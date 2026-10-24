@@ -1,0 +1,11 @@
+.git
+node_modules
+wrangler.jsonc
+worker-entry.js
+.assetsignore
+worker
+netlify
+netlify.toml
+_redirects
+firestore.rules
+*_SETUP.txt
