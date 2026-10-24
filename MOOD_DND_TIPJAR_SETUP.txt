@@ -1,0 +1,23 @@
+MOOD STATUS + DO-NOT-DISTURB + CREATOR TIP JAR  (3 steps)
+
+1) Deploy this folder to Netlify (index.html, service-worker.js, netlify/functions/push.js changed).
+2) Firebase Console -> Firestore -> Rules: replace EVERYTHING with the file firestore.rules from this folder (one complete file) -> Publish.
+   (new blocks: presence/{uid}, tipJars/{uid})
+3) Android: rebuild the app (small change: MainActivity.openPayApp + <queries> in the manifest).
+
+What users get (Top bar: the 🌙 icon (next to the albums icon)):
+- Mood status: Free / Busy / Sleeping / Driving / Studying / custom note, for 1h / 4h / today / until changed.
+  Shown on the profile, in the chat header, and as a heads-up ("Call anyway?") before a call.
+- Do not disturb: quiet hours (e.g. 22:00-07:00). Calls and push notifications stay silent, except people on the
+  user's Close Friends list (the same list used by Stories). Enforced on the phone AND on the server (push.js).
+  Calls received in DND are declined silently with reason "dnd"; the user sees a count next time the app opens.
+- Creator tip jar: creator saves EasyPaisa / JazzCash number (+ account title, thank-you message; can auto-fill from the
+  monetization application - CNIC is never copied). A "Tip" button appears on the profile. Fans copy the number or open
+  the wallet app (Android). Money goes wallet-to-wallet; Genzura does not process it.
+
+=== ROUND 2: chat timer + public Q&A + translate ===
+- Deploy again (index.html, service-worker.js, NEW netlify/functions/translate.js) and re-publish firestore.rules (new block: qa/{id}).
+- Disappearing messages: the ⏱ button in the chat header (next to the call buttons). Off / 1 hour / 24 hours / 7 days for the whole conversation.
+- Public Q&A: Anonymous Inbox -> "Answer publicly" on a question; "My public Q&A page" shares  ?qa=<uid>.  A "Q&A" button also shows on a profile that has answers.
+- Translate: "🌐 Translate" under every post caption and comment; one tap -> Urdu / Roman Urdu / English (remembers your last choice).
+  Uses the free Google web translate endpoint from the Netlify function (falls back to MyMemory). No API key needed.

@@ -1,0 +1,11 @@
+TRUTH - DARE - ROAST SPIN (Game Room) - setup
+
+1) Deploy this folder to Netlify (index.html changed). Android app needs NO change (it opens the website).
+2) Firebase Console -> Firestore -> Rules: publish the new firestore.rules (adds gameRooms + gameInvites).
+3) Optional (push for invites): redeploy netlify/functions/push.js and worker/genzura-worker-all.js (new kind "game").
+
+How it works
+- Home 3-lines menu -> "Truth - Dare - Roast Spin" and "Music - Soundbite Maker".
+- Pick friends -> invite -> everyone joins ONE voice call (max 6) -> host taps "Start the wheel".
+- Wheel shows ONLY tasks. Anyone taps SPIN, all phones spin together. When it stops: task + NAME appears.
+- Tasks come from Admin Panel -> Wheel lists (settings/truthDare).

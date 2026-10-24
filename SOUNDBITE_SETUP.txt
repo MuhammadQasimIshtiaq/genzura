@@ -1,0 +1,6 @@
+SOUNDBITE MAKER (Soundbite Roulette)
+- Chat bar now has a music-note button next to the dice. Record or pick voice clips, choose a built-in beat + voice effect (or spin the roulette), preview, then share.
+- Share link opens https://<your-site>/?sb=<id> with a player and a 'Make your own' button.
+- Publish the updated firestore.rules (new 'soundbites' collection) or sharing links will fail.
+- Audio uploads use the same Cloudinary preset as voice messages (arain_unsigned). If your preset blocks audio/wav, allow it in Cloudinary.
+- Android app needs no change (it loads the website). Inside the Android WebView, Insta/TikTok + Download buttons share the link instead of a file.

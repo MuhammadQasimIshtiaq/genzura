@@ -1,0 +1,7 @@
+DAKU LEDGER (group chats) - setup
+1) Deploy this folder to Netlify. Android app: no change.
+2) Publish the new firestore.rules (adds chats/{id}/ledger).
+Use: open a GROUP chat -> tap the detective icon in the header.
+- "Busted" tab: post "I'm coming in N min"; friends can press Busted only 5 min after the ETA; each Busted = +1 Jhoota Certificate.
+- Location is optional and only attached if the person ticks "share my approx. location" (rounded ~100 m). The app never reads anyone's location otherwise.
+- "Udhaar" tab: chai / money owed, lender marks Paid. "Board" tab: biggest liar + biggest udhaari.

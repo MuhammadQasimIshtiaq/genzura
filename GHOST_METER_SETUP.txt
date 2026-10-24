@@ -1,0 +1,8 @@
+GHOST METER - setup
+1) Deploy folder to Netlify (index.html changed). 2) Publish firestore.rules (new collection: responseStats). No index, no function. Android app: no change.
+- When you answer a friend's message in a 1-to-1 chat, the app measures ONLY the time between their last message and your reply (chat metadata lastFrom/lastAt). No text is read.
+- Buckets: <5 min fast, <1 h ok, 1 h - 3 days slow (later than 3 days is ignored). Last 20 replies kept in responseStats/{uid}.
+- 8+ replies needed. >=60% fast and <=10% slow = "Super Responder"; >=50% slow = "Certified Ghost". Shown on the person's profile next to the handle.
+- Menu -> "Ghost Meter": see your own numbers and switch the badge off (also stops counting).
+- Not included: "Seen but ignored" - the app has no read-receipt data to measure it safely.
+- Note: the numbers are written by the user's own phone (like likes/stats elsewhere), so a technical user could fake his own badge. It is only gamification.

@@ -1,0 +1,40 @@
+WATCH PARTY (Co-Reels) - setup (1 minute)
+
+1) Deploy this folder to Netlify as usual (index.html changed).
+
+2) Firebase Console -> Firestore Database -> Rules: add this block INSIDE "match /databases/{database}/documents { ... }"
+
+    match /watchParties/{code} {
+      // host creates a party for himself
+      allow create: if request.auth != null
+                    && request.resource.data.hostUid == request.auth.uid
+                    && request.resource.data.guestUid == null;
+      // anyone signed in who has the (secret, random) code can open it; no listing
+      allow get: if request.auth != null;
+      allow list: if false;
+      allow update: if request.auth != null && (
+          // host or guest: move to another reel / leave / end
+          ((resource.data.hostUid == request.auth.uid || resource.data.guestUid == request.auth.uid)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['videoId','by','updatedAt','ended','guestUid','guestName']))
+          // a friend joining an empty seat
+          || (resource.data.guestUid == null && resource.data.ended == false
+            && request.resource.data.guestUid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['guestUid','guestName']))
+        );
+      allow delete: if false;
+    }
+
+   Then press Publish.
+
+How it works
+- Profile menu (≡) -> "Watch Party" -> Invite a friend (WhatsApp etc). Link: https://genzura.netlify.app/?party=<code>
+- Friend opens the link, signs in if needed, taps "Join Watch Party".
+- Both phones now stay on the SAME reel. Whoever swipes, the other follows. A pill at the top shows the status + Leave.
+- Max 2 people per party. Host leaving ends it. Parties older than 6 hours can't be joined.
+- Use chat / voice call at the same time as usual.
+- Android app: no change needed (it is all inside the website).
+
+=== UPDATE (4 people + voice + shared playlist) ===
+- Party now holds up to 4 people. Everyone sees the same reels in the same order (shared playlist, ads paused during the party); whoever swipes, all phones follow.
+- Tap the 🎙 button in the pill to talk (voice chat, mic is OFF until you tap it).
+- Firestore rules: use the full firestore.rules file (it already contains watchParties + sig + albums + contactLinks). The old block in this file is obsolete.

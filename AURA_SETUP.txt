@@ -1,0 +1,48 @@
+AI AURA & GENZURA AVATARS - SETUP
+=================================
+
+KYA HAI?
+- Profile par naya button "✨ My Aura". Us se aap ka Aura + 3D-style Avatar banta hai.
+- AURA = 2 colors + 2-4 traits (jaise "🎧 Music Soul", "🌙 Night Owl", "🔥 Consistent Creator", "⚡ Reel Addict", "😎 Emoji Fan").
+  Ye aap ke apne uploads/posts se phone par hi nikalta hai: sab se zyada category (Music samet), post karne ka waqt,
+  kitne din active, reels ka hissa, captions mein emojis. "Aura name" jaise "Midnight Violet Aura".
+- AVATAR = original SVG artwork (copyright ka koi masla nahi): 6 skin tone, 8 hairstyle, 6 hair color, 8 accessories
+  (glasses, headphones, cap, shades, crown, headband, earrings). Drag karo to 3D mein ghoomta hai. Shuffle bhi hai.
+- 30 READY-MADE AVATARS aura ke hisaab se (aura sheet mein "30 Avatars" gallery):
+    🎧 Music (4): DJ Violet, Lo-fi Chill, Rockstar, Singer Rose
+    🎮 Gaming (4): Pro Gamer, Stream King, Pixel Girl, Night Raider
+    😂 Comedy (3): Meme Lord, Jester, Laugh Riot
+    🏏 Sports (3): Cricket Captain, Gym Hero, Striker
+    🧠 Curious (3): Bookworm, Coder, Scientist
+    🌍 Travel (3): Backpacker, Beach Wanderer, Desert Explorer
+    🎬 Film (3): Director, Cinephile, Animator
+    🌟 Star (3): Star, Glam Queen, Showman
+    📰 News (2): Anchor, Reporter
+    💬 Vibe (2): Sunny Soul, Chill Buddy
+  "⭐ For me" tab mein pehle wo avatars aate hain jo aap ki aura traits se match karte hain. Naye user ka pehla avatar bhi
+  usi theme ke 30 mein se khud chun liya jata hai. Har avatar aap ke apne aura colors mein dikhta hai. Tap karo = lag gaya, phir Save.
+- DOSTON KI FEED PAR REACT: Home ke upar (stories ke neeche) friends ke avatars ki strip aati hai.
+  Dost ka avatar un ke Mood / Vibe ke hisab se expression badalta hai aur ek emoji bubble dikhata hai:
+    Sleeping 😴 -> neend wala chehra     Hungry 🍔 -> zubaan bahar      Gaming 🎮 / Cramming 📚 / Chai ☕ / Movie 🍿 / Walk 🌙 ...
+  Mood na ho to normal khush chehra. Tap karo to un ka aura card khulta hai.
+- "Show my avatar to friends" switch se koi apna avatar chhupa sakta hai.
+- Friends = mutual follow ya phone-contacts (jaise Vibe feature mein).
+
+IMPORTANT (sach)
+- Ye rule-based "AI" hai: koi external AI model / API use nahi hota, isliye kharcha zero hai aur data phone se bahar nahi jata.
+  Asli generative AI (photo se avatar, AI se likha aura) ke liye Netlify function + AI API key chahiye hogi - alag step.
+- "Music taste" ke liye abhi app mein music-listening data nahi hai, isliye ye aap ke "Music" category ke videos se nikalta hai.
+
+STEP 1 - FIREBASE RULES [2 minute]
+- Is zip ki firestore.rules mein "auras" ka naya block hai (Near Me block ke baad, "EVERYTHING ELSE IS DENIED" se pehle).
+- Firebase Console -> Firestore Database -> Rules -> poori purani rules mita ke nayi firestore.rules paste -> Publish.
+- Koi index nahi chahiye.
+
+STEP 2 - DEPLOY
+- Web zip Netlify par drop karo (service-worker cache v78). Android app mein koi change nahi chahiye
+  (Android zip sirf Near Me ke liye pehle wali hi use hoti hai).
+
+TEST
+1. Profile -> "✨ My Aura" -> Save my Aura.
+2. Do accounts se (dono mutual follow) -> dusre account ka Mood/Vibe "Sleeping" ya "Hungry" set karo ->
+   pehle account ke Home par us ka avatar 90 second ke andar (ya app dobara kholne par) expression badal lega.

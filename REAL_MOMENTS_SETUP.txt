@@ -1,0 +1,107 @@
+REAL MOMENTS ("Genzura Time") - SETUP  (Firebase rules, deploy + Cloudflare worker, test)
+====================================================================================
+
+KYA HAI?
+- Din mein EK baar, ek random waqt par (sab ke liye same), sab ko notification aata hai:
+  "Genzura Time! Post what you are doing right now."
+- User ke paas 2 minute hote hain. Back camera + front camera ki photo (sirf live camera, koi filter / gallery nahi).
+- Dost = jo aap ko follow karte hain AUR aap bhi unhe follow karte hain (mutual).
+- Dosto ke moments tab dikhte hain jab aap apna moment post kar dein (curiosity -> roz wapas aao).
+- 2 minute ke baad bhi post ho sakta hai, lekin us par "Late" ka tag lagta hai.
+- Daily waqt: 10:00 AM se 9:00 PM Pakistan time ke beech, 5-5 minute ke slots mein (roz alag).
+
+
+STEP 1 - FIREBASE (Firestore Rules)  [2 minute]
+------------------------------------------------
+1. Browser mein https://console.firebase.google.com kholo, apne Google account se login karo.
+2. Project "arain-tube-672a1" par click karo.
+3. Left menu mein  Build  ->  Firestore Database  par click karo.
+4. Upar tabs mein "Rules" tab par click karo.
+5. Editor mein purane rules dikhenge. Neeche scroll karke dekho: sab se aakhir mein ye 2 lines hongi
+       }      <- ye "match /databases/{database}/documents {" ko band karti hai
+     }        <- ye "service cloud.firestore {" ko band karti hai
+   Aakhri DO "}" ko mat chhedna.
+6. Aakhri do "}" se THODA UPAR (jahan Watch Party / anonMessages ka block khatam hota hai, uske neeche)
+   cursor rakho aur ye poora block paste karo:
+
+    match /moments/{momentId} {
+      // dost ka moment: me khud, ya mutual follow (dono ek doosre ko follow karte hon)
+      function isFriend(other) {
+        return exists(/databases/$(database)/documents/subscriptions/$(request.auth.uid + '_' + other))
+            && exists(/databases/$(database)/documents/subscriptions/$(other + '_' + request.auth.uid));
+      }
+      allow get: if request.auth != null
+                 && (resource == null
+                     || resource.data.uid == request.auth.uid
+                     || isFriend(resource.data.uid));
+      allow list: if false;
+      // sirf apna moment, din mein ek (doc id = uid_YYYY-MM-DD), sirf ye fields
+      allow create: if request.auth != null
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.day is string
+                    && request.resource.data.day.size() == 10
+                    && momentId == request.auth.uid + '_' + request.resource.data.day
+                    && request.resource.data.keys().hasOnly(['uid','name','logoURL','day','backURL','frontURL','caption','late','momentAt','createdAt'])
+                    && request.resource.data.keys().hasAll(['uid','name','day','backURL','late','momentAt','createdAt'])
+                    && request.resource.data.name is string && request.resource.data.name.size() <= 60
+                    && request.resource.data.backURL is string && request.resource.data.backURL.size() <= 500
+                    && (!('frontURL' in request.resource.data) || (request.resource.data.frontURL is string && request.resource.data.frontURL.size() <= 500))
+                    && (!('logoURL' in request.resource.data) || (request.resource.data.logoURL is string && request.resource.data.logoURL.size() <= 500))
+                    && (!('caption' in request.resource.data) || (request.resource.data.caption is string && request.resource.data.caption.size() <= 80))
+                    && request.resource.data.late is bool
+                    && request.resource.data.createdAt == request.time;
+      allow update: if false;
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+
+7. Upar / neeche "Publish" button dabao. "Rules published" aa jaye to ho gaya.
+   (Agar "Unexpected token / Missing }" ka red error aaye to paste galat jagah hua hai - block
+    "match /databases/{database}/documents {" ke ANDAR hona chahiye, uske bahar nahi.)
+8. Koi index banane ki zaroorat NAHI hai.
+
+NOTE: Watch Party aur Anonymous Inbox ke blocks pehle se hain to unhe mat chhedna - ye block bas unke saath add hota hai.
+
+
+STEP 2 - DEPLOY + CLOUDFLARE (roz ka notification)  [5 minute]
+--------------------------------------------------------------
+A) Netlify: zip ka poora folder pehle ki tarah deploy karo (index.html, service-worker.js badle hain).
+
+B) Cloudflare: NAYA worker banane ki zaroorat NAHI. Aap ka jo ek worker (push/turn/view/anon-send) hai, usi mein kaam hota hai.
+   1. dash.cloudflare.com -> Workers & Pages -> apna worker -> "Edit code".
+   2. Purana poora code hata kar  worker/genzura-worker-all.js  ka poora code paste karo -> Deploy.
+      (Ye aap ke purane code jaisa hi hai, bas neeche Real Moments ka roz wala notification add hai.)
+   3. Secrets wahi hain (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY) - kuch naya nahi.
+   4. Worker -> Settings -> Triggers -> "Cron Triggers" -> Add -> likho:   */5 * * * *   -> Add.
+      (Har 5 minute check karta hai; aaj ka Genzura Time aate hi EK baar bhejta hai, dobara nahi.)
+   5. Check: Worker -> Logs (Live): cron par  {"skipped":true}  theek hai;
+      Genzura Time par  {"day":"...","tokens":N,"sent":true}  dikhega.
+
+Service worker ka cache version badal diya hai (v72), isliye purane users ko naya index.html khud mil jayega.
+Notification na bhi chale to app khulte hi Genzura Time ka popup aa jata hai.
+
+
+STEP 3 - TEST (apne admin account se, 1 minute)
+-----------------------------------------------
+1. Site ko ye link lagakar kholo (apne admin account se login ho):
+       https://genzura.netlify.app/?momentTest=1
+   (Ye sirf ADMIN_UIDS wale account par kaam karta hai; aap ka UID already list mein hai.)
+2. "Genzura Time!" ka popup aayega -> "Open camera" -> pehle back camera ki photo (shutter),
+   phir 3-2-1 ke baad front camera apne aap click -> caption likho -> Post.
+3. Profile menu (≡) -> "Real Moments" mein aap ka moment aur dosto ke moments dikhenge.
+4. Dost ka moment dekhne ke liye dono accounts ek doosre ko follow karein (mutual).
+5. Agar "Real Moments is not enabled yet" aaye = Step 1 (rules) Publish nahi hua ya galat jagah paste hua.
+
+
+ANDROID APP
+-----------
+Koi change nahi chahiye. Kyunke ye website ke andar hai, aur Android app mein camera ki permission
+video call ke liye pehle se maangi jati hai. Notification bhi wahi purana PushService dikha deta hai.
+
+
+FILES JO BADLI
+--------------
+index.html                       (Real Moments ka naya block, aakhir mein)
+service-worker.js                (sirf cache version v72)
+worker/genzura-worker-all.js     (aap ka worker + Real Moments ka roz wala notification)
+firestore.rules                  (aap ke poore rules + watchParties + moments)
+REAL_MOMENTS_SETUP.txt           (ye file)

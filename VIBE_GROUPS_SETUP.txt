@@ -1,0 +1,29 @@
+VIBE STATUS (2-hour floating moods) + AUTO VIBE GROUPS  (2 steps)
+
+1) Deploy this folder to Netlify (index.html and service-worker.js changed).
+2) Firebase Console -> Firestore -> Rules: replace EVERYTHING with firestore.rules from this folder -> Publish.
+   (presence/{uid} now accepts vibe / vibeUntil / vibeGroup; group chats can carry expiresAt)
+Android: NO rebuild needed (the app loads the website).
+
+What users get:
+- Vibe status: tap the top-bar icon -> "Vibe (2 hours)", or tap "Set vibe" at the top of Messages.
+  Bored / Cramming for Exams / Down for Chai / Down to Hangout / Gaming / Movie Night / Hungry / Late-night Walk.
+  It disappears automatically after 2 hours (rules also cap it at 2 hours).
+- Floating statuses: friends' vibes float in a strip at the top of Messages (with time left). Tap one to chat.
+  The vibe also shows as a pill on the profile and in the chat header.
+- Auto vibe group: when you + 2 friends have the same active vibe, a temporary group (e.g. "Down for Chai")
+  is created by the first phone that notices. Friends who join the vibe later are added by the group creator.
+  The group shows a countdown in the inbox and is hidden/locked when it expires (no new messages).
+- Privacy: "friends" = mutual follow or phone-contact link. A checkbox in the vibe sheet lets a user opt out of auto-groups.
+
+=== NO-ALGORITHM MODE (chronological, friends-only feed) ===
+- No new Firestore rules needed. Deploy index.html + service-worker.js only.
+- Home screen: a switch "No-Algorithm mode" under the stories. ON =>
+    Home: only posts of people you follow (+ your own), strictly newest first.
+    Reels: only reels of people you follow, newest first; no promoted/boosted reels, no shuffle, no ad slides.
+- OPTIONAL but recommended (one time): Firestore composite index  posts: uid (Ascending) + createdAt (Descending).
+  Without it the feed still works (it falls back to the newest 200 posts), but may miss older posts of friends.
+  Easiest way: turn the mode ON, open the browser console, click the index link Firestore prints, press Create.
+- Ads: reels ad slides are hidden while the mode is ON. To keep ads, set HIDE_ADS=false at the top of the
+  script id="gcJs" at the end of index.html.
+- The setting is saved per device (localStorage 'gz_chrono').

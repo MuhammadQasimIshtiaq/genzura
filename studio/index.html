@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Genzura Studio</title>
+<meta name="theme-color" content="#ffffff">
+<meta name="robots" content="noindex">
+<link rel="icon" href="/studio/favicon-32.png">
+<script>
+  (function(){ try{ if(window.AndroidAuth) document.documentElement.classList.add('in-apk'); var t=null; try{ t=localStorage.getItem('st_theme'); }catch(e){} if(!t) t='light'; document.documentElement.dataset.theme=t; }catch(e){} })();
+</script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js" crossorigin="anonymous"></script>
+<style>
+  :root{--bg:#ffffff;--surface:#ffffff;--surface2:#f1f1f1;--surface3:#e6e6e6;--border:#dddddd;--text:#0f0f0f;--text-dim:#606060;--green:#188038;--blue:#1a73e8;}
+  :root[data-theme="dark"]{--bg:#0f0f0f;--surface:#181818;--surface2:#272727;--surface3:#303030;--border:#2c2c2c;--text:#f1f1f1;--text-dim:#aaaaaa;--green:#2fbf71;--blue:#3ea6ff;}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:"Roboto","Segoe UI",Arial,sans-serif;}
+  button{font-family:inherit;} .hidden{display:none !important;}
+  #toast{position:fixed;left:50%;bottom:92px;transform:translateX(-50%);background:#323232;color:#fff;padding:10px 18px;border-radius:22px;font-size:14px;z-index:99999;opacity:0;pointer-events:none;transition:opacity .2s;max-width:86vw;text-align:center;}
+  #toast.show{opacity:1;}
+  /* ---------- app-open splash (AT studio logo animation) ---------- */
+  #stBoot{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;background:var(--bg);transition:opacity .35s ease;}
+  #stBoot.out{opacity:0;pointer-events:none;}
+  #stBoot .bt{display:flex;flex-direction:column;align-items:center;line-height:1;opacity:0;transform:scale(.55);animation:stPop .7s cubic-bezier(.2,.9,.3,1.25) .08s forwards, stGlow 1.7s ease-in-out .85s infinite;}
+  #stBoot .bt img{width:210px;height:auto;display:block;}
+  html.in-apk #stBoot .bt{visibility:hidden;} /* inside the Android app the native splash shows the same animation on top */
+  @keyframes stPop{0%{opacity:0;transform:scale(.55);}60%{opacity:1;transform:scale(1.08);}100%{opacity:1;transform:scale(1);}}
+  @keyframes stGlow{0%,100%{opacity:1;transform:scale(1);filter:drop-shadow(0 0 0 rgba(138,59,255,0));}50%{opacity:1;transform:scale(1.045);filter:drop-shadow(0 0 16px rgba(138,59,255,.35));}}
+  @keyframes stSub{from{opacity:0;}to{opacity:1;}}
+  /* ---------- login ---------- */
+  #stLogin{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;background:var(--bg);z-index:9500;}
+  #stLogin .lg{display:flex;flex-direction:column;align-items:center;line-height:1;margin-bottom:14px;}
+  #stLogin .lg img{width:190px;height:auto;display:block;}
+  #stLogin p{color:var(--text-dim);max-width:300px;line-height:1.5;margin:6px 0 26px;}
+  #stGoogle{display:flex;align-items:center;gap:12px;background:#fff;color:#1f1f1f;border:1px solid #dadce0;border-radius:26px;padding:13px 26px;font-size:16px;font-weight:600;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.15);}
+  #stGoogle svg{width:22px;height:22px;} #stGoogle:disabled{opacity:.6;}
+  #stLoginErr{color:#d93025;font-size:13px;margin-top:16px;max-width:320px;white-space:pre-wrap;word-break:break-word;}
+  /* ---------- studio shell ---------- */
+  #atStudio{position:fixed;inset:0;z-index:9200;background:var(--bg);color:var(--text);display:flex;flex-direction:column;max-width:600px;margin:0 auto;}
+  #atStudio .st-top{display:flex;align-items:center;justify-content:space-between;padding:calc(env(safe-area-inset-top,0px) + 12px) 16px 10px;}
+  #atStudio .st-logo{display:flex;flex-direction:row;align-items:center;gap:8px;line-height:1;}
+  #atStudio .st-logo img{width:34px;height:34px;display:block;flex-shrink:0;}
+  #atStudio .st-logo .nm{display:flex;flex-direction:column;align-items:flex-start;line-height:1;}
+  #atStudio .st-logo b{font-size:24px;font-weight:900;letter-spacing:-1px;color:#8a3bff;line-height:.9;}
+  #atStudio .st-logo span{font-size:11px;font-weight:600;letter-spacing:1.5px;color:var(--text-dim);margin-top:1px;text-transform:lowercase;}
+  #atStudio .st-x{background:none;border:0;color:inherit;font-size:24px;padding:4px 8px;cursor:pointer;}
+  #stAvBtn{width:38px;height:38px;border-radius:50%;overflow:hidden;border:0;padding:0;background:var(--surface3);color:#fff;font-weight:700;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  #stAvBtn img{width:100%;height:100%;object-fit:cover;}
+  #atStudio .st-body{flex:1;overflow-y:auto;padding:4px 16px 24px;-webkit-overflow-scrolling:touch;}
+  #atStudio .st-nav{display:flex;border-top:1px solid var(--border);background:var(--bg);padding-bottom:env(safe-area-inset-bottom,0px);}
+  #atStudio .st-nav button{flex:1;background:none;border:0;color:var(--text-dim);display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 0 8px;font-size:11px;cursor:pointer;}
+  #atStudio .st-nav button svg{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+  #atStudio .st-nav button.on{color:var(--text);font-weight:700;} #atStudio .st-nav button.on svg{stroke-width:2.6;}
+  #atStudio h2{font-size:22px;font-weight:700;margin:18px 0 10px;}
+  #atStudio h3{font-size:16px;margin:0 0 8px;}
+  #atStudio .st-card{border:1px solid var(--border);border-radius:16px;padding:14px 16px;background:var(--surface);margin-bottom:12px;}
+  #atStudio .st-row{display:flex;gap:12px;} #atStudio .st-row>.st-card{flex:1;margin-bottom:0;}
+  #atStudio .st-k{font-size:13px;color:var(--text-dim);} #atStudio .st-big{font-size:28px;font-weight:700;margin-top:4px;} #atStudio .st-sub{font-size:12.5px;color:var(--text-dim);margin-top:2px;}
+  #atStudio .st-chan{display:flex;align-items:center;gap:16px;margin:8px 0 6px;}
+  #atStudio .st-chan .av{width:76px;height:76px;border-radius:50%;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:700;color:#fff;}
+  #atStudio .st-chan .av img{width:100%;height:100%;object-fit:cover;}
+  #atStudio .st-tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin:6px -16px 14px;padding:0 16px;overflow-x:auto;}
+  #atStudio .st-tabs button{background:none;border:0;color:var(--text-dim);font-size:16px;padding:12px 12px;border-bottom:3px solid transparent;white-space:nowrap;cursor:pointer;}
+  #atStudio .st-tabs button.on{color:var(--text);font-weight:700;border-bottom-color:var(--text);}
+  #atStudio .st-chips{display:flex;gap:8px;overflow-x:auto;margin:6px 0 10px;padding-bottom:4px;}
+  #atStudio .st-chip{background:var(--surface2);border:0;color:var(--text);border-radius:10px;padding:9px 14px;font-size:14px;white-space:nowrap;cursor:pointer;} #atStudio .st-chip.on{background:var(--text);color:var(--bg);font-weight:600;}
+  #atStudio .st-vrow{display:flex;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);} #atStudio .st-vrow:last-child{border-bottom:0;}
+  #atStudio .st-th{width:96px;height:54px;border-radius:8px;background:var(--surface3) center/cover;flex-shrink:0;} #atStudio .st-th.s{width:54px;height:96px;}
+  #atStudio .st-vt{flex:1;min-width:0;font-size:14.5px;line-height:1.3;}
+  #atStudio .st-vt b{display:-webkit-box;font-weight:600;overflow:hidden;text-overflow:ellipsis;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+  #atStudio .st-vt span{font-size:12.5px;color:var(--text-dim);}
+  #atStudio .st-dots{background:none;border:0;color:inherit;font-size:22px;padding:4px 8px;cursor:pointer;}
+  #atStudio .st-badge{display:inline-block;font-size:11px;padding:2px 7px;border-radius:6px;background:var(--surface3);color:var(--text-dim);margin-left:6px;} #atStudio .st-live{background:#e11;color:#fff;}
+  #atStudio .st-btn{width:100%;background:var(--surface2);border:0;color:var(--text);border-radius:22px;padding:13px;font-size:15px;font-weight:600;cursor:pointer;margin-top:10px;}
+  #atStudio .st-btn.pri{background:var(--blue);color:#fff;} #atStudio .st-btn.grn{background:var(--green);color:#fff;} #atStudio .st-btn:disabled{opacity:.5;}
+  #atStudio .st-empty{color:var(--text-dim);text-align:center;padding:28px 0;font-size:14px;}
+  #atStudio .st-cm{border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:12px;background:var(--surface);}
+  #atStudio .st-cm .top{display:flex;gap:10px;justify-content:space-between;} #atStudio .st-cm .vt{font-size:14.5px;font-weight:600;flex:1;}
+  #atStudio .st-cm .who{display:flex;gap:10px;margin-top:12px;}
+  #atStudio .st-cm .who .a{width:40px;height:40px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;overflow:hidden;} #atStudio .st-cm .who .a img{width:100%;height:100%;object-fit:cover;}
+  #atStudio .st-cm .nm{font-size:13px;color:var(--text-dim);} #atStudio .st-cm .tx{font-size:15px;margin-top:3px;word-break:break-word;}
+  #atStudio .st-cm .acts{display:flex;gap:6px;margin-top:8px;} #atStudio .st-cm .acts button{background:none;border:0;color:var(--text-dim);font-size:19px;padding:6px 10px;cursor:pointer;} #atStudio .st-cm .acts button.on{color:#ff3b5c;}
+  #atStudio table{width:100%;border-collapse:collapse;font-size:13.5px;} #atStudio th{color:var(--text-dim);font-weight:500;text-align:right;padding:6px 4px;}
+  #atStudio th:first-child,#atStudio td:first-child{text-align:left;} #atStudio td{padding:9px 4px;border-top:1px solid var(--border);text-align:right;} #atStudio td:first-child{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  #atStudio .st-bar{height:8px;border-radius:5px;background:var(--surface3);overflow:hidden;margin-top:6px;} #atStudio .st-bar i{display:block;height:100%;background:var(--blue);}
+  /* earn */
+  #atStudio .st-status{border-radius:14px;padding:14px 16px;font-weight:700;margin-bottom:12px;}
+  #atStudio .st-status.ok{background:rgba(24,128,56,.12);color:var(--green);} #atStudio .st-status.no{background:var(--surface2);color:var(--text-dim);} #atStudio .st-status.wait{background:rgba(255,170,0,.15);color:#b26a00;} #atStudio .st-status.bad{background:rgba(217,48,37,.12);color:#d93025;}
+  #atStudio .st-crit{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--border);} #atStudio .st-crit:last-child{border-bottom:0;}
+  #atStudio .st-crit .ic{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid var(--border);color:var(--text-dim);} #atStudio .st-crit .ic.d{background:var(--green);border-color:var(--green);color:#fff;}
+  #atStudio .st-crit .bd{flex:1;} #atStudio .st-crit .lb{font-size:15px;font-weight:600;}
+  #atStudio ol.st-how{margin:6px 0 0;padding-left:20px;line-height:1.6;font-size:14.5px;} #atStudio ol.st-how li{margin-bottom:8px;}
+  #atStudio .st-money{font-size:34px;font-weight:800;color:var(--green);margin:4px 0 10px;}
+  #atStudio .st-line{display:flex;justify-content:space-between;font-size:14px;color:var(--text-dim);margin-top:6px;} #atStudio .st-line b{color:var(--text);}
+  /* sheet + modal */
+  #stSheet{position:fixed;inset:0;z-index:9300;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;}
+  #stSheet .in{width:100%;max-width:600px;margin:0 auto;background:var(--surface);border-radius:20px 20px 0 0;padding:10px 0 calc(env(safe-area-inset-bottom,0px) + 10px);}
+  #stSheet button{display:block;width:100%;background:none;border:0;color:var(--text);text-align:left;font-size:16px;padding:15px 22px;cursor:pointer;} #stSheet button.red{color:#ff5c5c;}
+  #stModal{position:fixed;inset:0;z-index:9400;background:var(--bg);color:var(--text);overflow-y:auto;display:none;} #stModal.show{display:block;}
+  #stModal .in{max-width:600px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 18px 40px;}
+  #stModal h1{font-size:22px;margin:6px 0 4px;} #stModal .hint{font-size:12.5px;color:var(--text-dim);margin:4px 0 10px;}
+  #stModal label.f{display:block;font-size:13px;color:var(--text-dim);margin:14px 0 4px;font-weight:600;}
+  #stModal input[type=text],#stModal input[type=tel],#stModal textarea,#stModal select,#stModal .ro{width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:15px;}
+  #stModal textarea{min-height:80px;resize:vertical;} #stModal .rw{display:flex;gap:8px;} #stModal .rw input{flex:1;} #stModal .mini{background:var(--blue);color:#fff;border:0;border-radius:10px;padding:0 16px;font-weight:600;white-space:nowrap;cursor:pointer;} #stModal .mini:disabled{opacity:.5;}
+  #stModal .opt{display:flex;gap:10px;align-items:center;border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer;} #stModal .opt.sel{border-color:var(--blue);background:rgba(26,115,232,.08);}
+  #stModal .opt b{display:block;font-size:15px;} #stModal .opt span{font-size:12.5px;color:var(--text-dim);}
+
+  /* ---------- DESKTOP WEBSITE: full screen + left sidebar (not used inside the Android app) ---------- */
+  .st-sidechan{display:none;}
+  @media (min-width:900px){
+    html:not(.in-apk) #atStudio{max-width:none;margin:0;display:grid;grid-template-columns:240px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);grid-template-areas:"top top" "nav body";}
+    html:not(.in-apk) #atStudio .st-top{grid-area:top;padding:10px 24px;border-bottom:1px solid var(--border);}
+    html:not(.in-apk) #atStudio .st-logo b{font-size:24px;}
+    html:not(.in-apk) #stPlus{font-size:30px;line-height:1;padding:2px 10px;}
+    html:not(.in-apk) #atStudio .st-body{grid-area:body;padding:8px 32px 48px;}
+    html:not(.in-apk) #stBody>*{max-width:1280px;margin-left:auto;margin-right:auto;}
+    html:not(.in-apk) #atStudio .st-nav{grid-area:nav;flex-direction:column;border-top:0;border-right:1px solid var(--border);padding:12px 12px 24px;overflow-y:auto;gap:2px;}
+    html:not(.in-apk) #atStudio .st-nav button{flex:none;flex-direction:row;justify-content:flex-start;gap:20px;width:100%;padding:12px 16px;font-size:15px;border-radius:10px;color:var(--text);}
+    html:not(.in-apk) #atStudio .st-nav button:hover{background:var(--surface2);}
+    html:not(.in-apk) #atStudio .st-nav button.on{background:var(--surface2);font-weight:700;}
+    html:not(.in-apk) #atStudio .st-nav button svg{width:24px;height:24px;flex-shrink:0;}
+    html:not(.in-apk) .st-sidechan{display:flex;flex-direction:column;align-items:center;text-align:center;padding:18px 8px 20px;}
+    html:not(.in-apk) .st-sidechan .av{width:112px;height:112px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:44px;font-weight:700;color:#fff;margin-bottom:12px;}
+    html:not(.in-apk) .st-sidechan .av img{width:100%;height:100%;object-fit:cover;}
+    html:not(.in-apk) .st-sidechan b{font-size:16px;font-weight:600;}
+    html:not(.in-apk) .st-sidechan span{font-size:13px;color:var(--text-dim);margin-top:2px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    html:not(.in-apk) #atStudio h2{font-size:24px;margin:22px auto 14px;}
+    html:not(.in-apk) #atStudio .st-tabs{margin:6px auto 18px;padding:0;}
+    /* dashboard: cards in a grid */
+    html:not(.in-apk) #atStudio .st-chan{margin:18px auto 6px;} html:not(.in-apk) #atStudio .st-chan .av{display:none;}
+    html:not(.in-apk) #atStudio .st-dgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;align-items:start;grid-template-areas:"sl sa stp" "sl sa scm";margin-top:6px;}
+    html:not(.in-apk) #atStudio .st-sec{border:1px solid var(--border);border-radius:16px;padding:20px 22px;background:var(--surface);}
+    html:not(.in-apk) #atStudio .st-sec h2{font-size:19px;margin:0 0 14px;}
+    html:not(.in-apk) #atStudio .st-sec.sl{grid-area:sl;} html:not(.in-apk) #atStudio .st-sec.sa{grid-area:sa;} html:not(.in-apk) #atStudio .st-sec.stp{grid-area:stp;} html:not(.in-apk) #atStudio .st-sec.scm{grid-area:scm;}
+    html:not(.in-apk) #atStudio .st-sec.sl .st-card,html:not(.in-apk) #atStudio .st-sec.stp .st-card,html:not(.in-apk) #atStudio .st-sec.scm .st-card{border:0;padding:0;margin:0;background:none;}
+    html:not(.in-apk) #atStudio .st-sec.sa .st-card{background:var(--surface2);border:0;}
+    html:not(.in-apk) #atStudio .st-sec .st-empty{padding:18px 0;}
+    /* menus + modals centered instead of bottom sheet */
+    html:not(.in-apk) #stSheet{align-items:center;}
+    html:not(.in-apk) #stSheet .in{max-width:380px;border-radius:16px;padding:8px 0;}
+    html:not(.in-apk) #stModal .in{max-width:720px;}
+  }
+  @media (min-width:900px) and (max-width:1279px){
+    html:not(.in-apk) #atStudio .st-dgrid{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"sa sl" "stp scm";}
+    html:not(.in-apk) #atStudio{grid-template-columns:210px minmax(0,1fr);}
+  }
+</style>
+</head>
+<body>
+<div id="stBoot"><div class="bt"><img src="/studio/genzura-studio-logo.png" alt="Genzura Studio"></div></div>
+<div id="toast"></div>
+<div id="recaptcha-container"></div>
+
+<div id="stLogin" class="hidden">
+  <div class="lg"><img src="/studio/genzura-studio-logo.png" alt="Genzura Studio"></div>
+  <p>Manage your Genzura channel: analytics, posts, comments and earnings.</p>
+  <button id="stGoogle"><svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.7 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.5-.8-3-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.6-4.2-13.5-9.9l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>Sign in with Google</button>
+  <div id="stLoginErr" class="hidden"></div>
+</div>
+
+<div id="atStudio" class="hidden">
+  <div class="st-top"><div class="st-logo"><img src="/studio/genzura-g.png" alt=""><div class="nm"><b>Genzura</b><span>studio</span></div></div><div style="display:flex;align-items:center;gap:6px"><button class="st-x" id="stPlus" title="Upload on Genzura">&#8853;</button><button id="stAvBtn" aria-label="Account"></button></div></div>
+  <div class="st-body" id="stBody"></div>
+  <div class="st-nav" id="stNav">
+    <div class="st-sidechan" id="stSideChan"></div>
+    <button data-t="dash" class="on"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard</button>
+    <button data-t="content"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="15" height="15" rx="2"/><path d="M3 17V5a2 2 0 0 1 2-2h12"/><path d="M12 10.5v6l5-3z"/></svg>Content</button>
+    <button data-t="analytics"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 17v-6M12 17V7M16 17v-3"/></svg>Analytics</button>
+    <button data-t="community"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9" r="2.4"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M15 14.5c2.8-.4 6 1.3 6 5"/></svg>Community</button>
+    <button data-t="earn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M15 8.5c-.6-1-1.7-1.5-3-1.5-1.7 0-3 .9-3 2.3 0 3.2 6 1.6 6 4.7 0 1.4-1.4 2.5-3 2.5-1.4 0-2.6-.6-3.2-1.7M12 5.5v13"/></svg>Earn</button>
+  </div>
+</div>
+<div id="stModal"><div class="in" id="stModalIn"></div></div>
+<script>
+/* =====================================================================
+   AT STUDIO  -  creator studio for Genzura (same Firebase project)
+   ===================================================================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyATkLM81knrj_enQUsg1L9XRXt9_jdvL0w",
+  authDomain: "genzura.netlify.app",
+  projectId: "arain-tube-672a1",
+  storageBucket: "arain-tube-672a1.firebasestorage.app",
+  messagingSenderId: "649325973427",
+  appId: "1:649325973427:web:8021eab6a361352f7ec5c6"
+};
+const CLOUDINARY_CLOUD_NAME = "rct4qeol", CLOUDINARY_UPLOAD_PRESET = "arain_unsigned";
+const CREATOR_SHARE = 0.96;                       /* 96% creator / 4% platform (same as the old Earn page) */
+const MAIN_APP = location.origin + '/';           /* Genzura main site */
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
+const db = firebase.firestore();
+try{ db.settings({ experimentalAutoDetectLongPolling:true, merge:true }); }catch(e){}
+
+const DAY = 86400000;
+const E = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const el = id => document.getElementById(id);
+const ms = ts => (ts && ts.toMillis) ? ts.toMillis() : 0;
+const sum = a => a.reduce((x,y)=>x+y,0);
+const isApk = () => !!(window.AndroidAuth && window.AndroidAuth.signIn);
+function nf(n){ n=+n||0; if(n>=1e6) return (n/1e6).toFixed(1).replace(/\.0$/,'')+'M'; if(n>=1e3) return (n/1e3).toFixed(n>=1e4?0:1).replace(/\.0$/,'')+'K'; return String(n); }
+function ago(ts){ if(!ts || !ts.toMillis) return 'Just now'; const s=Math.floor((Date.now()-ts.toMillis())/1000); if(s<60) return 'Just now'; if(s<3600) return Math.floor(s/60)+'m ago'; if(s<86400) return Math.floor(s/3600)+'h ago'; if(s<2592000) return Math.floor(s/86400)+'d ago'; return Math.floor(s/2592000)+'mo ago'; }
+function colorFor(n){ const c=['#e91e63','#9c27b0','#3f51b5','#009688','#ff5722','#795548','#607d8b','#2e7d32']; let h=0; for(const ch of String(n||'')) h=(h*31+ch.charCodeAt(0))|0; return c[Math.abs(h)%c.length]; }
+function toast(m){ const t=el('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2400); }
+const dkey = t => { const d = new Date(t); return 'd' + d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0'); };
+function days(n){ const a=[]; const b=new Date(); b.setHours(0,0,0,0); for(let i=n-1;i>=0;i--) a.push(b.getTime()-i*DAY); return a; }
+
+/* ---------- theme ---------- */
+(function(){ let t=null; try{ t=localStorage.getItem('st_theme'); }catch(e){} if(!t) t = 'light'; document.documentElement.dataset.theme = t; try{ window.AndroidStudio && window.AndroidStudio.setTheme && window.AndroidStudio.setTheme(t); }catch(e){} })();
+function toggleTheme(){ const r=document.documentElement; r.dataset.theme = r.dataset.theme==='dark' ? 'light' : 'dark'; try{ localStorage.setItem('st_theme', r.dataset.theme); }catch(e){} try{ window.AndroidStudio && window.AndroidStudio.setTheme && window.AndroidStudio.setTheme(r.dataset.theme); }catch(e){} }
+
+/* ---------- links to the main app ---------- */
+function openArainTube(path){
+  const url = MAIN_APP + (path || '');
+  try{ if(window.AndroidStudio && window.AndroidStudio.openArainTube){ window.AndroidStudio.openArainTube(path || ''); return; } }catch(e){}
+  window.open(url, '_blank');
+}
+function openExternal(url){
+  try{ if(window.AndroidStudio && window.AndroidStudio.openExternal){ window.AndroidStudio.openExternal(url); return; } }catch(e){}
+  window.open(url, '_blank');
+}
+
+/* ---------- sign in (same flow as the main app) ---------- */
+function nativeGoogleSignIn(){
+  return new Promise((resolve, reject)=>{
+    if(!(window.AndroidAuth && typeof window.AndroidAuth.signIn === 'function')){ reject({code:'unavailable', message:'Native sign-in not available'}); return; }
+    window.__nativeGoogleSignIn = {
+      onToken: (idToken)=>{ const cred = firebase.auth.GoogleAuthProvider.credential(idToken); auth.signInWithCredential(cred).then(resolve).catch(e=>reject({code:'error', message:e.message})); },
+      onFailed: (code, msg)=>reject({code, message:msg})
+    };
+    try{ window.AndroidAuth.signIn(); }catch(e){ reject({code:'error', message:String(e)}); }
+  });
+}
+/* forget the remembered Google account inside the Android app so the account picker shows again */
+function clearNativeAccount(){ try{ if(window.AndroidAuth && typeof window.AndroidAuth.clearAccount === 'function') window.AndroidAuth.clearAccount(); }catch(e){} }
+/* Switch account: sign out, then open the Google account chooser straight away */
+function switchAccount(){
+  clearNativeAccount();
+  auth.signOut().catch(()=>{}).then(()=>{
+    setTimeout(()=>{ const b=el('stGoogle'); if(b && !b.disabled) b.click(); }, 450);
+  });
+}
+function showLoginErr(t){ const e=el('stLoginErr'); e.textContent=t; e.classList.remove('hidden'); }
+el('stGoogle').addEventListener('click', ()=>{
+  const btn = el('stGoogle'); el('stLoginErr').classList.add('hidden'); btn.disabled = true;
+  const provider = new firebase.auth.GoogleAuthProvider(); provider.setCustomParameters({ prompt:'select_account' });
+  if(window.AndroidAuth){
+    nativeGoogleSignIn().catch(err=>{ showLoginErr('Sign-in failed. Please try again.\n(' + (err.code||'error') + ': ' + (err.message||'') + ')\nApp: com.araintube.studio'); }).finally(()=>btn.disabled=false);
+    return;
+  }
+  auth.signInWithPopup(provider).catch(err=>{
+    if(err && (err.code==='auth/popup-blocked' || err.code==='auth/operation-not-supported-in-this-environment' || err.code==='auth/cancelled-popup-request')){ auth.signInWithRedirect(provider); }
+    else if(err && err.code !== 'auth/popup-closed-by-user'){ showLoginErr('Login failed: ' + err.message); }
+  }).finally(()=>btn.disabled=false);
+});
+auth.getRedirectResult().catch(err=>{ if(err && err.code !== 'auth/no-current-user') showLoginErr('Login failed: ' + err.message); });
+
+/* ---------- state + data ---------- */
+let currentUser = null, currentChannel = null;
+const S = { tab:'dash', at:'overview', loaded:false, vids:[], posts:[], pa:null, ct:'posts', subs:[], refs:[], live:null, app:null, viewDays:null, viewTotal7:0, cf:{ type:'all', vis:'all', sort:'date' }, cm:null, earn:null };
+
+async function load(){
+  const uid = currentUser.uid;
+  const [vs, ss, rs, lv, ap, ps] = await Promise.all([
+    db.collection('videos').where('channelId','==',uid).get(),
+    db.collection('subscriptions').where('channelId','==',uid).get(),
+    db.collection('referrals').where('referrerUid','==',uid).get().catch(()=>null),
+    db.collection('live_streams').doc(uid).get().catch(()=>null),
+    db.collection('monetization_applications').doc(uid).get().catch(()=>null),
+    db.collection('posts').where('uid','==',uid).get().catch(()=>null)
+  ]);
+  S.posts = ps ? ps.docs.map(d => { const o = Object.assign({ id:d.id }, d.data()); o.thumbURL = postThumb(o); o.isVid = !!(o.media && o.media[0] && o.media[0].type==='video'); return o; }).sort((a,b)=> ms(b.createdAt) - ms(a.createdAt)) : [];
+  S.vids = vs.docs.map(d => Object.assign({ id:d.id }, d.data())).sort((a,b)=> ms(b.createdAt) - ms(a.createdAt));
+  S.subs = ss.docs.map(d => d.data());
+  S.refs = rs ? rs.docs.map(d => d.data()) : [];
+  S.live = (lv && lv.exists) ? lv.data() : null;
+  S.app  = (ap && ap.exists) ? ap.data() : null;
+  S.loaded = true;
+  snapshot();
+}
+/* real daily views from the "views" collection (one doc per viewer per video) */
+async function loadViewLogs(){
+  try{
+    const ids = S.vids.map(v=>v.id).slice(0, 60); if(!ids.length){ S.viewDays = days(28).map(()=>0); S.viewTotal7 = 0; return; }
+    const d28 = days(28), counts = d28.map(()=>0); let last7 = 0; const t7 = Date.now() - 7*DAY;
+    for(let i=0;i<ids.length;i+=10){
+      const sn = await db.collection('views').where('videoId','in',ids.slice(i,i+10)).limit(3000).get();
+      sn.forEach(d=>{ const m = ms(d.data().createdAt); if(!m) return; if(m>=t7) last7++; const ix = d28.findIndex((t,k)=> m>=t && (k===d28.length-1 || m<d28[k+1])); if(ix>=0) counts[ix]++; });
+    }
+    S.viewDays = counts; S.viewTotal7 = last7;
+    if(S.tab==='dash' || S.tab==='analytics') render();
+  }catch(e){ console.warn('view logs', e); }
+}
+function totals(){
+  const t = { views:0, likes:0, comments:0, followers: Math.max(S.subs.length, (currentChannel && currentChannel.subscriberCount) || 0) };
+  S.posts.forEach(v => { t.likes += v.likesCount || 0; t.comments += v.commentsCount || 0; });
+  return t;
+}
+/* one snapshot a day of likes/comments totals (those have no timestamps) -> their graphs grow from the first day Studio is opened */
+function snapshot(){
+  try{
+    const t = totals(), k = dkey(Date.now()), h = (currentChannel && currentChannel.statsHistory) || {};
+    if(h[k] && h[k].l === t.likes && h[k].c === t.comments) return;
+    const row = { v:t.views, l:t.likes, c:t.comments, s:t.followers };
+    currentChannel.statsHistory = Object.assign({}, h, { [k]: row });
+    db.collection('channels').doc(currentUser.uid).update({ ['statsHistory.' + k]: row }).catch(()=>{});
+  }catch(e){}
+}
+function histSeries(field){
+  const h = (currentChannel && currentChannel.statsHistory) || {}, keys = Object.keys(h).sort();
+  return days(28).map(t => { const k = dkey(t); if(!h[k]) return 0; let prev=null; for(let i=keys.length-1;i>=0;i--){ if(keys[i]<k){ prev=h[keys[i]]; break; } } return prev ? Math.max(0,(h[k][field]||0)-(prev[field]||0)) : 0; });
+}
+function subSeries(){ const d=days(28), out=d.map(()=>0); S.subs.forEach(s=>{ const m=ms(s.joinedAt); if(!m) return; const i=d.findIndex((t,ix)=> m>=t && (ix===d.length-1 || m<d[ix+1])); if(i>=0) out[i]++; }); return out; }
+
+/* ---------- monetization data (same rules as the old Earn page) ---------- */
+function earnCriteria(){
+  const wk = Date.now() - 7*DAY;
+  const views = sum(S.vids.filter(v=>ms(v.createdAt)>=wk).map(v=>v.views||0));
+  const fol = S.subs.filter(f=>ms(f.joinedAt)>=wk).length;
+  const ref = S.refs.filter(r=>ms(r.createdAt)>=wk).length;
+  return [ { label:'Get 7 followers (last 7 days)', have:fol, need:7 }, { label:'Get 70 views (last 7 days)', have:views, need:70 }, { label:'Refer 3 new channels (last 7 days)', have:ref, need:3 } ];
+}
+/* ---------- country-wise payout math (same rules as the Admin Panel, see index.html) ----------
+   Ad revenue is entered per platform + country. Each amount is shared ONLY between the views from that platform + country.
+   Views from a country with no row, old views without a country, and VPN / proxy views all share the OTHER pool. */
+function ccOfView(x){ if(x.vpn) return 'ZZ'; const c = String(x.country||'').toUpperCase(); return /^[A-Z]{2}$/.test(c) ? c : 'XX'; }
+function revPools(rev){
+  rev = rev || {};
+  const clean = o => { const r = {}; Object.keys(o||{}).forEach(k=>{ const v = +o[k]; if(v > 0) r[k] = v; }); return r; };
+  const bc = rev.byCountry;
+  if(bc && (bc.app || bc.web)) return { legacy:false, app: clean(bc.app), web: clean(bc.web) };
+  if(rev.appUSD != null || rev.webUSD != null) return { legacy:false, app: clean({OTHER:rev.appUSD}), web: clean({OTHER:rev.webUSD}) };
+  return { legacy:true, total:+rev.totalUSD || 0, app:{}, web:{} };
+}
+function splitEarnings(viewDocs, v2c, uids, rev){
+  const P = revPools(rev), isMon = {}; uids.forEach(u=>{ isMon[u] = 1; });
+  const has = (o,k) => Object.prototype.hasOwnProperty.call(o,k);
+  const cnt = {app:{}, web:{}}, tot = {app:{}, web:{}}, appBy = {}, webBy = {}, byCountryCh = {};
+  viewDocs.forEach(d=>{
+    const x = d.data ? d.data() : d, c = v2c[x.videoId]; if(!c) return;
+    const p = x.source === 'app' ? 'app' : 'web', cc = ccOfView(x), by = p === 'app' ? appBy : webBy; by[c] = (by[c]||0) + 1;
+    const ch = byCountryCh[c] || (byCountryCh[c] = {}), e = ch[cc] || (ch[cc] = {app:0, web:0}); e[p]++;
+    if(!isMon[c]) return;
+    const pk = has(P[p], cc) ? cc : 'OTHER', m = cnt[p][pk] || (cnt[p][pk] = {}); m[c] = (m[c]||0) + 1; tot[p][pk] = (tot[p][pk]||0) + 1;
+  });
+  const tApp = uids.reduce((a,u)=>a+(appBy[u]||0),0), tWeb = uids.reduce((a,u)=>a+(webBy[u]||0),0);
+  const gross = uid => {
+    if(P.legacy){ const t = tApp + tWeb; return t > 0 ? ((appBy[uid]||0) + (webBy[uid]||0)) / t * P.total : 0; }
+    let g = 0;
+    ['app','web'].forEach(p=>{ Object.keys(P[p]).forEach(k=>{ const n = (cnt[p][k] && cnt[p][k][uid]) || 0, t = tot[p][k] || 0; if(n > 0 && t > 0) g += n / t * P[p][k]; }); });
+    return g;
+  };
+  return { appBy, webBy, tApp, tWeb, gross, byCountryCh };
+}
+const CC_DN = (()=>{ try{ return new Intl.DisplayNames(['en'], {type:'region'}); }catch(e){ return null; } })();
+function countryName(cc){
+  if(cc === 'XX') return 'Unknown (older views)';
+  if(cc === 'ZZ') return 'Unverified (VPN / proxy)';
+  try{ const n = CC_DN && CC_DN.of(cc); return (n && n !== cc) ? n : cc; }catch(e){ return cc; }
+}
+function countryFlag(cc){
+  if(cc === 'ZZ') return '\uD83D\uDEE1\uFE0F';
+  if(!/^[A-Z]{2}$/.test(cc) || cc === 'XX') return '\uD83C\uDF10';
+  return String.fromCodePoint(127397 + cc.charCodeAt(0), 127397 + cc.charCodeAt(1));
+}
+function countriesCard(){
+  const L = (S.earn && S.earn.countries) || [], tot = L.reduce((a,x)=>a+x.n,0);
+  let h = '<div class="st-card"><h3>Views by country</h3><div class="st-sub" style="margin:0 0 4px">'+E(S.earn.label)+' &middot; '+tot.toLocaleString()+' views</div>';
+  if(!tot) return h + '<div class="st-empty">No views yet this month</div></div>';
+  h += L.map(x=>{ const pct = x.n/tot*100;
+    return '<div style="margin-top:12px"><div class="st-line" style="margin-top:0;font-size:15px;color:var(--text)"><span>'+countryFlag(x.cc)+' '+E(countryName(x.cc))+'</span><b>'+x.n.toLocaleString()+' &middot; '+pct.toFixed(1)+'%</b></div><div class="st-bar"><i style="width:'+pct.toFixed(1)+'%"></i></div></div>'; }).join('');
+  if(L.some(x=>x.cc==='ZZ')) h += '<div class="st-sub" style="margin-top:12px;font-size:11.5px">Views that come through a VPN or proxy can\'t be matched to a real country, so they are paid at the &quot;Other&quot; rate.</div>';
+  return h + '</div>';
+}
+async function loadEarnings(){
+  const now = new Date(), monthKey = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const label = now.toLocaleString('en-US',{ month:'long', year:'numeric' }), start = new Date(now.getFullYear(), now.getMonth(), 1);
+  try{
+    const [chSnap, vidsSnap, revDoc] = await Promise.all([ db.collection('channels').where('monetized','==',true).get(), db.collection('videos').get(), db.collection('settings').doc('monthlyRevenue_'+monthKey).get() ]);
+    const uids = chSnap.docs.map(d=>d.id), v2c = {}; vidsSnap.docs.forEach(d=>{ v2c[d.id] = d.data().channelId; });
+    const vs = await db.collection('views').where('createdAt','>=',start).get();
+    const sp = splitEarnings(vs.docs, v2c, uids, revDoc.exists ? revDoc.data() : {});
+    const me = currentUser.uid, a = sp.appBy[me]||0, w = sp.webBy[me]||0, mine = a+w, share = (sp.tApp+sp.tWeb)>0 ? mine/(sp.tApp+sp.tWeb) : 0;
+    const cm = sp.byCountryCh[me] || {};
+    const countries = Object.keys(cm).map(cc=>({ cc, n: cm[cc].app + cm[cc].web })).sort((x,y)=>y.n-x.n);
+    S.earn = { label, mine, app:a, web:w, share, amount: sp.gross(me)*CREATOR_SHARE, countries };
+  }catch(e){ console.error(e); S.earn = { error:true }; }
+  if(S.tab==='earn') render();
+}
+
+/* ---------- small ui helpers ---------- */
+function chart(vals){
+  const W=300,H=120,mx=Math.max(1,...vals),n=vals.length;
+  const pts = vals.map((v,i)=>(8+i*(W-16)/(n-1)).toFixed(1)+','+(H-10-(v/mx)*(H-24)).toFixed(1)).join(' ');
+  let g=''; for(let i=0;i<4;i++){ const y=10+i*(H-24)/3; g+='<line x1="8" x2="'+(W-8)+'" y1="'+y.toFixed(1)+'" y2="'+y.toFixed(1)+'" stroke="currentColor" opacity=".12"/>'; }
+  const d=days(28), f=t=>new Date(t).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:130px;color:var(--text)">'+g+'<polyline points="'+pts+'" fill="none" stroke="#06a7d6" stroke-width="2.4" stroke-linejoin="round"/></svg><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-dim)"><span>'+f(d[0])+'</span><span>'+f(d[27])+'</span></div>';
+}
+function metric(label,big,sub,vals,note){ return '<div class="st-card"><div class="st-k">'+label+'</div><div class="st-big">'+big+'</div><div class="st-sub">'+(sub||'')+'</div>'+(vals?'<div style="margin-top:8px">'+chart(vals)+'</div>':'')+(note?'<div class="st-sub" style="margin-top:6px">'+note+'</div>':'')+'</div>'; }
+function thumb(v){ return '<div class="st-th'+(v.kind==='short'?' s':'')+'" style="'+(v.thumbURL?'background-image:url(\''+E(v.thumbURL)+'\')':'')+'"></div>'; }
+const NOTE = 'Graph fills up day by day from the first day you open Studio.';
+
+/* ---------- posts: thumbnails + helpers ---------- */
+function postThumb(p){
+  const m=(p.media||[])[0]; if(!m||!m.url) return '';
+  try{
+    return m.type==='video' ? m.url.replace('/video/upload/','/video/upload/so_0,w_240,h_240,c_fill,f_jpg/').replace(/\.[a-z0-9]+$/i,'.jpg')
+                            : m.url.replace('/image/upload/','/image/upload/w_240,h_240,c_fill,f_auto/');
+  }catch(e){ return m.url; }
+}
+function pthumb(p){ return '<div class="st-th" style="width:64px;height:64px;'+(p.thumbURL?'background-image:url(\''+E(p.thumbURL)+'\')':'')+'"></div>'; }
+function ptitle(p){ const t=String(p.caption||'').trim(); return t ? t.slice(0,80) : 'Post without caption'; }
+function soon(icon,title,txt){ return '<div class="st-card" style="text-align:center;padding:38px 20px"><div style="font-size:44px">'+icon+'</div><h2 style="margin:10px 0 6px">'+title+'</h2><div class="st-badge" style="margin:0 0 10px">Coming soon</div><div class="st-sub" style="font-size:14px;line-height:1.5">'+txt+'</div></div>'; }
+
+/* ---------- tabs ---------- */
+function dash(){
+  const t = totals(), c = currentChannel || {};
+  const P = S.posts, last = P[0], rank = last ? ([...P].sort((a,b)=>(b.likesCount||0)-(a.likesCount||0)).findIndex(v=>v.id===last.id)+1) : 0;
+  const top = [...P].sort((a,b)=>(b.likesCount||0)-(a.likesCount||0)).slice(0,5), newSubs = sum(subSeries());
+  let h = '<div class="st-chan"><div class="av" style="background:'+colorFor(c.name||'A')+'">'+(c.logoURL?'<img src="'+E(c.logoURL)+'">':E(((c.name||'A')[0]||'A').toUpperCase()))+'</div><div><div style="font-size:24px;font-weight:700">'+E(c.name||'My channel')+'</div><div class="st-big" style="margin-top:2px">'+nf(t.followers)+'</div><div class="st-k">Total followers</div></div></div>';
+  h += '<div class="st-dgrid"><div class="st-sec sa"><h2>Channel analytics</h2><div class="st-row"><div class="st-card"><div class="st-k">Followers</div><div class="st-big">'+(newSubs>0?'+':'')+nf(newSubs)+'</div><div class="st-sub">Last 28 days</div></div><div class="st-card"><div class="st-k">Posts</div><div class="st-big">'+nf(P.length)+'</div><div class="st-sub">All time</div></div></div>';
+  h += '<div class="st-row" style="margin-top:12px"><div class="st-card"><div class="st-k">Likes</div><div class="st-big">'+nf(t.likes)+'</div><div class="st-sub">All time</div></div><div class="st-card"><div class="st-k">Comments</div><div class="st-big">'+nf(t.comments)+'</div><div class="st-sub">All time</div></div></div>';
+  h += '</div><div class="st-sec sl"><h2>Latest post</h2>';
+  if(last){
+    h += '<div class="st-card" data-open="'+last.id+'" style="cursor:pointer"><div class="st-vrow" style="border:0;padding-top:0">'+pthumb(last)+'<div class="st-vt"><b>'+E(ptitle(last))+'</b><span>'+ago(last.createdAt)+'</span></div></div>'
+      + '<div style="display:flex;gap:22px;padding:10px 0;border-top:1px solid var(--border);font-size:16px"><span>&#128077; '+nf(last.likesCount)+'</span><span>&#128172; '+nf(last.commentsCount)+'</span></div>'
+      + '<div class="st-line" style="font-size:15px;color:var(--text)"><span>Ranking by likes</span><span>'+rank+' of '+P.length+'</span></div><div class="st-sub" style="margin-top:8px">Tap to see this post\'s analytics</div></div>';
+  } else h += '<div class="st-empty">No posts yet. Share your first post on Genzura!</div>';
+  h += '</div><div class="st-sec stp"><h2>Top posts</h2><div class="st-card"><div class="st-k">Likes &middot; All time</div>'+(top.length ? top.map(v=>'<div class="st-vrow" data-open="'+v.id+'" style="cursor:pointer">'+pthumb(v)+'<div class="st-vt"><b>'+E(ptitle(v))+'</b></div><b>'+nf(v.likesCount)+'</b></div>').join('') : '<div class="st-empty">Nothing yet</div>')+'</div>';
+  h += '</div><div class="st-sec scm"><h2>Comments</h2><div class="st-card"><div class="st-k">Comments on your posts</div><div class="st-big">'+nf(t.comments)+'</div><button class="st-btn" data-go="community">View all</button></div></div></div>';
+  return h;
+}
+function content(){
+  const ct=S.ct;
+  let h='<div class="st-tabs">'+[['posts','Posts'],['reels','Reels'],['live','Live']].map(x=>'<button data-ct="'+x[0]+'" class="'+(ct===x[0]?'on':'')+'">'+x[1]+'</button>').join('')+'</div>';
+  if(ct==='reels') return h+soon('&#127910;','Reels','Reels management and analytics are on the way. You will be able to see how every reel performs right here.');
+  if(ct==='live') return h+soon('&#128308;','Live','Live stream management and analytics are on the way.');
+  const row=v=>'<div class="st-vrow" data-open="'+v.id+'" style="cursor:pointer">'+pthumb(v)+'<div class="st-vt"><b>'+E(ptitle(v))+'</b><span>&#128077; '+nf(v.likesCount)+' &nbsp; &#128172; '+nf(v.commentsCount)+'</span><br><span>'+ago(v.createdAt)+(v.isVid?'<i class="st-badge">Video</i>':'')+'</span></div><button class="st-dots" data-menu="'+v.id+'">&#8942;</button></div>';
+  h+='<h2>Posts <span class="st-badge">'+S.posts.length+'</span></h2><div class="st-card">'+(S.posts.length?S.posts.map(row).join(''):'<div class="st-empty">No posts yet</div>')+'</div>';
+  return h;
+}
+function analytics(){
+  const t=totals();
+  let h='<div class="st-tabs">'+[['overview','Overview'],['content','Content'],['audience','Audience'],['trends','Trends']].map(x=>'<button data-at="'+x[0]+'" class="'+(S.at===x[0]?'on':'')+'">'+x[1]+'</button>').join('')+'</div>';
+  const lS=histSeries('l'), cS=histSeries('c'), sS=subSeries();
+  if(S.at==='overview'){
+    h+=metric('Followers', nf(t.followers), '+'+nf(sum(sS))+' in last 28 days', sS);
+    h+=metric('Likes', nf(t.likes), '+'+nf(sum(lS))+' in last 28 days', lS, NOTE);
+    h+=metric('Comments', nf(t.comments), '+'+nf(sum(cS))+' in last 28 days', cS, NOTE);
+  } else if(S.at==='content'){
+    const mx=Math.max(1,...S.posts.map(v=>v.likesCount||0));
+    h+='<div class="st-card"><div class="st-k">Your posts &middot; All time</div><table><tr><th>Post</th><th>Likes</th><th>Cmts</th></tr>'+(S.posts.map(v=>'<tr data-open="'+v.id+'" style="cursor:pointer"><td>'+E(ptitle(v))+'<div class="st-bar"><i style="width:'+Math.round((v.likesCount||0)/mx*100)+'%"></i></div></td><td>'+nf(v.likesCount)+'</td><td>'+nf(v.commentsCount)+'</td></tr>').join('')||'<tr><td colspan="3" class="st-empty">No posts yet</td></tr>')+'</table></div>';
+  } else if(S.at==='audience'){
+    const recent=[...S.subs].sort((a,b)=>ms(b.joinedAt)-ms(a.joinedAt)), n7=recent.filter(s=>Date.now()-ms(s.joinedAt)<7*DAY).length;
+    h+='<div class="st-row"><div class="st-card"><div class="st-k">Followers</div><div class="st-big">'+nf(t.followers)+'</div></div><div class="st-card"><div class="st-k">New &middot; 7 days</div><div class="st-big">+'+nf(n7)+'</div></div></div><div style="height:12px"></div>'+metric('New followers','+'+nf(sum(sS)),'Last 28 days',sS)+'<div class="st-card"><div class="st-k">Latest followers</div><div id="stRecentF"><div class="st-empty">Loading…</div></div></div>';
+    setTimeout(()=>recentFollowers(recent.slice(0,10)),0);
+  } else {
+    const byL=[...S.posts].sort((a,b)=>(b.likesCount||0)-(a.likesCount||0)).slice(0,5), byC=[...S.posts].sort((a,b)=>(b.commentsCount||0)-(a.commentsCount||0)).slice(0,5);
+    const rows=(arr,k)=>arr.length?arr.map((v,i)=>'<div class="st-vrow" data-open="'+v.id+'" style="cursor:pointer"><b style="width:20px;color:var(--text-dim)">'+(i+1)+'</b>'+pthumb(v)+'<div class="st-vt"><b>'+E(ptitle(v))+'</b></div><b>'+nf(v[k])+'</b></div>').join(''):'<div class="st-empty">Nothing yet</div>';
+    h+='<div class="st-card"><div class="st-k">Most liked</div>'+rows(byL,'likesCount')+'</div><div class="st-card"><div class="st-k">Most commented</div>'+rows(byC,'commentsCount')+'</div>';
+  }
+  return h;
+}
+async function recentFollowers(list){
+  const box=el('stRecentF'); if(!box) return;
+  if(!list.length){ box.innerHTML='<div class="st-empty">No followers yet</div>'; return; }
+  const rows=await Promise.all(list.map(async s=>{ let nm='User'; try{ const d=await db.collection('channels').doc(s.subscriberId).get(); if(d.exists) nm=d.data().name||nm; }catch(e){} return '<div class="st-vrow"><div class="st-vt"><b>'+E(nm)+'</b></div><span class="st-sub">'+ago(s.joinedAt)+'</span></div>'; }));
+  const b2=el('stRecentF'); if(b2) b2.innerHTML=rows.join('');
+}
+function community(){
+  if(!S.cm){ loadComments(); return '<h2>Comments</h2><div class="st-empty">Loading comments…</div>'; }
+  const unh=S.cm.filter(c=>!c.creatorHeart).length;
+  let h='<div class="st-row" style="margin-top:6px"><div class="st-card"><div class="st-k">Recent comments</div><div class="st-big">'+S.cm.length+'</div></div><div class="st-card"><div class="st-k">Unliked comments</div><div class="st-big">'+unh+'</div></div></div><h2>Comments</h2>';
+  if(!S.cm.length) return h+'<div class="st-empty">No comments yet</div>';
+  return h+S.cm.map((c,i)=>'<div class="st-cm"><div class="top"><div class="vt">'+E(c.vTitle)+'</div>'+(c.vThumb?'<div class="st-th" style="width:52px;height:52px;background-image:url(\''+E(c.vThumb)+'\')"></div>':'')+'</div><div class="who"><div class="a" style="background:'+colorFor(c.authorName||'U')+'">'+(c.authorLogo?'<img src="'+E(c.authorLogo)+'">':E(((c.authorName||'U')[0]||'U').toUpperCase()))+'</div><div style="flex:1;min-width:0"><div class="nm">'+E(c.authorName||'User')+' &middot; '+ago(c.createdAt)+'</div><div class="tx">'+E(c.text)+'</div></div></div><div class="acts"><button data-heart="'+i+'" class="'+(c.creatorHeart?'on':'')+'">'+(c.creatorHeart?'&#10084;&#65039;':'&#9825;')+'</button><button data-delc="'+i+'">&#128465;</button></div></div>').join('');
+}
+async function loadComments(){
+  const out=[];
+  try{
+    const ps=S.posts.filter(v=>(v.commentsCount||0)>0).slice(0,15);
+    await Promise.all(ps.map(async v=>{ const sn=await db.collection('posts').doc(v.id).collection('comments').orderBy('createdAt','desc').limit(15).get(); sn.forEach(d=>out.push(Object.assign({id:d.id,vId:v.id,vTitle:ptitle(v),vThumb:v.thumbURL||''},d.data()))); }));
+  }catch(e){ console.warn(e); }
+  S.cm=out.sort((a,b)=>ms(b.createdAt)-ms(a.createdAt)).slice(0,60);
+  if(S.tab==='community') render();
+}
+
+/* ---------- ANALYTICS OF ONE POST (opens when you tap a post) ---------- */
+async function openPostAnalytics(p){
+  const m = (p.media||[])[0];
+  const head = '<button id="paBack" style="font-size:22px;background:none;border:0;color:inherit;cursor:pointer">&#8592; Back</button><h1>Post analytics</h1>'
+    + '<div class="st-vrow" style="border:0">'+pthumb(p)+'<div class="st-vt"><b>'+E(ptitle(p))+'</b><span>'+ago(p.createdAt)+(p.isVid?' &middot; Video':'')+'</span></div></div>';
+  const eng = '';
+  modal(head + '<div id="paBody"><div class="st-empty">Loading analytics…</div></div>');
+  el('paBack').onclick = closeModal;
+  const d28 = days(28), likeDays = d28.map(()=>0); let like28 = 0, noLog = false;
+  try{
+    const sn = await db.collection('postLikes').where('postId','==',p.id).limit(3000).get();
+    sn.forEach(d=>{ const t = ms(d.data().createdAt); if(!t) return; const ix = d28.findIndex((x,k)=> t>=x && (k===d28.length-1 || t<d28[k+1])); if(ix>=0){ likeDays[ix]++; like28++; } });
+  }catch(e){ noLog = true; }
+  let cms = [];
+  try{ const sn = await db.collection('posts').doc(p.id).collection('comments').orderBy('createdAt','desc').limit(20).get(); sn.forEach(d=>cms.push(d.data())); }catch(e){}
+  const likes = p.likesCount||0, cmts = p.commentsCount||0, f = Math.max(1, totals().followers);
+  const reach = Math.round((likes + cmts) / f * 100);
+  let h = '<div class="st-row" style="margin-top:6px"><div class="st-card"><div class="st-k">Likes</div><div class="st-big">'+nf(likes)+'</div><div class="st-sub">All time</div></div><div class="st-card"><div class="st-k">Comments</div><div class="st-big">'+nf(cmts)+'</div><div class="st-sub">All time</div></div></div>';
+  h += '<div class="st-row" style="margin-top:12px"><div class="st-card"><div class="st-k">Interactions</div><div class="st-big">'+nf(likes+cmts)+'</div><div class="st-sub">Likes + comments</div></div><div class="st-card"><div class="st-k">Vs followers</div><div class="st-big">'+reach+'%</div><div class="st-sub">Interactions per follower</div></div></div>';
+  h += '<div style="height:12px"></div>' + (noLog ? '<div class="st-card"><div class="st-k">Likes per day</div><div class="st-empty">Daily graph is not available right now.</div></div>' : metric('Likes per day', '+'+nf(like28), 'Last 28 days', likeDays));
+  h += '<div class="st-card"><div class="st-k">Latest comments</div>' + (cms.length ? cms.map(c=>'<div class="st-vrow"><div class="st-vt"><b>'+E(c.authorName||'User')+'</b><span>'+E(c.text||'')+'</span></div><span class="st-sub">'+ago(c.createdAt)+'</span></div>').join('') : '<div class="st-empty">No comments yet</div>') + '</div>';
+  const b = el('paBody'); if(b) b.innerHTML = h;
+}
+
+/* ---------- EARN (monetization lives here now) ---------- */
+function howCard(){
+  return '<div class="st-card"><h3>How earning works</h3><ol class="st-how"><li><b>Meet the requirements.</b> Get 7 followers, 70 views and refer 3 new channels, all within the last 7 days.</li><li><b>Apply for monetization.</b> Verify your phone number, add your ID and your payment details.</li><li><b>Wait for approval.</b> The Genzura team reviews every application. Once approved, your channel becomes monetized.</li><li><b>Earn every month.</b> The month\'s ad revenue is shared between all monetized channels by their share of views, country by country &mdash; views from higher-paying countries earn more, and views through a VPN or proxy are paid at the lowest rate. You get <b>96%</b> of your share, Genzura keeps 4%.</li><li><b>Get paid.</b> Payouts are confirmed by the team at the end of the month and sent by JazzCash, EasyPaisa, bank transfer (Pakistan) or Payoneer (international).</li></ol></div>';
+}
+function earn(){
+  const mon = !!(currentChannel && currentChannel.monetized);
+  let h = '<h2>Earn</h2>';
+  if(mon){
+    h += '<div class="st-status ok">&#10003; Your channel is monetized</div>';
+    if(!S.earn){ loadEarnings(); h += '<div class="st-card"><div class="st-empty">Loading this month\'s earnings…</div></div>'; }
+    else if(S.earn.error) h += '<div class="st-card"><div class="st-empty">Couldn\'t load earnings right now.</div></div>';
+    else h += '<div class="st-card"><div class="st-k">'+E(S.earn.label)+' &mdash; estimated earnings</div><div class="st-money">$'+S.earn.amount.toFixed(2)+'</div><div class="st-line"><span>Views from the app</span><b>'+(S.earn.app||0).toLocaleString()+'</b></div><div class="st-line"><span>Views from the web</span><b>'+(S.earn.web||0).toLocaleString()+'</b></div><div class="st-line"><span>Your share of all creator views</span><b>'+(S.earn.share*100).toFixed(2)+'%</b></div><div class="st-sub" style="margin-top:12px;font-size:11.5px">This is an estimate based on this month so far. Final payout is confirmed by the Genzura team at month end.</div></div>';
+    if(S.earn && !S.earn.error) h += countriesCard();
+    return h + howCard();
+  }
+  const crit = earnCriteria(), all = crit.every(c=>c.have>=c.need), app = S.app, st = app && app.status;
+  if(st === 'pending') h += '<div class="st-status wait">&#9203; Your application is under review</div>';
+  else if(st === 'rejected') h += '<div class="st-status bad">Your last application was not approved.'+(all?' You can apply again.':'')+'</div>';
+  else h += '<div class="st-status '+(all?'ok':'no')+'">'+(all?'&#127881; You\'re eligible for monetization!':'Not yet eligible &mdash; keep going!')+'</div>';
+  h += '<div class="st-card"><h3>Monetization criteria</h3><div class="st-sub" style="margin:0 0 4px">Counted over the last 7 days</div>'+crit.map(c=>{ const d=c.have>=c.need, p=Math.min(100,c.have/c.need*100); return '<div class="st-crit"><div class="ic '+(d?'d':'')+'">'+(d?'&#10003;':'&#9675;')+'</div><div class="bd"><div class="lb">'+c.label+'</div><div class="st-bar"><i style="width:'+p+'%"></i></div><div class="st-sub">'+c.have+' / '+c.need+'</div></div></div>'; }).join('')+'</div>';
+  h += '<button class="st-btn" id="stShareRef">Share your referral link</button>';
+  if(all && st !== 'pending') h += '<button class="st-btn grn" id="stApply">Apply for Monetization</button>';
+  return h + '<div style="height:14px"></div>' + howCard();
+}
+function shareRef(){
+  const id = currentChannel && currentChannel.channelId, link = MAIN_APP + (id ? '?ref=' + id : '');
+  if(navigator.share){ navigator.share({ title:'Genzura', text:'Check out Genzura!', url:link }).catch(()=>{}); }
+  else { try{ navigator.clipboard.writeText(link); toast('Referral link copied'); }catch(e){ toast(link); } }
+}
+
+/* ---------- monetization application (moved here from the app) ---------- */
+function uploadToCloudinary(file, filename, attempt){
+  attempt = attempt || 1;
+  return new Promise((resolve,reject)=>{
+    const fd=new FormData(); fd.append('file',file,filename||file.name||'upload'); fd.append('upload_preset',CLOUDINARY_UPLOAD_PRESET);
+    const x=new XMLHttpRequest(); x.open('POST','https://api.cloudinary.com/v1_1/'+CLOUDINARY_CLOUD_NAME+'/image/upload'); x.timeout=120000;
+    x.onload=()=>{ if(x.status>=200&&x.status<300) resolve(JSON.parse(x.responseText).secure_url); else { let m='Upload failed ('+x.status+')'; try{ m=JSON.parse(x.responseText).error.message; }catch(e){} reject(new Error(m)); } };
+    const retry=err=>{ if(attempt<3) setTimeout(()=>uploadToCloudinary(file,filename,attempt+1).then(resolve).catch(reject),1200*attempt); else reject(err); };
+    x.onerror=()=>retry(new Error('Network error')); x.ontimeout=()=>retry(new Error('Upload timed out')); x.send(fd);
+  });
+}
+function modal(html){ el('stModalIn').innerHTML=html; el('stModal').classList.add('show'); el('stModal').scrollTop=0; }
+function closeModal(){ el('stModal').classList.remove('show'); el('stModalIn').innerHTML=''; }
+function openApply(){
+  if(isApk()){ openExternal(location.origin + '/studio/?apply=1'); toast('Opening the application in your browser…'); return; }
+  const c = currentChannel || {};
+  let phoneOk=false, confirmation=null, cnicFile=null, local=true;
+  modal('<button class="st-x" id="apBack" style="font-size:22px;background:none;border:0;color:inherit;cursor:pointer">&#8592; Back</button><h1>Monetization Application</h1><div class="hint">Complete all steps to submit your application</div>'
+   +'<label class="f">Channel</label><div class="ro">'+E(c.name||'')+' (@'+E(c.channelId||'')+')</div>'
+   +'<label class="f">Phone number *</label><div class="rw"><input type="tel" id="apPhone" placeholder="+92 300 1234567"><button class="mini" id="apSend">Send OTP</button></div><div class="hint">Include your country code, e.g. +92 for Pakistan.</div>'
+   +'<div id="apOtpBox" style="display:none"><label class="f">Enter OTP *</label><div class="rw"><input type="text" id="apOtp" placeholder="6-digit code"><button class="mini" id="apVerify">Verify</button></div></div><div id="apPhoneOk" style="display:none;color:var(--green);font-weight:600;font-size:13px;margin-top:8px">&#10003; Phone number verified</div>'
+   +'<label class="f">Gender</label><div class="ro" style="color:var(--text-dim)">'+E(c.gender||'Not set — please add this in Edit Channel (Genzura) first')+'</div>'
+   +'<label class="f">Country</label><div class="ro" style="color:var(--text-dim)">'+E(c.country||'Not set — please add this in Edit Channel (Genzura) first')+'</div>'
+   +'<label class="f">Address *</label><textarea id="apAddr" placeholder="Full residential address"></textarea>'
+   +'<label class="f">CNIC / National ID number *</label><input type="text" id="apCnic" placeholder="e.g. 12345-1234567-1">'
+   +'<label class="f">CNIC photo (front side) *</label><input type="file" id="apPhoto" accept="image/*">'
+   +'<label class="f">Payment method *</label><div class="opt sel" data-pay="local"><div><b>Pakistan &mdash; Local</b><span>Bank, JazzCash, or EasyPaisa</span></div></div><div class="opt" data-pay="intl"><div><b>International</b><span>Payoneer only</span></div></div>'
+   +'<div id="apLocal"><label class="f">Bank / Service name *</label><input type="text" id="apBank" placeholder="e.g. JazzCash, EasyPaisa, HBL, UBL, Meezan Bank..."><label class="f">Account title *</label><input type="text" id="apTitle"><label class="f">Account / mobile number *</label><input type="text" id="apNum"></div>'
+   +'<div id="apIntl" style="display:none"><label class="f">Payoneer email or customer ID *</label><input type="text" id="apPay"></div>'
+   +'<button class="st-btn pri" id="apSubmit" disabled style="margin-top:22px;width:100%;background:var(--blue);color:#fff;border:0;border-radius:22px;padding:14px;font-size:16px;font-weight:700">Submit Application</button><div class="hint" id="apMsg"></div>');
+  const g=id=>el(id), val=id=>g(id).value.trim();
+  function check(){ const pay = local ? (val('apBank')&&val('apTitle')&&val('apNum')) : val('apPay'); g('apSubmit').disabled = !(phoneOk && val('apAddr') && val('apCnic') && cnicFile && pay); }
+  ['apAddr','apCnic','apBank','apTitle','apNum','apPay'].forEach(id=>g(id).addEventListener('input',check));
+  g('apPhoto').addEventListener('change',e=>{ cnicFile=e.target.files[0]||null; check(); });
+  g('apBack').onclick=closeModal;
+  document.querySelectorAll('#stModal [data-pay]').forEach(o=>o.onclick=()=>{ document.querySelectorAll('#stModal [data-pay]').forEach(x=>x.classList.remove('sel')); o.classList.add('sel'); local=o.dataset.pay==='local'; g('apLocal').style.display=local?'':'none'; g('apIntl').style.display=local?'none':''; check(); });
+  g('apSend').onclick=async()=>{
+    const ph=val('apPhone'); if(!ph.startsWith('+')){ toast('Include country code, e.g. +92...'); return; }
+    const b=g('apSend'); b.disabled=true; b.textContent='Sending...';
+    try{ if(!window.apRecaptcha) window.apRecaptcha=new firebase.auth.RecaptchaVerifier('recaptcha-container',{size:'invisible'}); confirmation=await currentUser.linkWithPhoneNumber(ph,window.apRecaptcha); g('apOtpBox').style.display=''; toast('OTP sent!'); }
+    catch(err){ toast('Failed to send OTP: '+((err.code==='auth/credential-already-in-use'||err.code==='auth/provider-already-linked')?'This phone number is already linked to an account.':err.message)); }
+    finally{ b.disabled=false; b.textContent='Send OTP'; }
+  };
+  g('apVerify').onclick=async()=>{
+    const code=val('apOtp'); if(!code||!confirmation){ toast('Enter the OTP first'); return; }
+    const b=g('apVerify'); b.disabled=true; b.textContent='Verifying...';
+    try{ await confirmation.confirm(code); phoneOk=true; g('apOtpBox').style.display='none'; g('apPhoneOk').style.display='block'; g('apPhone').disabled=true; g('apSend').disabled=true; toast('Phone verified!'); check(); }
+    catch(err){ toast('Invalid OTP: '+err.message); } finally{ b.disabled=false; b.textContent='Verify'; }
+  };
+  g('apSubmit').onclick=async()=>{
+    const b=g('apSubmit'); b.disabled=true; g('apMsg').textContent='Submitting...';
+    let photoURL=''; try{ photoURL=await uploadToCloudinary(cnicFile,'cnic_'+currentUser.uid+'_'+Date.now()+'.jpg'); }catch(err){ toast('CNIC photo upload failed: '+err.message); b.disabled=false; g('apMsg').textContent=''; return; }
+    const data={ uid:currentUser.uid, channelId:c.channelId||null, channelName:c.name||'', phone:val('apPhone'), gender:c.gender||null, country:c.country||null, address:val('apAddr'), cnic:val('apCnic'), cnicPhotoURL:photoURL, paymentType:local?'local':'international', bankName:local?val('apBank'):null, accountTitle:local?val('apTitle'):null, accountNumber:local?val('apNum'):null, payoneerId:!local?val('apPay'):null, status:'pending', submittedAt:firebase.firestore.FieldValue.serverTimestamp() };
+    try{ await db.collection('monetization_applications').doc(currentUser.uid).set(data); S.app={ status:'pending' }; el('stModalIn').innerHTML='<div class="st-empty" style="color:var(--green);padding-top:80px;font-size:17px">&#10003; Application submitted!<br><br>Your monetization application has been received and is under review.</div><button class="st-btn pri" id="apDone" style="width:100%;background:var(--blue);color:#fff;border:0;border-radius:22px;padding:14px;font-size:16px;font-weight:700;margin-top:24px">Done</button>'; el('apDone').onclick=()=>{ closeModal(); render(); }; }
+    catch(err){ toast('Submission failed: '+err.message); b.disabled=false; g('apMsg').textContent=''; }
+  };
+}
+
+/* ---------- edit video ---------- */
+function openEdit(v){
+  modal('<button id="edBack" style="font-size:22px;background:none;border:0;color:inherit;cursor:pointer">&#8592; Back</button><h1>Edit post</h1><label class="f">Caption</label><textarea id="edD" maxlength="2200">'+E(v.caption||'')+'</textarea><button class="st-btn pri" id="edS" style="width:100%;background:var(--blue);color:#fff;border:0;border-radius:22px;padding:14px;font-size:16px;font-weight:700;margin-top:22px">Save</button>');
+  el('edBack').onclick=closeModal;
+  el('edS').onclick=async()=>{ const cap=el('edD').value.trim(); const tags=(cap.match(/#[\p{L}\p{N}_]+/gu)||[]).map(x=>x.slice(1).toLowerCase()); const o={ caption:cap, tags, edited:true }; try{ await db.collection('posts').doc(v.id).update(o); Object.assign(v,o); toast('Saved'); closeModal(); render(); }catch(e){ toast('Save failed: '+e.message); } };
+}
+async function delPost(v){
+  if(!confirm('Delete this post? This cannot be undone.')) return;
+  try{ await db.collection('posts').doc(v.id).delete(); S.posts=S.posts.filter(x=>x.id!==v.id); S.cm=null; toast('Deleted'); render(); }catch(e){ toast('Delete failed: '+e.message); }
+}
+
+/* ---------- render + events ---------- */
+function render(){
+  const b=el('stBody'); if(!b) return;
+  if(!S.loaded){ b.innerHTML='<div class="st-empty">Loading Studio…</div>'; return; }
+  const keep=b.scrollTop;
+  const sc=el('stSideChan'); if(sc){ const c=currentChannel||{}; sc.innerHTML='<div class="av" style="background:'+colorFor(c.name||'A')+'">'+(c.logoURL?'<img src="'+E(c.logoURL)+'">':E(((c.name||'A')[0]||'A').toUpperCase()))+'</div><b>Your channel</b><span>'+E(c.name||'My channel')+'</span>'; }
+  b.innerHTML=({dash,content,analytics,community,earn}[S.tab]||dash)();
+  el('stNav').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.t===S.tab));
+  b.scrollTop=keep;
+}
+function sheet(items){
+  let s=el('stSheet'); if(s) s.remove();
+  s=document.createElement('div'); s.id='stSheet'; s.innerHTML='<div class="in">'+items.map((x,i)=>'<button class="'+(x.red?'red':'')+'" data-i="'+i+'">'+x.label+'</button>').join('')+'</div>';
+  s.addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b){ if(e.target===s) s.remove(); return; } const it=items[+b.dataset.i]; s.remove(); it.fn(); });
+  document.body.appendChild(s);
+}
+el('stNav').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; S.tab=b.dataset.t; render(); el('stBody').scrollTop=0; });
+el('stPlus').addEventListener('click',()=>openArainTube(''));
+el('stAvBtn').addEventListener('click',()=>sheet([
+  { label:'Open Genzura', fn:()=>openArainTube('') },
+  { label:(document.documentElement.dataset.theme==='dark'?'Light theme':'Dark theme'), fn:toggleTheme },
+  { label:'Switch account', fn:switchAccount },
+  { label:'Sign out', red:true, fn:()=>{ clearNativeAccount(); auth.signOut().catch(()=>{}); } }
+]));
+el('stBody').addEventListener('click',async e=>{
+  const t=e.target; let x;
+  if((x=t.closest('[data-go]'))){ S.tab=x.dataset.go; render(); return; }
+  if((x=t.closest('[data-at]'))){ S.at=x.dataset.at; render(); return; }
+  if((x=t.closest('[data-ct]'))){ S.ct=x.dataset.ct; render(); return; }
+  if(t.closest('#stShareRef')){ shareRef(); return; }
+  if(t.closest('#stApply')){ openApply(); return; }
+  if((x=t.closest('[data-menu]'))){ e.stopPropagation(); const v=S.posts.find(z=>z.id===x.dataset.menu); if(!v) return; sheet([ {label:'View analytics',fn:()=>openPostAnalytics(v)}, {label:'Edit caption',fn:()=>openEdit(v)}, {label:'Delete',red:true,fn:()=>delPost(v)} ]); return; }
+  if((x=t.closest('[data-open]'))){ const v=S.posts.find(z=>z.id===x.dataset.open); if(v) openPostAnalytics(v); return; }
+  if((x=t.closest('[data-heart]'))){ const c=S.cm[+x.dataset.heart]; if(!c) return; const nv=!c.creatorHeart; try{ await db.collection('posts').doc(c.vId).collection('comments').doc(c.id).update({creatorHeart:nv}); c.creatorHeart=nv; render(); }catch(er){ toast("Couldn't heart this comment"); } return; }
+  if((x=t.closest('[data-delc]'))){ const c=S.cm[+x.dataset.delc]; if(!c||!confirm('Delete this comment?')) return; try{ await db.collection('posts').doc(c.vId).collection('comments').doc(c.id).delete(); try{ await db.collection('posts').doc(c.vId).update({commentsCount:firebase.firestore.FieldValue.increment(-1)}); }catch(e2){} S.cm=S.cm.filter(z=>z!==c); render(); toast('Comment deleted'); }catch(er){ toast("Couldn't delete this comment"); } }
+});
+
+/* ---------- boot ---------- */
+const BOOT_T0 = Date.now(); let bootDone = false;
+/* fade the splash out once the screen is ready (min 1.4 s so the logo animation is always seen) */
+function stBootDone(){
+  if(bootDone) return; bootDone = true;
+  setTimeout(()=>{
+    const b = el('stBoot'); if(b){ b.classList.add('out'); setTimeout(()=>b.classList.add('hidden'), 380); }
+    try{ window.AndroidStudio && window.AndroidStudio.bootDone && window.AndroidStudio.bootDone(); }catch(e){}
+  }, Math.max(0, 1000 - (Date.now() - BOOT_T0)));
+}
+setTimeout(stBootDone, 2000); /* splash never stays longer than 2 s */
+/* banner ad (Android app only): shown only while a channel dashboard is on screen */
+function studioAds(on){ try{ window.AndroidStudio && window.AndroidStudio.setAds && window.AndroidStudio.setAds(!!on); }catch(e){} }
+let chUnsub = null, started = false;
+function showLogin(){ el('atStudio').classList.add('hidden'); el('stLogin').classList.remove('hidden'); studioAds(false); stBootDone(); }
+function setAvatar(){ const c=currentChannel||{}, b=el('stAvBtn'); b.style.background=colorFor(c.name||'A'); b.innerHTML=c.logoURL?'<img src="'+E(c.logoURL)+'">':E(((c.name||'A')[0]||'A').toUpperCase()); }
+auth.onAuthStateChanged(async user=>{
+  if(chUnsub){ chUnsub(); chUnsub=null; }
+  if(!user){ currentUser=null; currentChannel=null; started=false; S.loaded=false; showLogin(); return; }
+  currentUser=user; el('stLogin').classList.add('hidden');
+  const first = await db.collection('channels').doc(user.uid).get().catch(()=>null);
+  if(!first || !first.exists){
+    el('atStudio').classList.remove('hidden');
+    el('stBody').innerHTML='<div class="st-empty" style="padding-top:80px">You do not have a channel yet.<br>Create your channel in Genzura first, then come back to Studio.<br><br><button class="st-btn pri" id="stGoMain" style="background:var(--blue);color:#fff">Open Genzura</button></div>';
+    el('stGoMain').onclick=()=>openArainTube(''); studioAds(false); stBootDone(); return;
+  }
+  currentChannel=first.data(); setAvatar(); el('atStudio').classList.remove('hidden'); studioAds(true);
+  const h=(location.hash||'').replace('#',''); if(['dash','content','analytics','community','earn'].includes(h)) S.tab=h;
+  render();
+  chUnsub=db.collection('channels').doc(user.uid).onSnapshot(d=>{ if(d.exists){ const wasMon=currentChannel&&currentChannel.monetized; currentChannel=d.data(); setAvatar(); if(S.loaded && S.tab==='earn' && wasMon!==currentChannel.monetized){ S.earn=null; render(); } } });
+  try{ await load(); }catch(e){ el('stBody').innerHTML='<div class="st-empty">Could not load Studio. Check your internet and try again.</div>'; stBootDone(); return; }
+  render(); stBootDone();
+  if(!started){ started=true; if(/[?&]apply=1/.test(location.search) && !currentChannel.monetized){ S.tab='earn'; render(); const all=earnCriteria().every(c=>c.have>=c.need); if(all && !(S.app&&S.app.status==='pending')) openApply(); else toast('You need to meet the requirements first'); } }
+});
+window.addEventListener('hashchange',()=>{ const h=(location.hash||'').replace('#',''); if(S.loaded && ['dash','content','analytics','community','earn'].includes(h)){ S.tab=h; render(); } });
+
+</script>
+</body></html>

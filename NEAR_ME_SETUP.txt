@@ -1,0 +1,48 @@
+NEAR ME (Local Map Feed + Local Events) - SETUP
+================================================
+
+KYA HAI?
+- Home ke upar header mein ek 📍 (pin) icon aata hai. Us par tap karo to "Near Me" khulta hai.
+- Aap ke 5 km ya 10 km ke andar ke POSTS (24 ghante tak) aur EVENTS (concert, match, food festival, other) dikhte hain.
+- Do view: Feed (list) aur Map (OpenStreetMap, Leaflet - koi API key nahi chahiye).
+- Filters: All / Posts / Events / Concert / Match / Food / Other.
+- "+" button: apne area mein post karo (text + optional photo) ya Event add karo (naam, type, date/time, venue map par tap karke).
+- Apna post/event delete kar sakte ho. Doosron ka post "Report" kar sakte ho (reports admin panel mein pending aate hain).
+
+PRIVACY (zaroor samajh lo)
+- Post mein sirf ~1 km ka approximate area save hota hai. Exact GPS kabhi save/share nahi hota.
+- Event ka venue public hota hai (log dhoondh sakein), isliye precise pin save hota hai. Ghar ka address mat daalo.
+- Location sirf tab maangi jati hai jab user Near Me kholta hai. Phone ki location app/browser se alag se allow karni hoti hai.
+
+STEP 1 - FIREBASE RULES  [2 minute]
+- firestore.rules is zip mein already update hai ("localPosts" ka naya block, neeche "EVERYTHING ELSE IS DENIED" se pehle).
+- Firebase Console -> arain-tube-672a1 -> Build -> Firestore Database -> Rules tab -> poori file ki jagah naye
+  firestore.rules ka content paste karo -> Publish.
+  (Ya sirf "NEAR ME" wala block + "function lmValid" copy karke apne rules mein, aakhri 2 "}" se pehle paste karo.)
+- Koi index banane ki zaroorat NAHI hai.
+
+STEP 2 - PURANE POSTS AUTO-DELETE (TTL)  [2 minute, recommended]
+- Firestore Database -> upar "Indexes" ya left side "TTL" (Time-to-live) -> Create policy:
+    Collection group: localPosts      Timestamp field: expiresAt
+- Is se expire hue posts/events Firebase khud delete kar deta hai (app unhe pehle hi chhupa deta hai, ye sirf safai hai).
+
+STEP 3 - WEBSITE DEPLOY
+- Is Web zip ko Netlify par drop karo (jaise pehle). service-worker cache v77 ho gaya hai, isliye naya version turant load hoga.
+
+STEP 4 - ANDROID APP
+- Naya Android project zip use karo: AndroidManifest mein ACCESS_COARSE_LOCATION / ACCESS_FINE_LOCATION add hui hain
+  aur MainActivity.kt mein WebView ke liye location prompt (sirf apni site ke liye).
+- Build karke naya APK/AAB banao. Play Console mein Data safety form mein "Approximate location" add karna hoga
+  (collected, used for app functionality / user-generated content). Privacy policy mein bhi ek line likh dena.
+
+TEST
+1. Do alag accounts se login karo (ek phone + ek browser), dono Near Me kholo.
+2. Account A: "+" -> Post. Account B: Near Me -> Feed mein 5 minute tak (refresh ke liye Near Me band karke dobara kholo) post dikhni chahiye.
+3. Account A: "+" -> Add an event -> venue map par tap karo -> Add. Map tab mein pin dikhna chahiye.
+4. Radius 5 <-> 10 km badal ke dekho.
+
+LIMITS (jaan-boojh kar)
+- Har query ek map cell (~39 x 20 km) mein sabse naye 80 items laati hai. Bahut bade shehar mein jab hazaron posts hon to
+  geohash precision (GH_LEN) badhani paregi.
+- Post ke beech kam az kam 5 minute ka gap (sirf app ke andar, rules mein nahi).
+- Map tiles OpenStreetMap ke free server se aate hain - bohot zyada traffic par apna tile provider lagana hoga.

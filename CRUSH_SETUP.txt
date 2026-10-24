@@ -1,0 +1,13 @@
+CRUSH VOTE + WHO SAVED ME - setup
+1) Deploy the folder to Netlify (index.html + netlify/functions/contacts.js changed). Android app: no change.
+2) Publish the new firestore.rules (crushOpen, crushStats, crushVotes, savedCountOpt).
+   NOTE: if your live "contacts" backend is a Cloudflare Worker, copy the new "savedCount" action from netlify/functions/contacts.js there too.
+Use: Home 3-lines menu -> "Crush Vote & Who saved me".
+- Crush Vote: a person turns it ON himself; friends (mutual follow / contacts) vote Secret Crush or Legend. He sees totals only. Votes are readable only by the voter.
+- Who saved me: the person turns it ON himself; the server returns ONE number (hidden if fewer than 3). No names, no labels.
+
+MUTUAL CRUSH "SPARK" (new)
+- If A voted Secret Crush on B AND B voted Secret Crush on A, a small "Spark" pill shows on each other's profile (and in the Crush page). No notification, no push, no name sent anywhere.
+- Publish the new firestore.rules (new collection: sparks). No new index, no new function. Android app: no change.
+- How it works: the SECOND person to vote creates sparks/{lowUid_highUid}; the rules allow it only if both crushVotes docs exist with kind=crush. The first person sees the Spark next time he opens that profile / the Crush page. Votes themselves stay readable only by the voter.
+- Legend votes never create a Spark. Both people must have Crush Vote turned ON and be friends/contacts.

@@ -1,0 +1,29 @@
+ANONYMOUS INBOX - setup (1 minute)
+
+1) Deploy this folder to Netlify as usual (index.html changed).
+
+2) Firebase Console -> Firestore Database -> Rules: add this block INSIDE "match /databases/{database}/documents { ... }"
+
+    match /anonMessages/{id} {
+      // anyone (even without login) can SEND, but only a short text message
+      allow create: if request.resource.data.keys().hasOnly(['toUid','text','createdAt','read'])
+                    && request.resource.data.toUid is string
+                    && request.resource.data.text is string
+                    && request.resource.data.text.size() > 0
+                    && request.resource.data.text.size() <= 300
+                    && request.resource.data.read == false
+                    && request.resource.data.createdAt == request.time;
+      // only the receiver can read / delete their messages
+      allow read, delete: if request.auth != null && resource.data.toUid == request.auth.uid;
+      // receiver can only flip "read"
+      allow update: if request.auth != null && resource.data.toUid == request.auth.uid
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+    }
+
+   Then press Publish.
+
+How it works
+- Profile menu (≡) -> "Anonymous Inbox" -> Share my link.   Link format:  https://genzura.netlify.app/?ask=<uid>
+- Anyone who opens the link sees a send screen (no login). Sender identity is NOT stored at all.
+- New messages show a pink dot on the ≡ button and a count badge in the menu.
+- Android app: no change needed (it is all inside the website).

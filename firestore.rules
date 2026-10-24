@@ -1,0 +1,1026 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ================================================================
+    //  HELPERS
+    // ================================================================
+    function signedIn() { return request.auth != null; }
+    function me()       { return request.auth.uid; }
+    function isAdmin()  { return request.auth != null && request.auth.uid == 'zLq96Q4K6iNJoUHDxrE0GwBL1vk1'; }
+
+    // which top-level fields changed in this write
+    function changed()  { return request.resource.data.diff(resource.data).affectedKeys(); }
+    // numeric change of a counter field (missing field = 0)
+    function delta(f)   { return request.resource.data.get(f, 0) - resource.data.get(f, 0); }
+    function isStr(v, max) { return v is string && v.size() > 0 && v.size() <= max; }
+
+    // follow helpers
+    function subPath(a, b) { return /databases/$(database)/documents/subscriptions/$(a + '_' + b); }
+    function followsBoth(a, b) { return exists(subPath(a, b)) && exists(subPath(b, a)); }
+    // mutual phone-contacts link (written ONLY by the Netlify function 'contacts'; doc id = sorted "uidA_uidB")
+    function contactPath(a, b) { return /databases/$(database)/documents/contactLinks/$(a < b ? a + '_' + b : b + '_' + a); }
+    // chat / call allowed when both follow each other OR are in each other's phone contacts
+    function canTalk(a, b) { return followsBoth(a, b) || exists(contactPath(a, b)); }
+
+    // like helpers
+    function videoLikePath(u, v) { return /databases/$(database)/documents/likes/$(u + '_' + v); }
+    function postLikePath(u, p)  { return /databases/$(database)/documents/postLikes/$(u + '_' + p); }
+
+    // owner helpers
+    function videoOwner(vid) { return get(/databases/$(database)/documents/videos/$(vid)).data.channelId == me(); }
+    function postOwner(pid)  { return get(/databases/$(database)/documents/posts/$(pid)).data.uid == me(); }
+
+    // chat helpers (DM id = "uidA_uidB" sorted, group id = auto id without "_")
+    function isDmId(id)    { return id.matches('[^_]+_[^_]+'); }
+    function isGroupId(id) { return id.matches('[^_]+'); }
+    function inDmId(id)    { return isDmId(id) && (me() in id.split('_')); }
+    function dmFollowOk(id){ return canTalk(id.split('_')[0], id.split('_')[1]); }
+    function groupData(id) { return get(/databases/$(database)/documents/chats/$(id)).data; }
+    function chatMember(id){ return inDmId(id) || (isGroupId(id) && (me() in groupData(id).members)); }
+
+    // call helpers
+    function callData(id)  { return get(/databases/$(database)/documents/calls/$(id)).data; }
+    function callParty(id) { return me() == callData(id).callerId || me() == callData(id).calleeId; }
+
+    // toggle ONLY my own uid inside a "likes" array (post comment likes)
+    function onlyMyLikeToggle() {
+      return changed().hasOnly(['likes'])
+        && (
+          (request.resource.data.get('likes', []).toSet().difference(resource.data.get('likes', []).toSet()).hasOnly([me()])
+            && resource.data.get('likes', []).toSet().difference(request.resource.data.get('likes', []).toSet()).size() == 0)
+          ||
+          (resource.data.get('likes', []).toSet().difference(request.resource.data.get('likes', []).toSet()).hasOnly([me()])
+            && request.resource.data.get('likes', []).toSet().difference(resource.data.get('likes', []).toSet()).size() == 0)
+        );
+    }
+
+    // ================================================================
+    //  KEY BACKUPS / USER KEYS / PUSH TOKENS  (private)
+    // ================================================================
+    match /keyBackups/{uid} {
+      allow read, write: if signedIn() && me() == uid;
+    }
+
+    match /userKeys/{uid} {
+      allow read: if signedIn();                                   // public keys (needed for E2E chat)
+      allow create, update: if signedIn() && me() == uid
+        && isStr(request.resource.data.pub, 400);
+      allow delete: if signedIn() && me() == uid;
+    }
+
+    match /fcmTokens/{token} {
+      allow create, update: if signedIn() && request.resource.data.uid == me();
+      allow get, delete: if signedIn() && resource.data.uid == me();
+      allow list: if false;
+    }
+
+    // ================================================================
+    //  CHANNELS + CHANNEL IDS
+    // ================================================================
+    match /channelIds/{cid} {
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.ownerUid == me()
+        && request.resource.data.keys().hasOnly(['ownerUid']);
+      allow update: if false;
+      allow delete: if signedIn() && (resource.data.ownerUid == me() || isAdmin());
+    }
+
+    match /channels/{uid} {
+      allow read: if true;
+
+      allow create: if signedIn() && me() == uid
+        && isStr(request.resource.data.name, 100)
+        && request.resource.data.subscriberCount == 0
+        && request.resource.data.get('likesTotal', 0) == 0
+        && request.resource.data.get('referralCount', 0) == 0
+        && !('monetized' in request.resource.data)
+        && !('referredByAdmin' in request.resource.data)
+        && request.resource.data.channelId is string
+        && getAfter(/databases/$(database)/documents/channelIds/$(request.resource.data.channelId)).data.ownerUid == me();
+
+      allow delete: if signedIn() && (me() == uid || isAdmin());
+
+      allow update: if signedIn() && (
+        // admin: anything (approve monetization, etc.)
+        isAdmin()
+        // owner: edit own profile, but never the protected counters / badges
+        || (me() == uid
+            && !changed().hasAny(['subscriberCount', 'likesTotal', 'referralCount', 'monetized', 'referredByAdmin', 'createdAt'])
+            && (request.resource.data.get('channelId', null) == resource.data.get('channelId', null)
+                || getAfter(/databases/$(database)/documents/channelIds/$(request.resource.data.channelId)).data.ownerUid == me()))
+        // anyone else: ONLY subscriberCount +1 / -1 and ONLY together with a real follow / unfollow
+        || (me() != uid
+            && changed().hasOnly(['subscriberCount'])
+            && ((delta('subscriberCount') == 1  &&  existsAfter(subPath(me(), uid)))
+             || (delta('subscriberCount') == -1 && !existsAfter(subPath(me(), uid)))))
+      );
+    }
+
+    // ================================================================
+    //  FOLLOWS
+    // ================================================================
+    match /subscriptions/{id} {
+      allow read: if true;
+      allow create: if signedIn()
+        && request.resource.data.subscriberId == me()
+        && request.resource.data.channelId is string
+        && request.resource.data.channelId != me()
+        && id == me() + '_' + request.resource.data.channelId;
+      allow update: if false;
+      allow delete: if signedIn() && (resource.data.subscriberId == me() || isAdmin());
+    }
+
+    // ================================================================
+    //  VIDEOS (+ comments)
+    // ================================================================
+    match /videos/{vid} {
+      allow read: if true;
+
+      allow create: if signedIn()
+        && request.resource.data.channelId == me()
+        && exists(/databases/$(database)/documents/channels/$(me()))
+        && isStr(request.resource.data.title, 300)
+        && request.resource.data.views == 0
+        && request.resource.data.get('likesCount', 0) == 0
+        && request.resource.data.get('commentsCount', 0) == 0
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if signedIn() && (
+        isAdmin()
+        // owner edits (title, desc, boost, name/logo sync ...) but never counters / identity
+        || (resource.data.channelId == me()
+            && !changed().hasAny(['views', 'likesCount', 'commentsCount', 'channelId', 'createdAt']))
+        // likes counter: +1 only with my like doc, -1 only after my like doc is gone
+        || (changed().hasOnly(['likesCount'])
+            && ((delta('likesCount') == 1  &&  existsAfter(videoLikePath(me(), vid)))
+             || (delta('likesCount') == -1 && !existsAfter(videoLikePath(me(), vid)))))
+        // comments counter: +1, or decrease (deleting comments)
+        || (changed().hasOnly(['commentsCount'])
+            && (delta('commentsCount') == 1
+                || (delta('commentsCount') < 0 && request.resource.data.commentsCount >= 0)))
+        // NOTE: "views" can NOT be changed from the app. Only the Worker (service account) does it.
+      );
+
+      allow delete: if signedIn() && (resource.data.channelId == me() || isAdmin());
+
+      match /comments/{cid} {
+        allow read: if true;
+        allow create: if signedIn()
+          && request.resource.data.authorId == me()
+          && isStr(request.resource.data.text, 2000);
+        // video owner can only add / remove the "creator heart"
+        allow update: if signedIn() && videoOwner(vid) && changed().hasOnly(['creatorHeart']);
+        allow delete: if signedIn() && (resource.data.authorId == me() || videoOwner(vid) || isAdmin());
+      }
+    }
+
+    // ================================================================
+    //  VIEWS  (written only by the Worker with service account)
+    // ================================================================
+    match /views/{id} {
+      allow read: if signedIn();       // Studio analytics query by videoId / date
+      allow write: if false;
+    }
+
+    // ================================================================
+    //  VIDEO LIKES
+    // ================================================================
+    match /likes/{id} {
+      allow get: if signedIn() && (id.matches(me() + '_.*') || isAdmin());
+      allow list: if isAdmin();
+      allow create: if signedIn()
+        && request.resource.data.uid == me()
+        && request.resource.data.videoId is string
+        && id == me() + '_' + request.resource.data.videoId;
+      allow update: if false;
+      allow delete: if signedIn() && id.matches(me() + '_.*');
+    }
+
+    // ================================================================
+    //  POSTS (+ comments)
+    // ================================================================
+    match /posts/{id} {
+      allow read: if true;
+
+      allow create: if signedIn()
+        && request.resource.data.uid == me()
+        && exists(/databases/$(database)/documents/channels/$(me()))
+        && request.resource.data.get('likesCount', 0) == 0
+        && request.resource.data.get('commentsCount', 0) == 0
+        && request.resource.data.get('caption', '') is string
+        && request.resource.data.get('caption', '').size() <= 2200
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if signedIn() && (
+        isAdmin()
+        // owner: edit caption only (+ lower commentsCount when deleting comments)
+        || (resource.data.uid == me()
+            && changed().hasOnly(['caption', 'tags', 'edited', 'commentsCount'])
+            && delta('commentsCount') <= 0
+            && request.resource.data.get('commentsCount', 0) >= 0)
+        // likes counter (anyone, incl. owner): tied to my postLikes doc
+        || (changed().hasOnly(['likesCount'])
+            && ((delta('likesCount') == 1  &&  existsAfter(postLikePath(me(), id)))
+             || (delta('likesCount') == -1 && !existsAfter(postLikePath(me(), id)))))
+        // comments counter
+        || (changed().hasOnly(['commentsCount'])
+            && (delta('commentsCount') == 1
+                || (delta('commentsCount') < 0 && request.resource.data.commentsCount >= 0)))
+      );
+
+      allow delete: if signedIn() && (resource.data.uid == me() || isAdmin());
+
+      match /comments/{cid} {
+        allow read: if true;
+        allow create: if signedIn()
+          && request.resource.data.authorId == me()
+          && isStr(request.resource.data.text, 2200)
+          && request.resource.data.get('likes', []).size() == 0;
+        allow update: if signedIn() && onlyMyLikeToggle();
+        allow delete: if signedIn() && (
+          resource.data.authorId == me()
+          || postOwner(id)
+          || isAdmin()
+          // author of a parent comment deleting its replies
+          || (resource.data.get('parentId', null) != null
+              && get(/databases/$(database)/documents/posts/$(id)/comments/$(resource.data.parentId)).data.authorId == me())
+        );
+      }
+    }
+
+    match /postLikes/{id} {
+      allow get: if signedIn() && (id.matches(me() + '_.*') || isAdmin());
+      allow list: if isAdmin();
+      allow create: if signedIn()
+        && request.resource.data.uid == me()
+        && request.resource.data.postId is string
+        && id == me() + '_' + request.resource.data.postId;
+      allow update: if false;
+      allow delete: if signedIn() && id.matches(me() + '_.*');
+    }
+
+    match /saves/{id} {
+      allow read: if signedIn() && resource.data.uid == me();
+      allow create: if signedIn()
+        && request.resource.data.uid == me()
+        && request.resource.data.postId is string
+        && id == me() + '_' + request.resource.data.postId;
+      allow update: if false;
+      allow delete: if signedIn() && resource.data.uid == me();
+    }
+
+    // ================================================================
+    //  NOTIFICATIONS
+    // ================================================================
+    match /notifications/{id} {
+      allow read: if signedIn() && resource.data.toUid == me();
+      allow create: if signedIn()
+        && request.resource.data.fromUid == me()
+        && request.resource.data.toUid is string
+        && request.resource.data.toUid != me();
+      allow update: if signedIn() && (
+        // receiver: only mark as read
+        (resource.data.toUid == me() && changed().hasOnly(['read']))
+        // sender: re-send the same notification (same like -> same id)
+        || (resource.data.fromUid == me()
+            && request.resource.data.fromUid == me()
+            && request.resource.data.toUid == resource.data.toUid)
+      );
+      allow delete: if signedIn() && (resource.data.toUid == me() || resource.data.fromUid == me());
+    }
+
+    // ================================================================
+    //  ANONYMOUS INBOX  (messages are written ONLY by the Worker route /anon-send)
+    // ================================================================
+    match /anonMessages/{id} {
+      // no client can create: the Worker (service account) does it, with cooldown + push
+      allow create: if false;
+      // only the receiver can read / delete their own messages
+      allow read, delete: if signedIn() && resource.data.toUid == me();
+      // receiver can only flip "read"
+      allow update: if signedIn() && resource.data.toUid == me()
+        && changed().hasOnly(['read']);
+    }
+
+    // rate-limit counters (IP hashes) - Worker only, no client access at all
+    match /anonRate/{id} {
+      allow read, write: if false;
+    }
+
+    // ================================================================
+    //  REFERRALS
+    // ================================================================
+    match /referrals/{id} {
+      allow read: if signedIn() && (resource.data.referrerUid == me() || resource.data.newUid == me() || isAdmin());
+      allow create: if signedIn()
+        && request.resource.data.newUid == me()
+        && request.resource.data.referrerUid is string
+        && request.resource.data.referrerUid != me();
+      allow update, delete: if isAdmin();
+    }
+
+    // ================================================================
+    //  STORIES, ARCHIVE, CLOSE FRIENDS, HIGHLIGHTS
+    // ================================================================
+    match /stories/{sid} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.uid == me();
+      allow update: if signedIn() && resource.data.uid == me()
+        && request.resource.data.uid == resource.data.uid;
+      allow delete: if signedIn() && (resource.data.uid == me() || isAdmin());
+
+      match /views/{v} {
+        allow read: if signedIn() && (v == me()
+          || get(/databases/$(database)/documents/stories/$(sid)).data.uid == me());
+        allow create, update: if signedIn() && v == me() && request.resource.data.uid == me();
+        allow delete: if signedIn() && (v == me()
+          || get(/databases/$(database)/documents/stories/$(sid)).data.uid == me());
+      }
+    }
+
+    match /storyArchive/{id} {
+      allow read: if signedIn() && resource.data.uid == me();
+      allow create: if signedIn() && request.resource.data.uid == me();
+      allow update: if false;
+      allow delete: if signedIn() && resource.data.uid == me();
+    }
+
+    // ================================================================
+    //  MOOD STATUS + DO-NOT-DISTURB SCHEDULE  (public status, no private lists inside)
+    // ================================================================
+    match /presence/{uid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['mood', 'moodText', 'moodUntil', 'dndOn', 'dndFrom', 'dndTo', 'tz', 'updatedAt', 'vibe', 'vibeUntil', 'vibeGroup'])
+        // Vibe: auto-expiring mood (max 2 hours) used for floating statuses + auto vibe groups
+        && request.resource.data.get('vibe', '') in ['', 'bored', 'cramming', 'chai', 'hangout', 'gaming', 'movie', 'hungry', 'walk']
+        && request.resource.data.get('vibeUntil', 0) is number
+        && request.resource.data.get('vibeUntil', 0) <= request.time.toMillis() + 8100000
+        && request.resource.data.get('vibeGroup', true) is bool
+        && request.resource.data.get('mood', '') in ['', 'free', 'busy', 'sleeping', 'driving', 'studying', 'custom']
+        && request.resource.data.get('moodText', '') is string && request.resource.data.get('moodText', '').size() <= 40
+        && request.resource.data.get('moodUntil', 0) is number
+        && request.resource.data.get('dndOn', false) is bool
+        && request.resource.data.get('dndFrom', '22:00') is string && request.resource.data.get('dndFrom', '22:00').matches('^[0-2][0-9]:[0-5][0-9]$')
+        && request.resource.data.get('dndTo', '07:00') is string && request.resource.data.get('dndTo', '07:00').matches('^[0-2][0-9]:[0-5][0-9]$')
+        && request.resource.data.get('tz', 0) is number;
+      allow delete: if signedIn() && me() == uid;
+    }
+
+    // ================================================================
+    //  CREATOR TIP JAR  (EasyPaisa / JazzCash numbers the creator chooses to show; no money goes through Genzura)
+    // ================================================================
+    match /tipJars/{uid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['enabled', 'easypaisa', 'jazzcash', 'title', 'message', 'updatedAt'])
+        && request.resource.data.get('enabled', false) is bool
+        && request.resource.data.get('easypaisa', '') is string && request.resource.data.get('easypaisa', '').size() <= 15
+        && request.resource.data.get('jazzcash', '') is string && request.resource.data.get('jazzcash', '').size() <= 15
+        && request.resource.data.get('title', '') is string && request.resource.data.get('title', '').size() <= 60
+        && request.resource.data.get('message', '') is string && request.resource.data.get('message', '').size() <= 140;
+      allow delete: if signedIn() && me() == uid;
+    }
+
+    match /closeFriends/{uid} {
+      allow read, write: if signedIn() && me() == uid;
+    }
+
+    match /highlights/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.uid == me();
+      allow update: if signedIn() && resource.data.uid == me()
+        && request.resource.data.uid == resource.data.uid;
+      allow delete: if signedIn() && (resource.data.uid == me() || isAdmin());
+
+      match /items/{i} {
+        allow read: if signedIn();
+        allow write: if signedIn()
+          && get(/databases/$(database)/documents/highlights/$(id)).data.uid == me();
+      }
+    }
+
+    // ================================================================
+    //  LIVE STREAMS  (doc id = broadcaster uid)
+    // ================================================================
+    match /live_streams/{sid} {
+      allow read: if signedIn();
+      allow create, update, delete: if signedIn() && me() == sid;
+
+      match /chat/{m} {
+        allow read: if signedIn();
+        allow create: if signedIn()
+          && request.resource.data.authorId == me()
+          && isStr(request.resource.data.text, 200);
+        allow update: if false;
+        allow delete: if signedIn() && (me() == sid || resource.data.authorId == me() || isAdmin());
+      }
+
+      match /viewers/{v} {
+        allow read: if signedIn() && (me() == sid || me() == v);
+        allow create: if signedIn() && me() == v;
+        allow update: if signedIn() && (me() == sid || me() == v);   // streamer writes "answer"
+        allow delete: if signedIn() && (me() == sid || me() == v);
+
+        match /viewerCandidates/{c} {
+          allow create: if signedIn() && me() == v;
+          allow read: if signedIn() && (me() == sid || me() == v);
+          allow update, delete: if false;
+        }
+        match /broadcasterCandidates/{c} {
+          allow create: if signedIn() && me() == sid;
+          allow read: if signedIn() && (me() == sid || me() == v);
+          allow update, delete: if false;
+        }
+      }
+    }
+
+    // ================================================================
+    //  CONTACT LINKS  (read-only for the two people; written by the server only)
+    //  phoneIndex / contactBooks / userPhone are server-only: no rule = denied for clients.
+    // ================================================================
+    match /contactLinks/{id} {
+      allow get: if signedIn() && inDmId(id);
+      allow list: if signedIn() && me() in resource.data.members;
+      allow write: if false;
+    }
+
+    // ================================================================
+    //  CHATS  (DM needs mutual follow OR mutual phone contacts, group = members only)
+    // ================================================================
+    match /chats/{chatId} {
+      allow read: if signedIn() && (
+        inDmId(chatId)
+        || (resource != null && (me() in resource.data.members))
+      );
+
+      allow create: if signedIn() && (
+        // 1-to-1
+        (inDmId(chatId)
+          && dmFollowOk(chatId)
+          && request.resource.data.members.toSet() == chatId.split('_').toSet())
+        ||
+        // group
+        (isGroupId(chatId)
+          && request.resource.data.isGroup == true
+          && request.resource.data.owner == me()
+          && (me() in request.resource.data.members)
+          && request.resource.data.members.size() >= 2
+          && request.resource.data.members.size() <= 50)
+      );
+
+      allow update: if signedIn() && (
+        // 1-to-1: both members can update, but the 2 members can never change
+        (inDmId(chatId)
+          && request.resource.data.members.toSet() == chatId.split('_').toSet())
+        ||
+        (isGroupId(chatId) && (me() in resource.data.members) && (
+          // owner manages the group (name, photo, add / remove members)
+          (resource.data.owner == me()
+            && request.resource.data.owner == resource.data.owner
+            && request.resource.data.isGroup == true
+            && (me() in request.resource.data.members)
+            && request.resource.data.members.size() <= 50)
+          // any member: unread / typing / last message only
+          || changed().hasOnly(['unread', 'lastRead', 'typing', 'lastText', 'lastType', 'lastFrom', 'lastAt'])
+          // any member: leave the group (owner may pass ownership to a remaining member)
+          || (!(me() in request.resource.data.members)
+              && resource.data.members.toSet().difference(request.resource.data.members.toSet()) == [me()].toSet()
+              && request.resource.data.members.toSet().difference(resource.data.members.toSet()).size() == 0
+              && changed().hasOnly(['members', 'info', 'unread', 'lastRead', 'owner'])
+              && (request.resource.data.owner == resource.data.owner
+                  || (resource.data.owner == me() && (request.resource.data.owner in request.resource.data.members))))
+        ))
+      );
+
+      allow delete: if false;
+
+      // DAKU LEDGER (group chats): ETA "Busted" + chai udhaar, members only
+      match /ledger/{lid} {
+        allow read: if signedIn() && chatMember(chatId);
+        allow create: if signedIn() && isGroupId(chatId) && chatMember(chatId)
+          && request.resource.data.by == me()
+          && (
+            (request.resource.data.kind == 'eta'
+              && request.resource.data.uid == me()
+              && request.resource.data.status == 'open'
+              && request.resource.data.etaAt is number)
+            ||
+            (request.resource.data.kind == 'debt'
+              && request.resource.data.amount is number
+              && request.resource.data.amount > 0 && request.resource.data.amount <= 1000000
+              && request.resource.data.paid == false
+              && request.resource.data.lender is string && request.resource.data.borrower is string
+              && request.resource.data.lender != request.resource.data.borrower
+              && (me() == request.resource.data.lender || me() == request.resource.data.borrower))
+          );
+        allow update: if signedIn() && chatMember(chatId) && (
+          // owner says "arrived"
+          (resource.data.kind == 'eta' && resource.data.uid == me() && resource.data.status == 'open'
+            && changed().hasOnly(['status', 'arrivedAt']) && request.resource.data.status == 'ok')
+          // a friend busts it, only 5 minutes after the promised time
+          || (resource.data.kind == 'eta' && resource.data.uid != me() && resource.data.status == 'open'
+            && changed().hasOnly(['status', 'bustedBy', 'bustedAt'])
+            && request.resource.data.status == 'busted'
+            && request.resource.data.bustedBy == me()
+            && request.time.toMillis() > resource.data.etaAt + 300000)
+          // lender marks the udhaar as paid
+          || (resource.data.kind == 'debt' && resource.data.lender == me()
+            && changed().hasOnly(['paid', 'paidAt']))
+        );
+        allow delete: if signedIn() && chatMember(chatId) && resource.data.by == me();
+      }
+
+      match /messages/{mid} {
+        allow read: if signedIn() && chatMember(chatId);
+
+        allow create: if signedIn()
+          && chatMember(chatId)
+          && request.resource.data.from == me()
+          && (!isDmId(chatId) || dmFollowOk(chatId))
+          // temporary vibe groups stop accepting messages when they expire
+          && (!isGroupId(chatId) || groupData(chatId).get('expiresAt', 0) == 0 || groupData(chatId).expiresAt > request.time.toMillis());
+
+        // reactions: only my own key
+        allow update: if signedIn() && chatMember(chatId)
+          && changed().hasOnly(['reactions'])
+          && request.resource.data.get('reactions', {}).diff(resource.data.get('reactions', {})).affectedKeys().hasOnly([me()]);
+
+        // unsend: only my own message
+        allow delete: if signedIn() && chatMember(chatId) && resource.data.from == me();
+      }
+    }
+
+    // ================================================================
+    //  CALLS  (new call needs mutual follow)
+    // ================================================================
+    match /calls/{callId} {
+      allow read: if signedIn() && (resource.data.callerId == me() || resource.data.calleeId == me());
+
+      allow create: if signedIn()
+        && request.resource.data.callerId == me()
+        && request.resource.data.calleeId is string
+        && request.resource.data.calleeId != me()
+        && request.resource.data.status == 'ringing'
+        && canTalk(me(), request.resource.data.calleeId);
+
+      allow update: if signedIn()
+        && (resource.data.callerId == me() || resource.data.calleeId == me())
+        && changed().hasOnly(['status', 'answer', 'reason']);
+
+      allow delete: if signedIn() && (resource.data.callerId == me() || resource.data.calleeId == me());
+
+      match /callerCandidates/{c} {
+        allow create: if signedIn() && callData(callId).callerId == me();
+        allow read: if signedIn() && callParty(callId);
+        allow update, delete: if false;
+      }
+      match /calleeCandidates/{c} {
+        allow create: if signedIn() && callData(callId).calleeId == me();
+        allow read: if signedIn() && callParty(callId);
+        allow update, delete: if false;
+      }
+    }
+
+    // ================================================================
+    //  MONETIZATION / ADMIN PANEL
+    // ================================================================
+    match /monetization_applications/{uid} {
+      allow get: if signedIn() && (me() == uid || isAdmin());
+      allow list: if isAdmin();
+      // user can only apply as "pending" (never self-approve)
+      allow create: if signedIn() && me() == uid && request.resource.data.status == 'pending';
+      allow update: if signedIn() && (
+        isAdmin()
+        || (me() == uid
+            && resource.data.status != 'approved'
+            && request.resource.data.status == 'pending')
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /promotions/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /settings/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /reports/{reportId} {
+      allow get: if signedIn() && (reportId.matches('.*_' + me()) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if signedIn()
+        && request.resource.data.reporterId == me()
+        && reportId.matches('.*_' + me())
+        && request.resource.data.status == 'pending';
+      allow update, delete: if isAdmin();
+    }
+
+    // ================================================================
+    //  WATCH PARTY (Co-Reels)  - up to 4 people scroll the SAME reels + voice chat
+    //  members[] = everyone inside, queue[] = shared playlist (same order for all),
+    //  sig/* = WebRTC voice signalling between members (deleted after use)
+    // ================================================================
+    function wpMember(code) { return me() in get(/databases/$(database)/documents/watchParties/$(code)).data.members; }
+
+    match /watchParties/{code} {
+      // host creates a party for himself (only himself inside, playlist up to 40 reels)
+      allow create: if signedIn()
+        && request.resource.data.hostUid == me()
+        && request.resource.data.members == [me()]
+        && request.resource.data.queue is list
+        && request.resource.data.queue.size() <= 40;
+      // anyone signed in who has the (secret, random) code can open it; no listing
+      allow get: if signedIn();
+      allow list: if false;
+      allow update: if signedIn() && (
+        // host: end the party
+        (resource.data.hostUid == me()
+          && changed().hasOnly(['videoId', 'by', 'seq', 'updatedAt', 'ended']))
+        // any member: move everybody to another reel
+        || ((me() in resource.data.members)
+          && changed().hasOnly(['videoId', 'by', 'seq', 'updatedAt']))
+        // member leaves (removes only himself)
+        || ((me() in resource.data.members)
+          && changed().hasOnly(['members', 'names'])
+          && !(me() in request.resource.data.members)
+          && resource.data.members.toSet().difference(request.resource.data.members.toSet()) == [me()].toSet()
+          && request.resource.data.members.toSet().difference(resource.data.members.toSet()).size() == 0)
+        // a friend joins (adds only himself, max 4 people)
+        || (!(me() in resource.data.members)
+          && resource.data.ended == false
+          && changed().hasOnly(['members', 'names'])
+          && request.resource.data.members.size() <= 4
+          && request.resource.data.members.toSet().difference(resource.data.members.toSet()) == [me()].toSet()
+          && resource.data.members.toSet().difference(request.resource.data.members.toSet()).size() == 0)
+      );
+      allow delete: if false;
+
+      // voice-chat signalling (offer / answer / ICE): written by a member, read + deleted by the receiver
+      match /sig/{sid} {
+        allow create: if signedIn()
+          && request.resource.data.from == me()
+          && request.resource.data.to is string
+          && wpMember(code);
+        allow read, delete: if signedIn() && resource.data.to == me();
+        allow update: if false;
+      }
+    }
+
+    // ================================================================
+    //  GAME ROOM (Truth · Dare · Roast spin + voice call, max 6 people)
+    // ================================================================
+    function grMember(code) { return me() in get(/databases/$(database)/documents/gameRooms/$(code)).data.members; }
+
+    match /gameRooms/{code} {
+      allow create: if signedIn()
+        && request.resource.data.hostUid == me()
+        && request.resource.data.members == [me()];
+      allow get: if signedIn();
+      allow list: if false;
+      allow update: if signedIn() && (
+        (resource.data.hostUid == me() && changed().hasOnly(['state','wheel','spin','ended','updatedAt']))
+        || ((me() in resource.data.members) && changed().hasOnly(['wheel','spin','updatedAt']))
+        || ((me() in resource.data.members)
+          && changed().hasOnly(['members','names'])
+          && !(me() in request.resource.data.members)
+          && resource.data.members.toSet().difference(request.resource.data.members.toSet()) == [me()].toSet()
+          && request.resource.data.members.toSet().difference(resource.data.members.toSet()).size() == 0)
+        || (!(me() in resource.data.members)
+          && resource.data.ended == false
+          && changed().hasOnly(['members','names'])
+          && request.resource.data.members.size() <= 6
+          && request.resource.data.members.toSet().difference(resource.data.members.toSet()) == [me()].toSet()
+          && resource.data.members.toSet().difference(request.resource.data.members.toSet()).size() == 0)
+      );
+      allow delete: if false;
+
+      match /sig/{sid} {
+        allow create: if signedIn() && request.resource.data.from == me()
+          && request.resource.data.to is string && grMember(code);
+        allow read, delete: if signedIn() && resource.data.to == me();
+        allow update: if false;
+      }
+    }
+
+    match /gameInvites/{id} {
+      allow create: if signedIn() && request.resource.data.fromUid == me() && request.resource.data.toUid is string;
+      allow read, delete: if signedIn() && (resource.data.toUid == me() || resource.data.fromUid == me());
+      allow update: if false;
+    }
+
+    // ================================================================
+    //  CRUSH VOTE (opt-in, anonymous) + "how many saved me" switch
+    //  crushOpen  = public flag "I accept votes" (the person turns it on himself)
+    //  crushStats = totals, readable ONLY by the owner; others can only +1 together with their own vote doc
+    //  crushVotes = readable ONLY by the voter -> the owner can never see who voted
+    // ================================================================
+    function cvVotePath(v, o) { return /databases/$(database)/documents/crushVotes/$(v + '_' + o); }
+    function cvOpenOf(o)      { return get(/databases/$(database)/documents/crushOpen/$(o)).data.enabled == true; }
+
+    match /crushOpen/{uid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['enabled', 'updatedAt'])
+        && request.resource.data.enabled is bool;
+      allow delete: if signedIn() && me() == uid;
+    }
+
+    match /crushStats/{uid} {
+      allow read: if signedIn() && me() == uid;
+      allow create: if signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['crush', 'legend'])
+        && request.resource.data.crush == 0 && request.resource.data.legend == 0;
+      allow update: if signedIn() && me() != uid
+        && cvOpenOf(uid)
+        && canTalk(me(), uid)
+        && !exists(cvVotePath(me(), uid))
+        && existsAfter(cvVotePath(me(), uid))
+        && changed().hasOnly(['crush', 'legend'])
+        && (
+          (delta('crush') == 1 && delta('legend') == 0 && getAfter(cvVotePath(me(), uid)).data.kind == 'crush')
+          || (delta('legend') == 1 && delta('crush') == 0 && getAfter(cvVotePath(me(), uid)).data.kind == 'legend')
+        );
+      allow delete: if false;
+    }
+
+    match /crushVotes/{id} {
+      allow read: if signedIn() && resource.data.voter == me();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['voter', 'owner', 'kind', 'createdAt'])
+        && request.resource.data.voter == me()
+        && request.resource.data.owner is string
+        && request.resource.data.owner != me()
+        && id == me() + '_' + request.resource.data.owner
+        && request.resource.data.kind in ['crush', 'legend']
+        && cvOpenOf(request.resource.data.owner)
+        && canTalk(me(), request.resource.data.owner);
+      allow update, delete: if false;
+    }
+
+    // ----------------------------------------------------------------
+    //  MUTUAL CRUSH "SPARK" (no notification, no names in any push)
+    //  sparks/{lowUid_highUid} {uids:[low,high], createdAt}
+    //  A spark can exist ONLY if BOTH people really voted "crush" on each other
+    //  (rules check the two crushVotes docs, which nobody else can read).
+    //  Only the two people can read it. Nobody can edit / delete it.
+    // ----------------------------------------------------------------
+    match /sparks/{pid} {
+      allow read: if signedIn() && (me() in resource.data.uids);
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uids', 'createdAt'])
+        && request.resource.data.uids is list
+        && request.resource.data.uids.size() == 2
+        && (me() in request.resource.data.uids)
+        && request.resource.data.uids[0] < request.resource.data.uids[1]
+        && pid == request.resource.data.uids[0] + '_' + request.resource.data.uids[1]
+        && exists(cvVotePath(request.resource.data.uids[0], request.resource.data.uids[1]))
+        && exists(cvVotePath(request.resource.data.uids[1], request.resource.data.uids[0]))
+        && get(cvVotePath(request.resource.data.uids[0], request.resource.data.uids[1])).data.kind == 'crush'
+        && get(cvVotePath(request.resource.data.uids[1], request.resource.data.uids[0])).data.kind == 'crush';
+      allow update, delete: if false;
+    }
+
+    // the person asks the server to COUNT how many phone books contain his number (count only, no names)
+    match /savedCountOpt/{uid} {
+      allow read, delete: if signedIn() && me() == uid;
+      allow create, update: if signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['on', 'updatedAt'])
+        && request.resource.data.get('on', false) is bool;
+    }
+
+    // ================================================================
+    //  GHOST METER  - reply-speed badge. Only the owner writes his own doc; stores NO message text.
+    //  r = last 20 reply buckets (0 fast / 1 ok / 2 slow), hidden = owner turned the badge off
+    // ================================================================
+    match /responseStats/{uid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['r', 'hidden', 'updatedAt'])
+        && request.resource.data.get('r', []) is list
+        && request.resource.data.get('r', []).size() <= 20
+        && request.resource.data.get('hidden', false) is bool;
+      allow delete: if signedIn() && me() == uid;
+    }
+
+    // ================================================================
+    //  SHARED ALBUMS  - friends add photos / videos together (max 10 people)
+    // ================================================================
+    function albumData(aid) { return get(/databases/$(database)/documents/albums/$(aid)).data; }
+
+    match /albums/{aid} {
+      allow read: if signedIn() && (me() in resource.data.members);
+      allow create: if signedIn()
+        && request.resource.data.owner == me()
+        && request.resource.data.members is list
+        && (me() in request.resource.data.members)
+        && request.resource.data.members.size() <= 10
+        && isStr(request.resource.data.title, 60);
+      allow update: if signedIn() && (
+        // owner: rename, invite, counters, cover (he stays inside, max 10)
+        (resource.data.owner == me()
+          && request.resource.data.owner == resource.data.owner
+          && (me() in request.resource.data.members)
+          && request.resource.data.members.size() <= 10
+          && changed().hasOnly(['title', 'members', 'names', 'cover', 'clipCount', 'updatedAt']))
+        // any member: after adding / deleting clips (counter, cover, time)
+        || ((me() in resource.data.members)
+          && changed().hasOnly(['clipCount', 'cover', 'updatedAt']))
+        // member leaves (removes only himself)
+        || ((me() in resource.data.members)
+          && resource.data.owner != me()
+          && changed().hasOnly(['members', 'names'])
+          && !(me() in request.resource.data.members)
+          && resource.data.members.toSet().difference(request.resource.data.members.toSet()) == [me()].toSet()
+          && request.resource.data.members.toSet().difference(resource.data.members.toSet()).size() == 0)
+      );
+      allow delete: if signedIn() && resource.data.owner == me();
+
+      match /clips/{cid} {
+        allow read: if signedIn() && (me() in albumData(aid).members);
+        allow create: if signedIn()
+          && (me() in albumData(aid).members)
+          && request.resource.data.uid == me()
+          && isStr(request.resource.data.mediaURL, 600)
+          && request.resource.data.mediaType in ['image', 'video'];
+        allow update: if false;
+        allow delete: if signedIn()
+          && (me() in albumData(aid).members)
+          && (resource.data.uid == me() || albumData(aid).owner == me());
+      }
+    }
+
+    // ================================================================
+    //  PUBLIC Q&A PAGE  - the owner publishes an anonymous question together with his answer
+    // ================================================================
+    match /qa/{id} {
+      allow read: if true;
+      allow create: if signedIn()
+        && request.resource.data.uid == me()
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'logo', 'question', 'answer', 'createdAt'])
+        && isStr(request.resource.data.question, 500)
+        && isStr(request.resource.data.answer, 1000)
+        && request.resource.data.createdAt == request.time;
+      allow update: if signedIn() && resource.data.uid == me()
+        && changed().hasOnly(['answer'])
+        && isStr(request.resource.data.answer, 1000);
+      allow delete: if signedIn() && (resource.data.uid == me() || isAdmin());
+    }
+
+    // ================================================================
+    //  VOICE POSTS  (30-second audio posts; the app shows only the last 48 hours)
+    // ================================================================
+    match /voicePosts/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.uid == me()
+        && isStr(request.resource.data.audioURL, 600)
+        && request.resource.data.get('dur', 0) <= 35
+        && request.resource.data.get('caption', '').size() <= 120;
+      allow update: if false;
+      allow delete: if signedIn() && (resource.data.uid == me() || isAdmin());
+    }
+
+    // ================================================================
+    //  REAL MOMENTS ("Genzura Time")  - doc id = uid_YYYY-MM-DD, one per user per day
+    //  Only the owner or a MUTUAL follower can open a moment. No listing.
+    // ================================================================
+    match /moments/{momentId} {
+      allow get: if signedIn()
+        && (resource == null
+            || resource.data.uid == me()
+            || followsBoth(me(), resource.data.uid));
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.uid == me()
+        && request.resource.data.day is string
+        && request.resource.data.day.size() == 10
+        && momentId == me() + '_' + request.resource.data.day
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'logoURL', 'day', 'backURL', 'frontURL', 'caption', 'late', 'momentAt', 'createdAt'])
+        && request.resource.data.keys().hasAll(['uid', 'name', 'day', 'backURL', 'late', 'momentAt', 'createdAt'])
+        && isStr(request.resource.data.name, 60)
+        && isStr(request.resource.data.backURL, 500)
+        && (!('frontURL' in request.resource.data) || isStr(request.resource.data.frontURL, 500))
+        && (!('logoURL' in request.resource.data) || isStr(request.resource.data.logoURL, 500))
+        && (!('caption' in request.resource.data) || isStr(request.resource.data.caption, 80))
+        && request.resource.data.late is bool
+        && request.resource.data.createdAt == request.time;
+      allow update: if false;
+      allow delete: if signedIn() && resource.data.uid == me();
+    }
+
+    // (momentPush/* is written only by the Cloudflare worker with the service account -> no client access)
+
+    // ================================================================
+    //  NEAR ME  (Local Map Feed + Local Events)
+    //  Posts: ~1 km approximate position, live 24 h.  Events: precise public venue, live until 6 h after start.
+    //  "lk" = geohash(4) + '|' + reversed time (lets the app query a map cell newest-first with NO composite index).
+    // ================================================================
+    match /localPosts/{postId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && lmValid(request.resource.data);
+      allow update: if false;
+      allow delete: if signedIn() && (resource.data.uid == me() || isAdmin());
+    }
+    function lmValid(d) {
+      return d.keys().hasAll(['uid','name','kind','text','lat','lng','gh','lk','expiresAt','createdAt'])
+        && d.keys().hasOnly(['uid','name','kind','text','lat','lng','gh','lk','expiresAt','createdAt','logoURL','photoURL','title','cat','eventAt'])
+        && d.uid == me()
+        && isStr(d.name, 60)
+        && d.text is string && d.text.size() <= 280
+        && d.lat is number && d.lat >= -90 && d.lat <= 90
+        && d.lng is number && d.lng >= -180 && d.lng <= 180
+        && d.gh is string && d.gh.size() == 4
+        && d.lk is string && d.lk.matches(d.gh + '\\|[0-9]{13}')
+        && d.createdAt == request.time
+        && d.expiresAt is timestamp && d.expiresAt > request.time
+        && (!('logoURL' in d)  || (d.logoURL  is string && d.logoURL.size()  <= 500))
+        && (!('photoURL' in d) || (d.photoURL is string && d.photoURL.size() <= 500 && d.photoURL.matches('https://res\\.cloudinary\\.com/.*')))
+        && (
+          (d.kind == 'post'
+            && !('title' in d) && !('cat' in d) && !('eventAt' in d)
+            && d.expiresAt <= request.time + duration.value(25, 'h'))
+          ||
+          (d.kind == 'event'
+            && isStr(d.title, 80)
+            && d.cat in ['concert','match','food','other']
+            && d.eventAt is number
+            && d.expiresAt <= request.time + duration.value(62, 'd'))
+        );
+    }
+
+    // ================================================================
+    //  AI AURA & GENZURA AVATARS  - doc id = owner uid. Worked out on the phone, friends see avatar + colours + traits.
+    //  "hidden" = owner does not want it shown on friends' Home strip.
+    // ================================================================
+    match /auras/{uid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['name', 'owner', 'c1', 'c2', 'traits', 'sub', 'av', 'hidden', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['name', 'c1', 'c2', 'traits', 'av'])
+        && isStr(request.resource.data.name, 60)
+        && request.resource.data.get('owner', '') is string && request.resource.data.get('owner', '').size() <= 60
+        && request.resource.data.c1 is string && request.resource.data.c1.matches('^#[0-9a-fA-F]{6}$')
+        && request.resource.data.c2 is string && request.resource.data.c2.matches('^#[0-9a-fA-F]{6}$')
+        && request.resource.data.traits is list && request.resource.data.traits.size() <= 5
+        && request.resource.data.get('sub', '') is string && request.resource.data.get('sub', '').size() <= 120
+        && request.resource.data.av is map
+        && request.resource.data.av.keys().hasOnly(['skin', 'hair', 'hairC', 'acc', 'top'])
+        && request.resource.data.av.skin is int && request.resource.data.av.skin >= 0 && request.resource.data.av.skin < 6
+        && request.resource.data.av.hair is int && request.resource.data.av.hair >= 0 && request.resource.data.av.hair < 8
+        && request.resource.data.av.hairC is int && request.resource.data.av.hairC >= 0 && request.resource.data.av.hairC < 6
+        && request.resource.data.av.acc is int && request.resource.data.av.acc >= 0 && request.resource.data.av.acc < 8
+        && request.resource.data.av.top is string && request.resource.data.av.top.matches('^#[0-9a-fA-F]{6}$')
+        && request.resource.data.get('hidden', false) is bool;
+      allow delete: if signedIn() && (me() == uid || isAdmin());
+    }
+
+    // ================================================================
+    //  SIDE QUEST  - daily real-world quest, 5-second clip, reward points
+    //  sideQuests/{uid_YYYY-MM-DD}  one per user per day, create-only (owner may delete)
+    //  questPoints/{uid}            points / streak (gamification only, written by the user's own phone)
+    // ================================================================
+    match /sideQuests/{questId} {
+      allow get, list: if signedIn() && resource.data.uid == me();
+      allow create: if signedIn()
+        && request.resource.data.uid == me()
+        && request.resource.data.day is string && request.resource.data.day.size() == 10
+        && questId == me() + '_' + request.resource.data.day
+        && request.resource.data.keys().hasOnly(['uid','name','logoURL','day','q','videoURL','createdAt'])
+        && request.resource.data.keys().hasAll(['uid','name','day','q','videoURL','createdAt'])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 60
+        && request.resource.data.q is string && request.resource.data.q.size() <= 200
+        && request.resource.data.videoURL is string && request.resource.data.videoURL.size() <= 500
+        && request.resource.data.videoURL.matches('^https://res\\.cloudinary\\.com/.*')
+        && (!('logoURL' in request.resource.data) || (request.resource.data.logoURL is string && request.resource.data.logoURL.size() <= 500))
+        && request.resource.data.createdAt == request.time;
+      allow update: if false;
+      allow delete: if signedIn() && resource.data.uid == me();
+    }
+    match /questPoints/{uid} {
+      allow read: if signedIn() && me() == uid;
+      allow create: if signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['points','streak','done','lastDay','updatedAt'])
+        && request.resource.data.points is int && request.resource.data.points >= 10 && request.resource.data.points <= 20
+        && request.resource.data.streak == 1 && request.resource.data.done == 1
+        && request.resource.data.lastDay is string && request.resource.data.lastDay.size() == 10;
+      allow update: if signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['points','streak','done','lastDay','updatedAt'])
+        && request.resource.data.points is int
+        && request.resource.data.points - resource.data.points >= 10 && request.resource.data.points - resource.data.points <= 20
+        && request.resource.data.done == resource.data.done + 1
+        && request.resource.data.lastDay is string && request.resource.data.lastDay.size() == 10
+        && request.resource.data.lastDay != resource.data.lastDay
+        && request.resource.data.streak is int && request.resource.data.streak >= 1 && request.resource.data.streak <= resource.data.streak + 1;
+      allow delete: if false;
+    }
+
+    // ================================================================
+    //  EVERYTHING ELSE IS DENIED BY DEFAULT
+    // ================================================================
+  }
+}

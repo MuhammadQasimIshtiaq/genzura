@@ -1,0 +1,21 @@
+SIDE QUEST - setup  (gamified real-world meetups)
+=================================================
+KYA HAI?
+- Menu (3 lines) -> "Side Quest". Roz sab ko ek local quest milta hai (date se chunta hai, sab ke liye same list), jaise
+  "Apne qareebi park mein jao aur wahan jo bhi Genzura user mile, uske sath 5-second ka clip banao."
+- Camera se 5-second ka clip (front/back switch, countdown), preview + retake, phir "Post & claim points".
+  Clip loop mein chalta hai (GIF jaisa). Real GIF file nahi - browser mein GIF banana bhari hai, short video Cloudinary par jaata hai.
+- Reward: +10 points, aur lagatar din hone par +2 per streak day (max +10 extra). Din mein EK quest, ek baar "Swap" ki ijazat.
+- Safety text screen par: public + din ki roshni mein milo, kisi ko batao, filming se pehle ijazat, location kabhi share nahi hoti.
+  Clip post karne se pehle "sab ne OK kaha" checkbox lazmi hai.
+
+STEPS
+1) Netlify par poora folder deploy karo (index.html + service-worker.js badle; cache v83).
+2) Firebase Console -> Firestore -> Rules: firestore.rules ka naya poora content paste karke Publish.
+   Naye collections: sideQuests (uid_YYYY-MM-DD), questPoints (uid). Koi index nahi chahiye. Koi function/worker nahi.
+3) Test: do alag din ya quest complete karke points + streak check karo; dubara same din post kare to rules reject karte hain.
+
+NOTES
+- Points phone se likhe jaate hain (Ghost Meter ki tarah), rules sirf +10..+20 per din aur din badalne par hi allow karte hain.
+- Abhi quests sirf apni quest-log mein dikhte hain (friends ko nahi). Agla step: dosto ke quest clips ya leaderboard.
+- Quests badalne ke liye index.html mein QUESTS list (id="gzSideQuest") edit karo.
