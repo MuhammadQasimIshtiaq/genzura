@@ -6,6 +6,7 @@ worker-entry.js
 worker
 netlify
 netlify.toml
-_redirects
 firestore.rules
 *_SETUP.txt
+.wrangler
+netlify-redirects.txt.bak
