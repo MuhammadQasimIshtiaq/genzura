@@ -1,5 +1,5 @@
 /* ================================================================
-   GENZURA — Dynamic video sitemap, served from Netlify (FREE,
+   GENZLOOP — Dynamic video sitemap, served from Netlify (FREE,
    no Firebase Blaze plan needed, no npm install needed).
 
    This file has ZERO external dependencies (no firebase-admin) —
@@ -18,7 +18,7 @@
 ================================================================ */
 const crypto = require("crypto");
 
-const SITE_BASE = "https://genzura.netlify.app"; // apna asli domain alag ho to yahan badal dein
+const SITE_BASE = "https://genzloop.com"; // apna asli domain alag ho to yahan badal dein
 
 function base64url(input) {
   return Buffer.from(input)

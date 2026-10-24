@@ -1,5 +1,5 @@
 /* ================================================================
-   GENZURA — Contacts matching ("contact = no follow needed for chat/call").
+   GENZLOOP — Contacts matching ("contact = no follow needed for chat/call").
    Same 3 env vars as push.js:  FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
    Optional: CONTACTS_PEPPER (any long random string; falls back to the private key).
 
@@ -142,7 +142,7 @@ exports.handler = async (event) => {
       const book = hashes.map(hmac);
       await setDoc(`contactBooks/${me}`, {h: strArr(book), n: {integerValue: String(book.length)}});
 
-      /* which of my contacts are Genzura users? */
+      /* which of my contacts are Genzloop users? */
       const matches = {};
       for (let i = 0; i < book.length; i += 300) {
         const names = book.slice(i, i + 300).map((h) => `${ROOT}/phoneIndex/${h}`);
@@ -164,7 +164,7 @@ exports.handler = async (event) => {
         const mutual = list.some((v) => myHash.includes(v.stringValue));
         const ch = await getDoc(`channels/${u}`);
         const f = (ch && ch.fields) || {};
-        people.push({id: u, name: (f.name && f.name.stringValue) || "Genzura user", logo: (f.logoURL && f.logoURL.stringValue) || null, mutual});
+        people.push({id: u, name: (f.name && f.name.stringValue) || "Genzloop user", logo: (f.logoURL && f.logoURL.stringValue) || null, mutual});
         if (mutual) {
           const id = [me, u].sort().join("_");
           writes.push({update: {name: `${ROOT}/contactLinks/${id}`, fields: {members: strArr([me, u].sort()), at: {timestampValue: new Date().toISOString()}}}});

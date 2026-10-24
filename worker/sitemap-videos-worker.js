@@ -1,5 +1,5 @@
 /* ================================================================
-   GENZURA — Dynamic video sitemap on CLOUDFLARE (replaces the Netlify function).
+   GENZLOOP — Dynamic video sitemap on CLOUDFLARE (replaces the Netlify function).
    Route:  GET /sitemap-videos.xml
    Needs the SAME 3 variables your push/views worker already uses:
      FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
@@ -12,7 +12,7 @@
    B) Or make a NEW worker and paste this WHOLE file (the "export default" at the bottom is
       only for this case); add the 3 variables to that new worker.
 ================================================================ */
-const SM_SITE_BASE = "https://genzura.netlify.app"; /* the domain that serves the videos */
+const SM_SITE_BASE = "https://genzloop.com"; /* the domain that serves the videos */
 
 const smEnc = new TextEncoder();
 function smB64u(bytes) {

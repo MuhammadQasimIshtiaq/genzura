@@ -1,5 +1,5 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://genzura.netlify.app/sitemap.xml
-Sitemap: https://genzura.netlify.app/sitemap-videos.xml
+Sitemap: https://genzloop.com/sitemap.xml
+Sitemap: https://genzloop.com/sitemap-videos.xml

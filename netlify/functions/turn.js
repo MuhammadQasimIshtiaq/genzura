@@ -1,4 +1,4 @@
-/* GENZURA — gives the app TURN relay credentials so calls work between phones on different mobile networks.
+/* GENZLOOP — gives the app TURN relay credentials so calls work between phones on different mobile networks.
    Needs ONE of these (free) setups in Netlify env variables:
    0) ExpressTURN (free 1TB/month): EXPRESSTURN_USER + EXPRESSTURN_PASS
    B) Metered.ca:                METERED_APP (your app name, e.g. "arain") + METERED_API_KEY

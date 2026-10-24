@@ -369,7 +369,7 @@ service cloud.firestore {
     }
 
     // ================================================================
-    //  CREATOR TIP JAR  (EasyPaisa / JazzCash numbers the creator chooses to show; no money goes through Genzura)
+    //  CREATOR TIP JAR  (EasyPaisa / JazzCash numbers the creator chooses to show; no money goes through Genzloop)
     // ================================================================
     match /tipJars/{uid} {
       allow read: if signedIn();
@@ -886,7 +886,7 @@ service cloud.firestore {
     }
 
     // ================================================================
-    //  REAL MOMENTS ("Genzura Time")  - doc id = uid_YYYY-MM-DD, one per user per day
+    //  REAL MOMENTS ("Genzloop Time")  - doc id = uid_YYYY-MM-DD, one per user per day
     //  Only the owner or a MUTUAL follower can open a moment. No listing.
     // ================================================================
     match /moments/{momentId} {
@@ -954,7 +954,7 @@ service cloud.firestore {
     }
 
     // ================================================================
-    //  AI AURA & GENZURA AVATARS  - doc id = owner uid. Worked out on the phone, friends see avatar + colours + traits.
+    //  AI AURA & GENZLOOP AVATARS  - doc id = owner uid. Worked out on the phone, friends see avatar + colours + traits.
     //  "hidden" = owner does not want it shown on friends' Home strip.
     // ================================================================
     match /auras/{uid} {

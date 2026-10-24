@@ -1,4 +1,4 @@
-GENZURA - Country-wise revenue: setup (sirf ek baar)
+GENZLOOP - Country-wise revenue: setup (sirf ek baar)
 =========================================================
 
 Kya badla hai
@@ -11,7 +11,7 @@ Kya badla hai
    - Purane views (jin mein country nahi) bhi "Other" mein jate hain.
    - VPN / proxy wale views bhi "Other" mein jate hain (US/UK ke pool se paisa nahi milta).
    - Purane mahine jahan sirf App/Web total tha, wo pehle jaisa hi hisaab dete hain.
-3. Genzura Studio > Earn: naya "Views by country" card (creator ko apne views ki country dikhti hai).
+3. Genzloop Studio > Earn: naya "Views by country" card (creator ko apne views ki country dikhti hai).
 4. Admin > Creators > kisi creator par tap: views by country + gross kaise bana, dono dikhte hain.
 
 VPN ka ilaaj (har view par server check karta hai, koi ek signal mila to view vpn:true)
@@ -50,7 +50,7 @@ D) Firestore Rules (ZAROORI, warna koi phone se khud "US" likh kar view save kar
    Dhyan: C ke baad hi D karein. Pehle D kar diya to Worker ke bina views save nahi honge.
 
 E) Site deploy karein (Netlify). Android app ko dobara build karein (MainActivity.kt mein isVpnActive() add hua hai).
-   Genzura Studio ke Android app mein kuch badalna nahi hai.
+   Genzloop Studio ke Android app mein kuch badalna nahi hai.
 
 Mahine ka kaam
 --------------
