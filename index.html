@@ -1695,7 +1695,8 @@ nav{border-top:1px solid var(--border);padding:8px 0 12px;}
 ================================================================ */
 const firebaseConfig = {
   apiKey: "AIzaSyATkLM81knrj_enQUsg1L9XRXt9_jdvL0w",
-  authDomain: "genzloop.com",
+  /* login handler lives on our own domain; old Netlify link keeps working, other hosts (e.g. workers.dev test link) use Firebase's own domain */
+  authDomain: (function(h){ return (h==='genzloop.com'||h==='www.genzloop.com'||h==='genzura.netlify.app') ? h : 'arain-tube-672a1.firebaseapp.com'; })(location.hostname),
   projectId: "arain-tube-672a1",
   storageBucket: "arain-tube-672a1.firebasestorage.app",
   messagingSenderId: "649325973427",
