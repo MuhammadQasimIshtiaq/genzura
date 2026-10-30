@@ -110,7 +110,8 @@ async function push(request, env) {
     const cd = await (await fetch(`${DOCS}/chats/${cid}`, { headers: A })).json();
     const members = ((cd.fields && cd.fields.members && cd.fields.members.arrayValue.values) || []).map((v) => v.stringValue);
     if (!members.includes(from)) return out(env, 403, { error: "not a member" });
-    targets = members.filter((x) => x !== from);
+    const mf = (cd.fields && cd.fields.mute && cd.fields.mute.mapValue && cd.fields.mute.mapValue.fields) || {};
+    targets = members.filter((x) => x !== from && !(mf[x] && mf[x].booleanValue === true));
   } else {
     const to = String(body.toUid || "");
     if (!to || to === from) return out(env, 200, { sent: 0 });
