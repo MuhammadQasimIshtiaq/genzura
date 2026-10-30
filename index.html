@@ -5058,6 +5058,10 @@ async function openChannelScreen(channelId, fallbackName, fallbackLogo){
     const paint = ()=>{ const b = isBlockedUid(channelId); bb.textContent = b ? 'Unblock' : 'Block'; joinBtn.style.display = (mine || b) ? 'none' : ''; };
     paint();
     bb.onclick = async ()=>{ if(isBlockedUid(channelId)){ await unblockUser(channelId); } else { await blockUser(channelId, document.getElementById('chName').textContent); } paint(); };
+    let rb = document.getElementById('chReportBtn');
+    if(!rb){ rb = document.createElement('button'); rb.id = 'chReportBtn'; rb.type = 'button'; bb.insertAdjacentElement('afterend', rb); }
+    rb.className = bb.className; rb.style.marginLeft = '8px'; rb.textContent = 'Report'; rb.style.display = mine ? 'none' : '';
+    rb.onclick = ()=> window.gzReport({type:'channel', id:channelId, uid:channelId, name:document.getElementById('chName').textContent, title:'[Channel] '+document.getElementById('chName').textContent});
   }
   if(currentUser && channelId === currentUser.uid){
     joinBtn.style.display = 'none';
@@ -5655,6 +5659,11 @@ async function loadAdminRevenue(){
 }
 
 
+const REPORT_COLL={post:'posts',story:'stories',lm:'localPosts'};
+const REPORT_LBL={post:'Post',story:'Story',channel:'Channel',user:'User (from chat)',message:'Chat message',lm:'Near Me post'};
+function reportPfx(vid){ const i=String(vid||'').indexOf(':'); return i>0?String(vid).slice(0,i):''; }
+function reportRaw(vid){ const i=String(vid||'').indexOf(':'); return i>0?String(vid).slice(i+1):String(vid||''); }
+const aEsc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function loadAdminReports(){
   const c = document.getElementById('adminReportsContainer');
   c.innerHTML = `<div class="empty-state">Loading reports...</div>`;
@@ -5662,10 +5671,10 @@ async function loadAdminReports(){
     const snap = await db.collection('reports').where('status','==','pending').get();
     const all = snap.docs.map(d=>({id:d.id, ...d.data()}));
     if(all.length===0){ c.innerHTML = `<div class="empty-state">No pending reports. 🎉</div>`; return; }
-    /* group individual reports by videoId so repeat reports on the same video collapse into one row */
+    /* group individual reports by videoId so repeat reports on the same item collapse into one row */
     const byVideo = {};
     all.forEach(r=>{
-      if(!byVideo[r.videoId]) byVideo[r.videoId] = { videoId:r.videoId, videoTitle:r.videoTitle, videoThumb:r.videoThumb, channelName:r.channelName, reports:[] };
+      if(!byVideo[r.videoId]) byVideo[r.videoId] = { videoId:r.videoId, videoTitle:r.videoTitle, videoThumb:r.videoThumb, channelName:r.channelName, channelId:r.channelId, reports:[] };
       byVideo[r.videoId].reports.push(r);
     });
     const groups = Object.values(byVideo).sort((a,b)=> b.reports.length - a.reports.length);
@@ -5673,11 +5682,14 @@ async function loadAdminReports(){
     groups.forEach(g=>{
       const row = document.createElement('div');
       row.style.cssText = 'display:flex;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;align-items:center;';
+      const pf = reportPfx(g.videoId), tag = pf ? `<span style="font-size:11px;font-weight:700;color:var(--accent2);">${aEsc(REPORT_LBL[pf]||pf)}</span>` : '';
+      const th = /^https:\/\//.test(g.videoThumb||'') ? aEsc(g.videoThumb) : '';
       row.innerHTML = `
-        ${g.videoThumb ? `<img src="${g.videoThumb}" style="width:56px;height:76px;border-radius:8px;object-fit:cover;flex-shrink:0;">` : `<div style="width:56px;height:76px;border-radius:8px;flex-shrink:0;background:linear-gradient(135deg,${colorFor(g.videoTitle)},${colorFor(g.videoTitle+'x')})"></div>`}
+        ${th ? `<img src="${th}" style="width:56px;height:76px;border-radius:8px;object-fit:cover;flex-shrink:0;">` : `<div style="width:56px;height:76px;border-radius:8px;flex-shrink:0;background:linear-gradient(135deg,${colorFor(g.videoTitle||'')},${colorFor((g.videoTitle||'')+'x')})"></div>`}
         <div style="min-width:0;flex:1;">
-          <div style="font-weight:700;font-size:14px;">${g.videoTitle||'—'}</div>
-          <div style="font-size:12.5px;color:var(--text-dim);">by ${g.channelName||'—'}</div>
+          ${tag}
+          <div style="font-weight:700;font-size:14px;">${aEsc(g.videoTitle)||'—'}</div>
+          <div style="font-size:12.5px;color:var(--text-dim);">by ${aEsc(g.channelName)||'—'}</div>
         </div>
         <div style="font-size:12px;font-weight:700;color:#ff5c5c;white-space:nowrap;">${g.reports.length} report${g.reports.length===1?'':'s'}</div>`;
       row.onclick = ()=> openReportDetail(g);
@@ -5685,7 +5697,7 @@ async function loadAdminReports(){
     });
   }catch(err){
     console.error(err);
-    c.innerHTML = `<div class="empty-state">Couldn't load reports. ${err.message}</div>`;
+    c.innerHTML = `<div class="empty-state">Couldn't load reports. ${aEsc(err.message)}</div>`;
   }
 }
 
@@ -5693,22 +5705,27 @@ async function openReportDetail(group){
   const body = document.getElementById('adminDetailBody');
   document.getElementById('adminDetailOverlay').classList.remove('hidden');
   body.innerHTML = `<div class="empty-state">Loading...</div>`;
+  const pf = reportPfx(group.videoId), isVid = !pf, coll = isVid ? 'videos' : REPORT_COLL[pf], rawId = reportRaw(group.videoId);
 
-  let videoStillExists = true;
+  let videoStillExists = !!coll;   /* user/channel/message reports have nothing to delete here */
   let fullVideo = null;
-  try{
-    const vDoc = await db.collection('videos').doc(group.videoId).get();
-    videoStillExists = vDoc.exists;
-    if(videoStillExists) fullVideo = { id: vDoc.id, ...vDoc.data() };
-  }catch(e){}
-
-  const reasonsHtml = group.reports.map(r=> `<div style="margin-bottom:8px;font-size:13px;"><b>${r.reporterName||'Someone'}</b> — ${r.reason} <span style="color:var(--text-dim);">· ${timeAgo(r.createdAt)}</span></div>`).join('');
+  if(coll){
+    try{
+      const vDoc = await db.collection(coll).doc(rawId).get();
+      videoStillExists = vDoc.exists;
+      if(videoStillExists && isVid) fullVideo = { id: vDoc.id, ...vDoc.data() };
+    }catch(e){}
+  }
+  const kind = isVid ? 'Video' : (REPORT_LBL[pf]||pf);
+  const reasonsHtml = group.reports.map(r=> `<div style="margin-bottom:8px;font-size:13px;"><b>${aEsc(r.reporterName)||'Someone'}</b> — ${aEsc(r.reason)} <span style="color:var(--text-dim);">· ${timeAgo(r.createdAt)}</span>${r.details?`<div style="color:var(--text-dim);margin-top:2px;">“${aEsc(r.details)}”</div>`:''}${r.reportedText?`<div style="background:var(--surface2);border-radius:8px;padding:6px 8px;margin-top:4px;">Message: ${aEsc(r.reportedText)}</div>`:''}</div>`).join('');
+  const target = (!isVid && group.channelId) ? `<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;word-break:break-all;">${kind} id: ${aEsc(rawId)} · owner uid: ${aEsc(group.channelId)}</div>` : '';
 
   body.innerHTML = `
-    <h2 style="margin:0 0 4px;font-size:17px;">${group.videoTitle||'—'}</h2>
-    <div style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">Uploaded by ${group.channelName||'—'} ${videoStillExists ? '' : '<span style="color:#ff5c5c;">(already removed)</span>'}</div>
-
-    ${videoStillExists ? `<button id="reportWatchBtn" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:10px;border:none;background:var(--accent2);color:#fff;font-weight:700;margin-bottom:16px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M7 4l14 8-14 8z"/></svg> Watch this video</button>` : ''}
+    <div style="font-size:11px;font-weight:700;color:var(--accent2);">${aEsc(kind)} report</div>
+    <h2 style="margin:0 0 4px;font-size:17px;">${aEsc(group.videoTitle)||'—'}</h2>
+    <div style="color:var(--text-dim);font-size:13px;margin-bottom:${target?'6':'16'}px;">By ${aEsc(group.channelName)||'—'} ${(coll && !videoStillExists) ? '<span style="color:#ff5c5c;">(already removed)</span>' : ''}</div>
+    ${target}
+    ${fullVideo ? `<button id="reportWatchBtn" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:10px;border:none;background:var(--accent2);color:#fff;font-weight:700;margin-bottom:16px;">▶ Watch video</button>` : ''}
 
     <div style="background:var(--surface);border-radius:12px;padding:14px;margin-bottom:20px;">
       <div style="font-weight:700;margin-bottom:10px;">Reports (${group.reports.length})</div>
@@ -5717,25 +5734,25 @@ async function openReportDetail(group){
 
     <div style="display:flex;gap:12px;">
       <button id="reportDismissBtn" style="flex:1;padding:13px;border-radius:10px;border:none;background:var(--surface2);color:var(--text);font-weight:700;">Dismiss</button>
-      <button id="reportRemoveBtn" style="flex:1;padding:13px;border-radius:10px;border:none;background:#ff5c5c;color:#fff;font-weight:700;" ${videoStillExists?'':'disabled'}>Remove Video</button>
+      ${coll ? `<button id="reportRemoveBtn" style="flex:1;padding:13px;border-radius:10px;border:none;background:#ff5c5c;color:#fff;font-weight:700;" ${videoStillExists?'':'disabled'}>Remove ${aEsc(kind)}</button>` : `<button id="reportMarkBtn" style="flex:1;padding:13px;border-radius:10px;border:none;background:#ff5c5c;color:#fff;font-weight:700;">Mark action taken</button>`}
     </div>`;
 
-  if(fullVideo){
-    document.getElementById('reportWatchBtn').onclick = ()=> openPlayer(fullVideo);
-  }
+  if(fullVideo){ document.getElementById('reportWatchBtn').onclick = ()=> openPlayer(fullVideo); }
   document.getElementById('reportDismissBtn').onclick = ()=> resolveReportGroup(group, false);
-  document.getElementById('reportRemoveBtn').onclick = ()=> resolveReportGroup(group, true);
+  const rm = document.getElementById('reportRemoveBtn'); if(rm) rm.onclick = ()=> resolveReportGroup(group, true);
+  const mk = document.getElementById('reportMarkBtn'); if(mk) mk.onclick = ()=> resolveReportGroup(group, 'done');
 }
 
 async function resolveReportGroup(group, removeVideo){
   try{
+    const pf = reportPfx(group.videoId), coll = !pf ? 'videos' : REPORT_COLL[pf], rawId = reportRaw(group.videoId);
     const batch = db.batch();
     group.reports.forEach(r=>{
-      batch.update(db.collection('reports').doc(r.id), { status: removeVideo ? 'removed' : 'dismissed' });
+      batch.update(db.collection('reports').doc(r.id), { status: removeVideo===true ? 'removed' : removeVideo==='done' ? 'actioned' : 'dismissed' });
     });
     await batch.commit();
-    if(removeVideo){ await db.collection('videos').doc(group.videoId).delete(); }
-    toast(removeVideo ? 'Video removed' : 'Reports dismissed');
+    if(removeVideo===true && coll){ await db.collection(coll).doc(rawId).delete(); }
+    toast(removeVideo===true ? 'Removed' : removeVideo==='done' ? 'Marked done' : 'Reports dismissed');
     document.getElementById('adminDetailOverlay').classList.add('hidden');
     loadAdminReports();
   }catch(err){ toast('Failed: ' + err.message); }
@@ -5961,6 +5978,7 @@ if('serviceWorker' in navigator){
     <div class="sv-head">
       <div class="sv-av" id="svAv"></div><div class="sv-name" id="svName"></div><div class="sv-time" id="svTime"></div>
       <button class="sv-btn st-hide" id="svDel" aria-label="Delete story"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
+      <button class="sv-btn st-hide" id="svRep" aria-label="Report story" style="font-size:20px;color:#fff">&#9873;</button>
       <button class="sv-btn" id="svClose" aria-label="Close"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div class="sv-cap" id="svCap"></div>
@@ -6219,6 +6237,7 @@ if('serviceWorker' in navigator){
     $('svTime').textContent = ago(ms(s.createdAt) || Date.now());
     $('svCap').textContent = s.caption || '';
     $('svDel').classList.toggle('st-hide', !mine);
+    $('svRep').classList.toggle('st-hide', mine);
     $('svFoot').classList.toggle('st-hide', !mine);
     try{ storyReplyBar(s, mine, g); }catch(e){}
     $('svBars').innerHTML = g.items.map((_, i)=> `<div class="sv-bar"><i style="width:${i < V.ii ? 100 : 0}%"></i></div>`).join('');
@@ -6327,6 +6346,12 @@ if('serviceWorker' in navigator){
     stage.addEventListener('pointercancel', e=> end(e, true));
   })();
   $('svClose').addEventListener('click', ()=> closeViewer());
+  $('svRep').addEventListener('click', e=>{
+    e.stopPropagation();
+    const g = groups[V.gi], s = g && g.items[V.ii]; if(!s) return;
+    const was = V.paused; V.paused = true; try{ vid.pause(); }catch(er){}
+    window.gzReport({type:'story', id:s.id, uid:s.uid, name:g.name, title:s.caption||('[story] '+g.name), thumb:(s.mediaType!=='video'&&s.mediaURL)||'', onClose:()=>{ V.paused = was; try{ if(!was && s.mediaType==='video') vid.play(); }catch(er){} }});
+  });
 
   /* owner tools: view count, viewers list, delete */
   async function loadViewCount(s){
@@ -7259,6 +7284,15 @@ $('homeStories').appendChild($('storyTray'));
 
 /* ---------- feed ---------- */
 let posts=[],likedSet={},loaded=false;
+/* newest post is NOT always first: random mix with a small bonus for fresh posts; your own just-posted one stays on top for 10 min */
+function mixFeed(list){
+  const n=list.length||1,now=Date.now();
+  return list.map((p,i)=>{
+    const t=p.createdAt&&p.createdAt.toMillis?p.createdAt.toMillis():0;
+    const own=currentUser&&p.uid===currentUser.uid&&t&&now-t<10*60000;
+    return {p,k:Math.random()+0.3*(1-i/n)+(own?5:0)};
+  }).sort((a,b)=>b.k-a.k).map(x=>x.p);
+}
 async function loadFeed(){
   const f=$('homeFeed');
   if(!loaded)f.innerHTML='<div class="ig-skel"></div><div class="ig-skel"></div>';
@@ -7266,8 +7300,8 @@ async function loadFeed(){
     if(window.__chrono&&window.__chrono.on()){
       posts=(await window.__chrono.posts()).filter(p=> !isBlockedUid(p.uid));
     }else{
-      const snap=await db.collection('posts').orderBy('createdAt','desc').limit(40).get();
-      posts=snap.docs.map(d=>Object.assign({id:d.id},d.data())).filter(p=> !isBlockedUid(p.uid));
+      const snap=await db.collection('posts').orderBy('createdAt','desc').limit(50).get();
+      posts=mixFeed(snap.docs.map(d=>Object.assign({id:d.id},d.data())).filter(p=> !isBlockedUid(p.uid))).slice(0,40);
     }
     if(currentUser){
       const chk=await Promise.all(posts.map(p=>db.collection('postLikes').doc(currentUser.uid+'_'+p.id).get().catch(()=>null)));
@@ -7307,7 +7341,7 @@ function postHTML(p){
   return `<article class="ig-post" data-pid="${p.id}">
    <div class="ig-ph"><div class="ig-av" data-ch data-bduid="${esc(p.uid||'')}" style="background:${p.channelLogo?'transparent':colorFor(p.channelName)}">${av(p.channelName,p.channelLogo)}</div>
     <div class="ig-who"><b data-ch>${esc(p.channelName)}</b><small>${ago(p.createdAt)}${p.edited?' · edited':''}${(p.capsule&&!lk)?' · ⏳ Time capsule':''}</small></div>
-    ${mine?'<button class="ig-more" data-menu title="Options">&#8943;</button>':''}</div>
+    ${mine?'<button class="ig-more" data-menu title="Options">&#8943;</button>':'<button class="ig-more" data-prep title="Report">&#8943;</button>'}</div>
    ${mediaHTML(p)}
    ${lk?'':(p.tagged&&p.tagged.length)?`<div class="ig-with">With ${p.tagged.map(u=>`<span class="ig-men" data-tguid="${esc(u.uid)}" data-tgn="${esc(u.name||'')}" data-tgl="${esc(u.logo||'')}">@${esc(u.handle||u.name||'user')}</span>`).join(', ')}</div>`:''}
    ${lk?'':`<div class="ig-act"><button class="ig-like ${likedSet[p.id]?'on':''}" data-like>${ICO.heart}</button><button data-cmt>${ICO.cmt}</button><button data-share>${ICO.share}</button><button class="ig-save ${savedSet[p.id]?'on':''}" data-save aria-label="Save">${ICO.bm}</button></div>`}
@@ -7318,7 +7352,9 @@ function postHTML(p){
 function renderFeed(){
   const f=$('homeFeed');
   if(!posts.length){f.innerHTML=(window.__chrono&&window.__chrono.on())?'<div class="ig-empty">Nothing from your friends yet.<br>Follow people to fill this feed,<br>or turn off No-Algorithm mode above.<br><button id="igFirst">Create post</button></div>':'<div class="ig-empty">No posts yet.<br>Share your first photo or video!<br><button id="igFirst">Create post</button></div>';const b=$('igFirst');if(b)b.onclick=()=>$('plusBtn').click();return;}
-  f.innerHTML=posts.map(postHTML).join('');
+  const adsOn=!!(window.gzPostAds&&window.gzPostAds.on());let adN=0;
+  f.innerHTML=posts.map((p,i)=>postHTML(p)+((adsOn&&(i+1)%3===0)?window.gzPostAds.html(adN++):'')).join('');
+  if(adsOn)try{window.gzPostAds.mount(f);}catch(e){}
   observeVideos();
 }
 let vo;
@@ -7366,6 +7402,7 @@ const feedClick=e=>{
     atShare(d);return;}
   if(t.closest('[data-more]')){art.querySelector('[data-ct]').innerHTML=rich(p.caption);t.remove();return;}
   if(t.closest('[data-ch]'))return openChannelScreen(p.uid,p.channelName,p.channelLogo);
+  if(t.closest('[data-prep]'))return window.gzReport({type:'post',id:p.id,uid:p.uid,name:p.channelName,title:p.caption||('['+'post] '+(p.channelName||'')),thumb:(p.media&&p.media[0]&&p.media[0].type!=='video')?p.media[0].url:(p.thumbURL||'')});
   if(t.closest('[data-menu]'))return openMenu(p);
   const sb=t.closest('[data-snd]');
   if(sb){const v=sb.parentNode.querySelector('video');v.muted=!v.muted;sb.innerHTML=v.muted?ICO.mute:ICO.snd;return;}
@@ -7835,7 +7872,7 @@ function tmpTag(c){if(!(c.isTemp&&c.expiresAt))return '';const m=Math.max(1,Math
 function renderInbox(){
   const ct=new Set((typeof contactPeople!=='undefined'&&contactPeople||[]).map(p=>p.id));
   const isCt=c=>{const p=peerOf(c);return !p.group&&ct.has(p.id);};
-  let a=Object.values(chats).filter(c=>c.lastAt||c.lastText).filter(c=>{if(c.isTemp&&c.expiresAt&&c.expiresAt<Date.now())return false;const p=peerOf(c);return p.group||!isBlockedUid(p.id);}).sort((x,y)=>ts(y.lastAt)-ts(x.lastAt));
+  let a=Object.values(chats).filter(c=>c.lastAt||c.lastText).filter(c=>{if(c.isTemp&&c.expiresAt&&c.expiresAt<Date.now())return false;const p=peerOf(c);if(!p.group){const cl=Number((c.clearedAt||{})[me()])||0;if(cl&&ts(c.lastAt)<=cl)return false;}return p.group||!isBlockedUid(p.id);}).sort((x,y)=>ts(y.lastAt)-ts(x.lastAt));
   if(dmTab==='friends')a=a.filter(isCt);else if(dmTab==='follow')a=a.filter(c=>!isCt(c));
   const row=c=>{const p=peerOf(c),u=unreadN(c)>0;
     return `<div class="dm-row ${u?'unread':''}" data-c="${c.id}">${avbox(p.name,p.logo,52,p.group?'':p.id)}<div class="tx"><b>${esc(p.name)}${tmpTag(c)}</b><span>${esc((c.lastFrom===me()?'You: ':'')+prev(c))} · ${ago(c.lastAt)}</span></div>${u?'<i class="dot"></i>':''}</div>`;};
@@ -8027,7 +8064,7 @@ $('ncQ').addEventListener('input',e=>{
 $('ncList').onclick=e=>{const r=e.target.closest('[data-p]');if(!r)return;$('igNc').classList.remove('show');openChat({id:r.dataset.p,name:r.dataset.n,logo:r.dataset.l||null});};
 
 /* ================= chat screen ================= */
-let msgs=[];
+let msgs=[];let clr=0;
 function openChat(p){
   if(!requireAuth())return;
   if(!p.group&&!chats[cidOf(me(),p.id)]){
@@ -8043,12 +8080,18 @@ function openChat0(p){
   if(!currentChannel){toast('Create your channel first');return;}
   peer=p;openId=p.group?p.id:cidOf(me(),p.id);$('chatAud').style.display=$('chatVid').style.display=p.group?'none':'';
   $('chatWho').innerHTML=avbox(p.name,p.logo,36,p.group?'':p.id)+`<div style="min-width:0"><b id="dmWho">${esc(p.name)}</b><small id="dmTyp"></small></div>`;
-  $('dmMsgs').innerHTML='';msgs=[];$('igChat').classList.add('show');$('dmIn').value='';toggleSend();stopAudio();
+  $('dmMsgs').innerHTML='';msgs=[];clr=0;$('igChat').classList.add('show');$('dmIn').value='';toggleSend();stopAudio();
   if(window.__tU)window.__tU();rTo=null;
   try{ if(window.__gz) window.__gz.watchPeer(p.group?null:p.id); }catch(e){}
   window.__tU=db.collection('chats').doc(openId).onSnapshot(d=>{
     const x=d.data()||{};
     try{ if(window.__gz2) window.__gz2.chat(x,openId); }catch(e){}
+    if(!p.group){
+      const nk=(x.nicks&&x.nicks[p.id])||'';const w0=$('dmWho');if(w0)w0.textContent=nk||p.name;
+      const c2=Number((x.clearedAt||{})[me()])||0;
+      if(c2!==clr){clr=c2;if(clr){msgs=msgs.filter(m=>m._pending||ts(m.createdAt)>clr);renderMsgs();}}
+      try{ if(window.__gzCi) window.__gzCi.refresh(); }catch(e){}
+    }
     if(p.group){if(x.name)p.name='👥 '+x.name;if(x.members)p.members=x.members;const w=$('dmWho');if(w)w.textContent=p.name;}
     const el=$('dmTyp');if(!el)return;
     let txt='';const now=Date.now();
@@ -8063,7 +8106,7 @@ function openChat0(p){
   if(mUn)mUn();
   mUn=db.collection('chats').doc(openId).collection('messages').orderBy('createdAt','asc').limitToLast(200).onSnapshot(s=>{
     const raw=s.docs.map(d=>Object.assign({id:d.id,_pending:d.metadata.hasPendingWrites},d.data())),tok=++decTok,cid=openId;
-    (p.group?E2E.openAll(cid,null,raw):E2E.openAll(cid,p.id,raw)).catch(()=>{}).then(()=>{if(tok!==decTok||cid!==openId)return;msgs=raw.filter(m=>!m._fail&&!(window.__gz2&&window.__gz2.gone(m))); /* messages this device can't decrypt are hidden */
+    (p.group?E2E.openAll(cid,null,raw):E2E.openAll(cid,p.id,raw)).catch(()=>{}).then(()=>{if(tok!==decTok||cid!==openId)return;msgs=raw.filter(m=>!m._fail&&!(window.__gz2&&window.__gz2.gone(m))&&!(clr&&!m._pending&&ts(m.createdAt)<=clr)); /* messages this device can't decrypt are hidden */
       try{const L=[...msgs].reverse().find(m=>m.type==='text'&&m.text&&m.createdAt);if(L)localStorage.setItem('at_pv_'+cid,JSON.stringify({t:String(L.text).slice(0,120),at:ts(L.createdAt)}));}catch(e){}
       renderMsgs();
       if(chats[openId]&&unreadN(chats[openId])>0)markRead();});
@@ -8072,7 +8115,10 @@ function openChat0(p){
 }
 function closeChat(){if(window.__tU){window.__tU();window.__tU=null;}if(rec)cancelRec();$('igChat').classList.remove('show');if(mUn){mUn();mUn=null;}openId=null;stopAudio();if($('igDm').classList.contains('show'))renderInbox();}
 $('chatBack').onclick=closeChat;
-$('chatWho').onclick=()=>{if(!peer)return;if(peer.group)openGroupInfo();else openChannelScreen(peer.id,peer.name,peer.logo);};
+$('chatWho').onclick=()=>{if(!peer)return;if(peer.group)openGroupInfo();else if(window.__gzCi)window.__gzCi.open();else openChannelScreen(peer.id,peer.name,peer.logo);};
+window.__gzChat={peer:()=>peer,id:()=>openId,msgs:()=>msgs,close:closeChat,cleared:v=>{clr=v;msgs=msgs.filter(m=>m._pending||ts(m.createdAt)>clr);renderMsgs();},
+  profile:()=>{if(peer)openChannelScreen(peer.id,peer.name,peer.logo);},
+  goto:id=>{const n=document.querySelector('#dmMsgs [data-m="'+id+'"]');if(n){n.scrollIntoView({block:'center'});n.style.outline='2px solid #ec2b8e';setTimeout(()=>{n.style.outline='';},1800);}}};
 $('chatAud').onclick=()=>peer&&window.__calls&&window.__calls.startCall({id:peer.id,name:peer.name,logo:peer.logo},'audio');
 $('chatVid').onclick=()=>peer&&window.__calls&&window.__calls.startCall({id:peer.id,name:peer.name,logo:peer.logo},'video');
 async function markRead(){
@@ -8130,12 +8176,13 @@ function closeMenu(){const x=document.getElementById('dmMenu');if(x)x.remove();}
 function msgMenu(id){
   const m=msgs.find(x=>x.id===id);if(!m)return;closeMenu();
   const d=document.createElement('div');d.id='dmMenu';
-  d.innerHTML='<div class="box"><div class="em">'+['❤️','😂','😮','😢','👍','🔥'].map(e=>`<button data-e="${e}">${e}</button>`).join('')+'</div><button data-a="r">Reply</button>'+(m.from===me()?'<button data-a="u" style="color:#ed4956">Unsend</button>':'')+'</div>';
+  d.innerHTML='<div class="box"><div class="em">'+['❤️','😂','😮','😢','👍','🔥'].map(e=>`<button data-e="${e}">${e}</button>`).join('')+'</div><button data-a="r">Reply</button>'+(m.from===me()?'<button data-a="u" style="color:#ed4956">Unsend</button>':(m.type!=='sys'?'<button data-a="x" style="color:#ed4956">Report</button>':''))+'</div>';
   d.onclick=e=>{
     const b=e.target.closest('button');if(!b){closeMenu();return;}
     if(b.dataset.e){const mine=m.reactions&&m.reactions[me()]===b.dataset.e;mref(id).update({['reactions.'+me()]:mine?FV.delete():b.dataset.e}).catch(er=>toast('Reaction: '+er.message));}
     else if(b.dataset.a==='r'){rTo={id,text:m.type==='text'?m.text.slice(0,80):m.type==='image'?'📷 Photo':m.type==='video'?'🎥 Video':'🎤 Voice message',who:m.from===me()?'yourself':peer.name};setRep();$('dmIn').focus();}
     else if(b.dataset.a==='u')unsend(id);
+    else if(b.dataset.a==='x'){closeMenu();window.gzReport({type:'message',id:id,uid:m.from,name:m.fromName||(peer&&peer.name)||'',title:'[Chat message] '+(m.fromName||(peer&&peer.name)||''),text:m.type==='text'?m.text:('['+m.type+']'),chatId:openId});return;}
     closeMenu();
   };
   document.body.appendChild(d);
@@ -10959,7 +11006,8 @@ function openATStudioApp(tab){
   }
   G.chat=function(x,id){
     curId=id; ttl=Number(x.ttl)||0; since=Number(x.ttlSince)||0;
-    var b=btn(); if(b) b.innerHTML='⏱'+(ttl?'<small>'+lbl(ttl)+'</small>':'');
+    try{ var ob=$('chatTtl'); if(ob) ob.remove(); }catch(e){}
+    try{ if(window.__gzCi) window.__gzCi.refresh(); }catch(e){}
     clearTimeout(swT); swT=setTimeout(sweep,1500);
   };
   G.gone=function(m){
@@ -10977,6 +11025,8 @@ function openATStudioApp(tab){
     }catch(e){}
   }
   setInterval(function(){ if(curId && ttl && $('igChat') && $('igChat').classList.contains('show')) sweep(); },20000);
+  G.label=function(){ return ttl?longLbl(ttl):'Off'; };
+  G.openTimer=function(){ openTimer(); };
   function openTimer(){
     if(!curId) return;
     var ov=document.createElement('div'); ov.className='gz-ov';
@@ -13563,6 +13613,315 @@ window.gzConfirm=function(msg,okLabel){
   }
   window.gzQuestOpen=open;
   try{ auth.onAuthStateChanged(function(){ S.pts=null; S.list=null; if(ov) ov.classList.add('hidden'); stopCam(); }); }catch(e){}
+})();
+</script>
+
+<!-- ===================== REPORT EVERYTHING (reel, post, story, channel, user, chat message) =====================
+     One sheet for all. Writes reports/{targetId_uid}; same shape the admin Reports tab already reads
+     (videoId = id for reels/videos, "type:id" for everything else). Only the message the reporter chose is attached. -->
+<style id="gzRptCss">
+  #gzRptOv{position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;}
+  #gzRptOv .bx{width:100%;max-width:560px;max-height:88vh;overflow-y:auto;background:var(--bg,#fff);color:var(--text,#111);border-radius:20px 20px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));}
+  #gzRptOv h3{margin:0 0 4px;font-size:17px;} #gzRptOv .s{margin:0 0 10px;font-size:13px;line-height:1.45;color:var(--text-dim,#777);}
+  #gzRptOv label.r{display:flex;align-items:center;gap:12px;padding:11px 4px;font-size:15px;border-top:1px solid var(--border,#e3e3ec);cursor:pointer;}
+  #gzRptOv label.r input{width:20px;height:20px;accent-color:#ec2b8e;flex:none;}
+  #gzRptOv textarea{width:100%;box-sizing:border-box;margin-top:10px;border-radius:12px;border:1px solid var(--border,#ddd);background:var(--surface2,#f2f2f6);color:inherit;padding:10px;font:inherit;font-size:14px;resize:none;}
+  #gzRptOv .row{display:flex;gap:10px;margin-top:12px;} #gzRptOv .row button{flex:1;padding:13px;border:0;border-radius:12px;font-weight:700;font-size:15px;cursor:pointer;}
+  #gzRptOv .go{background:#e5484d;color:#fff;} #gzRptOv .no{background:var(--surface2,#eee);color:var(--text,#111);} #gzRptOv button[disabled]{opacity:.5;}
+</style>
+<script id="gzReportJs">
+(function(){
+  var NAMES={reel:'reel',video:'video',post:'post',story:'story',channel:'channel',user:'user',message:'message',lm:'post'};
+  var REASONS=['Spam or scam','Nudity or sexual content','Violence or dangerous content','Harassment or bullying','Hate speech','Copyright or stolen content','Child safety (under 18)','Fake account or impersonation','Something else'];
+  var ov=null, onDone=null;
+  function say(m){ try{ toast(m); }catch(e){ alert(m); } }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function close(){ if(ov){ ov.remove(); ov=null; } var f=onDone; onDone=null; if(typeof f==='function'){ try{ f(); }catch(e){} } }
+  /* o: {type,id,uid,name,title,thumb,text,chatId,onClose}  type = reel|video|post|story|channel|user|message|lm */
+  window.gzReport=function(o){
+    o=o||{};
+    try{ if(typeof requireAuth==='function' && !requireAuth()) return; }catch(e){}
+    var u=auth.currentUser; if(!u){ say('Please sign in first'); return; }
+    var type=String(o.type||''), id=String(o.id||''); if(!NAMES[type]||!id) return;
+    if(o.uid && o.uid===u.uid){ say("You can't report your own content"); return; }
+    close(); onDone=o.onClose||null;
+    var what=NAMES[type];
+    ov=document.createElement('div'); ov.id='gzRptOv';
+    ov.innerHTML='<div class="bx"><h3>Report this '+what+'</h3><p class="s">Pick the closest reason. Our team reviews every report. '
+      +(type==='message'?'The message you are reporting will be shared with our team. ':'')+'The other person is not told who reported.</p>'
+      +REASONS.map(function(r,i){ return '<label class="r"><input type="radio" name="gzRptR" value="'+esc(r)+'"'+(i===0?' checked':'')+'><span>'+esc(r)+'</span></label>'; }).join('')
+      +'<textarea id="gzRptD" rows="2" maxlength="200" placeholder="Add details (optional)"></textarea>'
+      +'<div class="row"><button type="button" class="no" id="gzRptNo">Cancel</button><button type="button" class="go" id="gzRptGo">Send report</button></div></div>';
+    ov.addEventListener('click',function(e){ if(e.target===ov||e.target.id==='gzRptNo') close(); });
+    ov.querySelector('#gzRptGo').onclick=async function(){
+      var btn=this; btn.disabled=true;
+      try{
+        var reason=(ov.querySelector('input[name="gzRptR"]:checked')||{}).value||'Something else';
+        var details=(ov.querySelector('#gzRptD').value||'').trim().slice(0,200);
+        var isVid=(type==='reel'||type==='video');
+        var rid=(isVid?id:(type+'-'+id)).replace(/[^A-Za-z0-9_\-:.]/g,'').slice(0,140)+'_'+u.uid;
+        var ref=db.collection('reports').doc(rid), ex=await ref.get();
+        if(ex.exists){ say('You already reported this'); close(); return; }
+        var thumb=/^https:\/\//.test(o.thumb||'')?String(o.thumb).slice(0,500):'';
+        var d={
+          videoId:isVid?id:(type+':'+id), videoTitle:String(o.title||('['+what+'] '+(o.name||''))).slice(0,120), videoThumb:thumb,
+          channelId:String(o.uid||''), channelName:String(o.name||'').slice(0,60),
+          reporterId:u.uid, reporterName:((typeof currentChannel!=='undefined'&&currentChannel&&currentChannel.name)||'Someone').slice(0,60),
+          reason:reason, details:details, targetType:type, targetId:id, status:'pending',
+          createdAt:firebase.firestore.FieldValue.serverTimestamp()
+        };
+        if(type==='message'){ d.reportedText=String(o.text||'').slice(0,300); d.chatId=String(o.chatId||'').slice(0,120); }
+        await ref.set(d);
+        say('Reported. Thank you, our team will review it');
+        close();
+      }catch(e){ btn.disabled=false; say('Could not send report: '+(e&&e.message||e)); }
+    };
+    document.body.appendChild(ov);
+  };
+})();
+</script>
+
+<!-- ===================== CHAT INFO SCREEN (tap the name at the top of a 1-to-1 chat) =====================
+     Profile, nickname, search in chat, media, mute, disappearing messages, block, report, delete chat (for me).
+     chats/{id}: nicks:{uid:name}  mute:{uid:true}  clearedAt:{uid:ms}   (all written with merge, allowed by the existing chat update rule) -->
+<style id="gzCiCss">
+  #gzCiOv{position:fixed;inset:0;z-index:99985;background:var(--bg,#fff);color:var(--text,#111);display:flex;flex-direction:column;max-width:560px;margin:0 auto;}
+  #gzCiOv.hidden{display:none !important;}
+  .ci-top{display:flex;align-items:center;gap:10px;padding:10px 12px;padding-top:calc(10px + env(safe-area-inset-top,0px));}
+  .ci-x{width:40px;height:40px;border-radius:50%;border:0;background:transparent;color:inherit;font-size:22px;cursor:pointer;}
+  .ci-top b{flex:1;font-size:16px;}
+  .ci-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 0 calc(24px + env(safe-area-inset-bottom,0px));}
+  .ci-hero{text-align:center;padding:6px 16px 8px;}
+  .ci-av{width:112px;height:112px;border-radius:50%;margin:0 auto 10px;overflow:hidden;background:linear-gradient(135deg,#ec2b8e,#4a5cff);color:#fff;display:flex;align-items:center;justify-content:center;font-size:44px;font-weight:700;}
+  .ci-av img{width:100%;height:100%;object-fit:cover;}
+  .ci-nm{font-size:22px;font-weight:800;line-height:1.2;word-break:break-word;} .ci-sub{font-size:13px;color:var(--text-dim,#777);margin-top:3px;}
+  .ci-quick{display:flex;justify-content:center;gap:14px;padding:14px 8px 6px;flex-wrap:wrap;}
+  .ci-q{width:74px;background:none;border:0;color:inherit;cursor:pointer;font-size:12.5px;display:flex;flex-direction:column;align-items:center;gap:6px;}
+  .ci-q i{font-style:normal;width:48px;height:48px;border-radius:50%;background:var(--surface2,#eee);display:flex;align-items:center;justify-content:center;font-size:21px;}
+  .ci-sec{font-size:13px;font-weight:700;color:var(--text-dim,#777);padding:16px 18px 4px;}
+  .ci-it{display:flex;align-items:center;gap:16px;width:100%;box-sizing:border-box;padding:13px 18px;border:0;background:none;color:inherit;font:inherit;font-size:16px;text-align:left;cursor:pointer;}
+  .ci-it i{font-style:normal;width:26px;text-align:center;font-size:21px;flex:none;}
+  .ci-it span{flex:1;min-width:0;} .ci-it small{display:block;font-size:12.5px;color:var(--text-dim,#777);margin-top:1px;} .ci-it em{font-style:normal;font-size:13px;color:var(--text-dim,#777);}
+  .ci-it.red{color:#e5484d;font-weight:600;}
+  .ci-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;padding:0 3px;} .ci-grid a{display:block;aspect-ratio:1;background:var(--surface2,#eee);overflow:hidden;}
+  .ci-grid img,.ci-grid video{width:100%;height:100%;object-fit:cover;display:block;}
+  .ci-in{margin:4px 14px 8px;width:calc(100% - 28px);box-sizing:border-box;padding:12px 14px;border-radius:12px;border:1px solid var(--border,#ddd);background:var(--surface2,#f2f2f6);color:inherit;font:inherit;font-size:15px;}
+  .ci-res{padding:11px 18px;border-top:1px solid var(--border,#e3e3ec);font-size:14.5px;line-height:1.4;cursor:pointer;} .ci-res small{display:block;color:var(--text-dim,#777);font-size:12px;margin-bottom:2px;}
+  .ci-mod{position:absolute;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;} .ci-mod>div{width:100%;background:var(--bg,#fff);border-radius:20px 20px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));}
+  .ci-mod h3{margin:0 0 4px;font-size:17px;} .ci-mod p{margin:0 0 10px;font-size:13px;color:var(--text-dim,#777);line-height:1.45;}
+  .ci-mod input{width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1px solid var(--border,#ddd);background:var(--surface2,#f2f2f6);color:inherit;font:inherit;font-size:16px;}
+  .ci-mod .row{display:flex;gap:10px;margin-top:12px;} .ci-mod .row button{flex:1;padding:12px;border:0;border-radius:12px;font-weight:700;font-size:15px;cursor:pointer;background:var(--surface2,#eee);color:inherit;} .ci-mod .row .go{background:linear-gradient(135deg,#ec2b8e,#4a5cff);color:#fff;}
+</style>
+<script id="gzChatInfoJs">
+(function(){
+  var ov=null, state='main', C=null, view='main';
+  var FV=function(){ return firebase.firestore.FieldValue; };
+  function $(id){ return document.getElementById(id); }
+  function me(){ return auth.currentUser && auth.currentUser.uid; }
+  function say(m){ try{ toast(m); }catch(e){ alert(m); } }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function ts(x){ return x&&x.toMillis?x.toMillis():(typeof x==='number'?x:0); }
+  function ch(){ return window.__gzChat; }
+  function peer(){ return ch()&&ch().peer(); }
+  function cid(){ return ch()&&ch().id(); }
+  function chatRef(){ return db.collection('chats').doc(cid()); }
+  function shownName(){ var p=peer(); return (C&&C.nicks&&C.nicks[p.id])||p.name||'User'; }
+
+  async function load(){
+    C={};
+    try{ var s=await chatRef().get(); if(s.exists) C=s.data()||{}; }catch(e){}
+  }
+  function mount(){
+    if(ov) return;
+    ov=document.createElement('div'); ov.id='gzCiOv'; ov.className='hidden';
+    ov.innerHTML='<div class="ci-top"><button class="ci-x" id="ciBack" aria-label="Back">←</button><b id="ciTitle"></b></div><div class="ci-body" id="ciBody"></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click',onClick);
+  }
+  function close(){ if(ov) ov.classList.add('hidden'); view='main'; }
+  function setTitle(t){ $('ciTitle').textContent=t||''; }
+
+  function renderMain(){
+    view='main'; var p=peer(), b=$('ciBody'); setTitle('');
+    var muted=!!(C.mute&&C.mute[me()]);
+    var blocked=false; try{ blocked=isBlockedUid(p.id); }catch(e){}
+    var ttlTxt='Off'; try{ ttlTxt=window.__gz2.label(); }catch(e){}
+    var logo=(p.logo&&/^https:\/\//.test(p.logo))?p.logo:'';
+    var h='<div class="ci-hero"><div class="ci-av">'+(logo?'<img src="'+esc(logo)+'" alt="">':esc((p.name||'U').trim().charAt(0).toUpperCase()))+'</div>'
+      +'<div class="ci-nm">'+esc(shownName())+'</div><div class="ci-sub">'+((C.nicks&&C.nicks[p.id])?esc(p.name||'')+' · ':'')+'🔒 End-to-end encrypted</div></div>'
+      +'<div class="ci-quick"><button class="ci-q" data-a="profile"><i>👤</i>Profile</button><button class="ci-q" data-a="nick"><i>Aa</i>Nickname</button><button class="ci-q" data-a="search"><i>🔍</i>Search</button><button class="ci-q" data-a="mute"><i>'+(muted?'🔔':'🔕')+'</i>'+(muted?'Unmute':'Mute')+'</button></div>'
+      +'<div class="ci-sec">Chat info</div>'
+      +'<button class="ci-it" data-a="media"><i>🖼️</i><span>View media, files &amp; links</span></button>'
+      +'<div class="ci-sec">Actions</div>'
+      +'<button class="ci-it" data-a="ttl"><i>⏱️</i><span>Disappearing messages<small>New messages vanish after the time you choose</small></span><em>'+esc(ttlTxt)+'</em></button>'
+      +'<div class="ci-sec">Privacy &amp; support</div>'
+      +'<button class="ci-it" data-a="block"><i>⛔</i><span>'+(blocked?'Unblock':'Block')+'</span></button>'
+      +'<button class="ci-it red" data-a="report"><i>⚠️</i><span>Report<small>Give feedback and report this conversation</small></span></button>'
+      +'<button class="ci-it red" data-a="delete"><i>🗑️</i><span>Delete chat<small>Removes it for you only</small></span></button>';
+    b.innerHTML=h;
+  }
+  function renderMedia(){
+    view='media'; setTitle('Media, files & links');
+    var nodes=document.querySelectorAll('#dmMsgs .dm-m img[data-big], #dmMsgs .dm-m video');
+    var h='';
+    nodes.forEach(function(n){
+      var src=n.getAttribute('src')||''; if(!src) return;
+      h+=n.tagName==='VIDEO'?'<a href="'+esc(src)+'" target="_blank" rel="noopener"><video src="'+esc(src)+'" muted playsinline preload="metadata"></video></a>':'<a href="'+esc(src)+'" target="_blank" rel="noopener"><img src="'+esc(src)+'" loading="lazy" alt=""></a>';
+    });
+    var links=[]; try{ (ch().msgs()||[]).forEach(function(m){ if(m.type==='text'&&m.text){ var f=m.text.match(/https?:\/\/[^\s]+/g); if(f) f.forEach(function(u){ links.push(u); }); } }); }catch(e){}
+    var l=links.length?'<div class="ci-sec">Links</div>'+links.slice(-30).reverse().map(function(u){ return '<div class="ci-res"><a href="'+esc(u)+'" target="_blank" rel="noopener" style="color:var(--accent2,#4a5cff);word-break:break-all">'+esc(u)+'</a></div>'; }).join(''):'';
+    $('ciBody').innerHTML=(h?'<div class="ci-grid">'+h+'</div>':'<div class="ci-res" style="border:0;color:var(--text-dim,#777)">No photos or videos in this chat yet.</div>')+l;
+  }
+  function renderSearch(){
+    view='search'; setTitle('Search in chat');
+    $('ciBody').innerHTML='<input class="ci-in" id="ciQ" placeholder="Search messages…" autocomplete="off"><div id="ciRes"></div>';
+    var q=$('ciQ'); q.focus();
+    q.oninput=function(){
+      var t=q.value.trim().toLowerCase(), box=$('ciRes');
+      if(t.length<2){ box.innerHTML=''; return; }
+      var hits=(ch().msgs()||[]).filter(function(m){ return m.type==='text'&&m.text&&m.text.toLowerCase().indexOf(t)>=0; }).slice(-40).reverse();
+      box.innerHTML=hits.length?hits.map(function(m){
+        return '<div class="ci-res" data-mid="'+esc(m.id)+'"><small>'+esc(m.from===me()?'You':shownName())+' · '+esc(new Date(ts(m.createdAt)||Date.now()).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}))+'</small>'+esc(m.text.slice(0,200))+'</div>';
+      }).join(''):'<div class="ci-res" style="border:0;color:var(--text-dim,#777)">No messages found.</div>';
+    };
+  }
+  function nickModal(){
+    var p=peer(), cur=(C.nicks&&C.nicks[p.id])||'';
+    var m=document.createElement('div'); m.className='ci-mod';
+    m.innerHTML='<div><h3>Nickname</h3><p>Only used in this chat. Both of you see it.</p><input id="ciNk" maxlength="30" placeholder="'+esc(p.name||'Nickname')+'" value="'+esc(cur)+'"><div class="row"><button type="button" data-m="x">Cancel</button>'+(cur?'<button type="button" data-m="r">Remove</button>':'')+'<button type="button" class="go" data-m="s">Save</button></div></div>';
+    m.addEventListener('click',async function(e){
+      var a=e.target.closest('[data-m]'); if(!a){ if(e.target===m) m.remove(); return; }
+      if(a.dataset.m==='x'){ m.remove(); return; }
+      var v=a.dataset.m==='r'?'':($('ciNk').value||'').trim().slice(0,30);
+      try{
+        var o={}; o[p.id]=v?v:FV().delete();
+        await chatRef().set({nicks:o,members:[me(),p.id]},{merge:true});
+        C.nicks=C.nicks||{}; if(v) C.nicks[p.id]=v; else delete C.nicks[p.id];
+        try{ var w=$('dmWho'); if(w) w.textContent=v||p.name; }catch(er){}
+        m.remove(); renderMain(); say(v?'Nickname saved':'Nickname removed');
+      }catch(er){ say('Could not save: '+(er&&er.message||er)); }
+    });
+    ov.appendChild(m); setTimeout(function(){ var i=$('ciNk'); if(i) i.focus(); },50);
+  }
+  async function toggleMute(){
+    var p=peer(), now=!(C.mute&&C.mute[me()]);
+    try{
+      var o={}; o[me()]=now;
+      await chatRef().set({mute:o,members:[me(),p.id]},{merge:true});
+      C.mute=C.mute||{}; C.mute[me()]=now; renderMain(); say(now?'Muted. You will not get push notifications from this chat':'Unmuted');
+    }catch(e){ say('Could not change: '+(e&&e.message||e)); }
+  }
+  async function doBlock(){
+    var p=peer(); var blocked=false; try{ blocked=isBlockedUid(p.id); }catch(e){}
+    try{
+      if(blocked){ await unblockUser(p.id); say('Unblocked'); renderMain(); return; }
+      var done=await blockUser(p.id,p.name); if(!done) return; close(); try{ ch().close(); }catch(e){}
+    }catch(e){ say('Could not change: '+(e&&e.message||e)); }
+  }
+  async function doDelete(){
+    var p=peer();
+    var ok=await gzConfirm('Delete this chat? The messages disappear for you only. '+(p.name||'The other person')+' keeps their copy.','Delete');
+    if(!ok) return;
+    try{
+      var o={}; o[me()]=Date.now();
+      await chatRef().set({clearedAt:o,members:[me(),p.id]},{merge:true});
+      try{ ch().cleared(Date.now()); }catch(e){}
+      close(); try{ ch().close(); }catch(e){} say('Chat deleted');
+    }catch(e){ say('Could not delete: '+(e&&e.message||e)); }
+  }
+  function onClick(e){
+    if(e.target.closest('#ciBack')){ if(view!=='main') renderMain(); else close(); return; }
+    var r=e.target.closest('[data-mid]');
+    if(r){ var id=r.dataset.mid; close(); try{ ch().goto(id); }catch(er){} return; }
+    var b=e.target.closest('[data-a]'); if(!b) return;
+    var a=b.dataset.a, p=peer();
+    if(a==='profile'){ close(); try{ ch().profile(); }catch(er){} }
+    else if(a==='nick') nickModal();
+    else if(a==='search') renderSearch();
+    else if(a==='media') renderMedia();
+    else if(a==='mute') toggleMute();
+    else if(a==='ttl'){ try{ window.__gz2.openTimer(); }catch(er){ say('Not available right now'); } }
+    else if(a==='block') doBlock();
+    else if(a==='report') window.gzReport({type:'user',id:p.id,uid:p.id,name:p.name,title:'[Chat] '+(p.name||'')});
+    else if(a==='delete') doDelete();
+  }
+  window.__gzCi={
+    open:async function(){
+      try{ if(typeof requireAuth==='function' && !requireAuth()) return; }catch(e){}
+      if(!peer()||peer().group) return;
+      mount(); ov.classList.remove('hidden'); $('ciBody').innerHTML='<div class="ci-res" style="border:0">Loading…</div>';
+      await load(); renderMain();
+    },
+    refresh:function(){ if(ov && !ov.classList.contains('hidden') && view==='main'){ load().then(renderMain); } }
+  };
+})();
+</script>
+
+<!-- ===================== ADMOB ADS BETWEEN POSTS (Android app only) =====================
+     After every 3 posts one ad card is added: banner (300x250) and native ("reel style") ads take turns.
+     Needs the AdMob bridge of the Android app (window.AndroidAdBridge); the website itself shows no ads here. -->
+<style id="gzPostAdCss">
+  .gz-adpost{margin:0 0 6px;padding:10px 0 12px;border-bottom:1px solid var(--border,#e3e3ec);}
+  .gz-adpost .ah{display:flex;align-items:center;gap:10px;padding:0 12px 8px;font-size:13px;font-weight:700;} .gz-adpost .ah small{font-weight:400;color:var(--text-dim,#777);margin-left:auto;}
+  .gz-adhole{width:100%;background:var(--surface2,#eee);} .gz-adhole.banner{height:250px;} .gz-adhole.native{aspect-ratio:4/5;max-height:70vh;}
+</style>
+<script id="gzPostAdsJs">
+(function(){
+  var seq=0;
+  function on(){ try{ return !!window.AndroidAdBridge && ADS_ENABLED && !isAdFree(); }catch(e){ return false; } }
+  function html(n){
+    var kind=(n%2===0)?'banner':'native';
+    return '<div class="gz-adpost" data-kind="'+kind+'"><div class="ah">Sponsored<small>Ad</small></div><div class="gz-adhole '+kind+'"></div></div>';
+  }
+  function overlayOpen(){
+    return !!document.querySelector('.ig-ov.show,.sheet-backdrop.show,#storyViewer:not(.st-hide),.gz-ov,.gz-page,#gzCiOv:not(.hidden),#gzRptOv,#cvOv:not(.hidden),#sqOv:not(.hidden),.rm-ov:not(.hidden)');
+  }
+  function bounds(){
+    var h=document.querySelector('#app > header'), n=document.querySelector('nav');
+    return { top:h?Math.round(h.getBoundingClientRect().bottom):0, bottom:n?Math.round(n.getBoundingClientRect().top):window.innerHeight };
+  }
+  function start(el){
+    var B=window.AndroidAdBridge; if(!B) return;
+    var kind=el.dataset.kind, hole=el.querySelector('.gz-adhole');
+    if(kind==='banner' && !B.registerBannerSlot){ kind='native'; hole.className='gz-adhole native'; }
+    var id='post_'+kind+'_'+(++seq), reg=false, was=false, last='';
+    try{ _adSlides[id]=el; }catch(e){}
+    function unreg(){ try{ B.unregisterAdSlot(id); }catch(e){} }
+    function tick(){
+      if(!el.isConnected){ if(was) unreg(); return; }
+      was=true;
+      var r=hole.getBoundingClientRect(), vh=window.innerHeight, bd=bounds();
+      var vis=r.width>0 && r.height>0 && hole.offsetParent!==null && !overlayOpen() && r.bottom>bd.top+2 && r.top<bd.bottom-2;
+      if(!reg && r.width>0 && r.top<vh*2 && r.bottom>-vh){
+        reg=true;
+        try{ if(B.markFeedSlot) B.markFeedSlot(id); }catch(e){}
+        try{ if(kind==='banner') B.registerBannerSlot(id); else B.registerAdSlot(id); }catch(e){}
+      }
+      if(reg){
+        var x=Math.round(r.left), y=Math.round(r.top), w=Math.round(r.width), h=Math.round(r.height);
+        var key=x+','+y+','+w+','+h+','+vis+','+bd.top+','+bd.bottom;
+        if(key!==last){
+          last=key;
+          try{ if(B.updateAdRectClipped) B.updateAdRectClipped(id,x,y,w,h,vis,bd.top,bd.bottom); else B.updateAdRect(id,x,y,w,h,vis); }catch(e){}
+        }
+      }
+      var far=r.top>vh*2||r.bottom<-vh;
+      if(far) setTimeout(tick,300); else requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+  function mount(root){
+    if(!on()) return;
+    (root||document).querySelectorAll('.gz-adpost:not([data-m])').forEach(function(el){ el.dataset.m='1'; start(el); });
+  }
+  /* a vertical swipe that starts on a native ad view comes back here and scrolls the feed */
+  window.__gzFeedSwipe=function(dir){
+    var f=document.getElementById('homeFeed'), el=f, sc=null;
+    while(el && el!==document.body){ var cs=getComputedStyle(el); if(/(auto|scroll)/.test(cs.overflowY) && el.scrollHeight>el.clientHeight+4){ sc=el; break; } el=el.parentElement; }
+    var dy=(dir>0?1:-1)*Math.round(window.innerHeight*0.7);
+    try{ (sc||window).scrollBy({top:dy,behavior:'smooth'}); }catch(e){ if(sc) sc.scrollTop+=dy; else window.scrollBy(0,dy); }
+  };
+  window.gzPostAds={on:on,html:html,mount:mount};
 })();
 </script>
 
