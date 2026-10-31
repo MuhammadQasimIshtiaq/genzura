@@ -6,6 +6,8 @@
      GET  /sitemap-videos.xml -> video sitemap for Google
      POST /ring-ack           -> phone confirms "call reached me" (caller sees Ringing)
      POST /anon-send          -> anonymous inbox message (server-side rate limit + push)   (NEW)
+     POST /contacts           -> contacts sync / "who saved me" count                      (NEW)
+     POST /translate          -> one-tap Urdu / English translate                         (NEW)
      CRON (every 5 min)       -> Real Moments: once a day at the random "Genzloop Time" sends ONE push to everybody   (NEW)
    Secrets: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY,
             EXPRESSTURN_USER, EXPRESSTURN_PASS
@@ -738,12 +740,222 @@ async function mmRun(env) {
   return { day, tokens: total, sent: mr.ok, status: mr.status };
 }
 
+/* ================================================================
+   CONTACTS + TRANSLATE  (ported from netlify/functions/contacts.js and translate.js)
+     POST /contacts   {action: register | sync | clear | savedCount}
+     POST /translate  {text, to: "ur" | "roman" | "en"}
+   Both need  Authorization: Bearer <Firebase ID token>.
+   Uses the SAME secrets as the rest of this worker (FIREBASE_*). Optional: CONTACTS_PEPPER (copy it from Netlify ONLY if it was set there).
+   ================================================================ */
+const CT_KEY_DEFAULT = "AIzaSyATkLM81knrj_enQUsg1L9XRXt9_jdvL0w"; /* public web key, same as the other routes */
+const CT_H = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type", "Content-Type": "application/json" };
+const ctJ = (code, o) => new Response(JSON.stringify(o), { status: code, headers: CT_H });
+const ctHex = (buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+const ctSha = async (s) => ctHex(await crypto.subtle.digest("SHA-256", anEnc.encode(s)));
+const CT_MAX_HASHES = 5000;
+
+/* same normalised PEM text the Netlify version used as fallback pepper (keeps old hashes valid) */
+function ctPem(rawIn) {
+  let raw = String(rawIn || "").trim();
+  if (raw.startsWith('"') && raw.endsWith('"')) raw = raw.slice(1, -1);
+  raw = raw.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\r\n/g, "\n")
+    .replace(/BEGIN\s+(RSA\s+)?PRIVATE\s+KEY/gi, " ").replace(/END\s+(RSA\s+)?PRIVATE\s+KEY/gi, " ");
+  const body64 = raw.replace(/[^A-Za-z0-9+/=]/g, "");
+  return body64.length > 800 ? "-----BEGIN PRIVATE KEY-----\n" + body64.match(/.{1,64}/g).join("\n") + "\n-----END PRIVATE KEY-----\n" : "";
+}
+
+/* ---- translate ---- */
+function ctParseGoogle(d) {
+  const rows = Array.isArray(d) && Array.isArray(d[0]) ? d[0] : [];
+  let text = "", roman = "";
+  for (const r of rows) {
+    if (!Array.isArray(r)) continue;
+    if (typeof r[0] === "string") text += r[0];
+    else if (r[0] === null && typeof r[3] === "string") roman += r[3];
+  }
+  return { text: text.trim(), roman: roman.trim() };
+}
+async function ctGoogle(text, tl) {
+  const r = await fetch("https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=" + tl + "&dt=t&dt=rm&q=" + encodeURIComponent(text),
+    { headers: { "User-Agent": "Mozilla/5.0" } });
+  if (!r.ok) throw new Error("google " + r.status);
+  return ctParseGoogle(await r.json());
+}
+async function ctMyMemory(text, tl) {
+  const r = await fetch("https://api.mymemory.translated.net/get?q=" + encodeURIComponent(text.slice(0, 450)) + "&langpair=autodetect|" + tl);
+  if (!r.ok) throw new Error("mymemory " + r.status);
+  const d = await r.json();
+  const t = d && d.responseData && d.responseData.translatedText;
+  if (!t) throw new Error("mymemory empty");
+  return { text: String(t), roman: "" };
+}
+async function ctTranslate(body) {
+  const text = String(body.text || "").trim().slice(0, 1500);
+  if (!text) return ctJ(400, { error: "empty" });
+  const tl = String(body.to || "ur") === "en" ? "en" : "ur";
+  let res;
+  try { res = await ctGoogle(text, tl); if (!res.text) throw new Error("empty"); }
+  catch (e) { res = await ctMyMemory(text, tl); }
+  return ctJ(200, { text: res.text, roman: res.roman });
+}
+
+/* ---- contacts ---- */
+async function ctContacts(env, user, body) {
+  const pid = String(env.FIREBASE_PROJECT_ID || "").trim(), email = String(env.FIREBASE_CLIENT_EMAIL || "").trim();
+  const pk = ctPem(env.FIREBASE_PRIVATE_KEY);
+  if (!pid || !email || !pk) return ctJ(500, { error: "missing env vars" });
+  const pepper = env.CONTACTS_PEPPER || pk;
+  const hk = await crypto.subtle.importKey("raw", anEnc.encode(pepper), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const hmac = async (s) => ctHex(await crypto.subtle.sign("HMAC", hk, anEnc.encode(String(s))));
+
+  const me = user.localId;
+  const emailOk = !!(user.email && user.emailVerified);
+  const phone = user.phoneNumber || ((user.providerUserInfo || []).find((p) => p.providerId === "phone") || {}).phoneNumber || "";
+  const action = String(body.action || "");
+
+  const at = await anAccessToken(env);
+  const A = { Authorization: "Bearer " + at, "Content-Type": "application/json" };
+  const ROOT = `projects/${pid}/databases/(default)/documents`;
+  const DOCS = `https://firestore.googleapis.com/v1/${ROOT}`;
+  const getDoc = async (p) => { const r = await fetch(`${DOCS}/${p}`, { headers: A }); return r.ok ? r.json() : null; };
+  const setDoc = (p, fields) => fetch(`${DOCS}/${p}`, { method: "PATCH", headers: A, body: JSON.stringify({ fields }) });
+  const commit = (writes) => fetch(`${DOCS}:commit`, { method: "POST", headers: A, body: JSON.stringify({ writes }) });
+  const strArr = (a) => ({ arrayValue: { values: a.map((s) => ({ stringValue: s })) } });
+  const query = async (sq) => {
+    const r = await fetch(`${DOCS}:runQuery`, { method: "POST", headers: A, body: JSON.stringify({ structuredQuery: sq }) });
+    const rows = await r.json();
+    return (Array.isArray(rows) ? rows : []).filter((x) => x.document).map((x) => x.document);
+  };
+  /* fewer sub-requests than one-by-one (Cloudflare free plan allows 50 per call) */
+  const batchGet = async (coll, ids, field, size) => {
+    const found = {};
+    for (let i = 0; i < ids.length; i += size) {
+      const r = await fetch(`${DOCS}:batchGet`, { method: "POST", headers: A, body: JSON.stringify({
+        documents: ids.slice(i, i + size).map((x) => `${ROOT}/${coll}/${x}`), mask: { fieldPaths: field } }) });
+      const rows = await r.json();
+      for (const x of (Array.isArray(rows) ? rows : [])) if (x.found) found[x.found.name.split("/").pop()] = x.found.fields || {};
+    }
+    return found;
+  };
+  const myLinkDocs = () => query({ from: [{ collectionId: "contactLinks" }],
+    where: { fieldFilter: { field: { fieldPath: "members" }, op: "ARRAY_CONTAINS", value: { stringValue: me } } }, limit: 1000 });
+
+  const prev = await getDoc(`userPhone/${me}`);
+  const prevIds = ((prev && prev.fields && prev.fields.ids && prev.fields.ids.arrayValue && prev.fields.ids.arrayValue.values) || []).map((v) => v.stringValue);
+
+  async function clearMine() {
+    const ws = prevIds.map((h) => ({ delete: `${ROOT}/phoneIndex/${h}` }));
+    ws.push({ delete: `${ROOT}/userPhone/${me}` }, { delete: `${ROOT}/contactBooks/${me}` });
+    for (const d of await myLinkDocs()) ws.push({ delete: d.name });
+    for (let i = 0; i < ws.length; i += 400) await commit(ws.slice(i, i + 400));
+  }
+
+  if (action === "clear") { await clearMine(); return ctJ(200, { ok: true }); }
+
+  if (action === "savedCount") {
+    const opt = await getDoc(`savedCountOpt/${me}`);
+    if (!(opt && opt.fields && opt.fields.on && opt.fields.on.booleanValue)) return ctJ(403, { error: "Turn this feature on first" });
+    const ids = [];
+    if (emailOk) ids.push(await hmac(await ctSha("mailto:" + user.email.trim().toLowerCase())));
+    if (phone) ids.push(await hmac(await ctSha(phone)));
+    if (!ids.length) return ctJ(400, { error: "Verify your phone number or Google e-mail first (Contacts sync)" });
+    const who = new Set();
+    for (const h of ids) {
+      const docs = await query({ from: [{ collectionId: "contactBooks" }],
+        where: { fieldFilter: { field: { fieldPath: "h" }, op: "ARRAY_CONTAINS", value: { stringValue: h } } },
+        select: { fields: [{ fieldPath: "n" }] }, limit: 5000 });
+      for (const d of docs) { const u = d.name.split("/").pop(); if (u !== me) who.add(u); }
+    }
+    return ctJ(200, { ok: true, count: who.size >= 3 ? who.size : null, few: who.size < 3 });
+  }
+
+  if (action === "register" || action === "sync") {
+    const myIds = [];
+    if (emailOk) myIds.push(await hmac(await ctSha("mailto:" + user.email.trim().toLowerCase())));
+    if (phone) myIds.push(await hmac(await ctSha(phone)));
+    if (!myIds.length) return ctJ(400, { error: "no verified e-mail or phone" });
+    if (prevIds.some((h) => !myIds.includes(h))) await clearMine();
+    const mine = [];
+    for (const h of myIds) {
+      const owner = await getDoc(`phoneIndex/${h}`);
+      const ownerUid = owner && owner.fields && owner.fields.uid && owner.fields.uid.stringValue;
+      if (ownerUid && ownerUid !== me) continue;
+      await setDoc(`phoneIndex/${h}`, { uid: { stringValue: me } });
+      mine.push(h);
+    }
+    if (!mine.length) return ctJ(409, { error: "identity already used by another account" });
+    await setDoc(`userPhone/${me}`, { ids: strArr(mine) });
+    if (action === "register") return ctJ(200, { ok: true });
+
+    const hashes = [...new Set((Array.isArray(body.hashes) ? body.hashes : [])
+      .map((h) => String(h).toLowerCase()).filter((h) => /^[0-9a-f]{64}$/.test(h)))].slice(0, CT_MAX_HASHES);
+    const book = await Promise.all(hashes.map(hmac));
+    await setDoc(`contactBooks/${me}`, { h: strArr(book), n: { integerValue: String(book.length) } });
+
+    /* which of my contacts are Genzura users? */
+    const idx = await batchGet("phoneIndex", book, ["uid"], 300);
+    const matches = {};
+    for (const k in idx) { const u = idx[k].uid && idx[k].uid.stringValue; if (u && u !== me) matches[u] = true; }
+    const uids = Object.keys(matches).slice(0, 500);
+
+    /* mutual = MY id is inside THEIR contact book */
+    const books = await batchGet("contactBooks", uids, ["h"], 50);
+    const chans = await batchGet("channels", uids, ["name", "logoURL"], 300);
+    const people = [], writes = [];
+    for (const u of uids) {
+      const list = (books[u] && books[u].h && books[u].h.arrayValue && books[u].h.arrayValue.values) || [];
+      const mutual = list.some((v) => mine.includes(v.stringValue));
+      const f = chans[u] || {};
+      people.push({ id: u, name: (f.name && f.name.stringValue) || "Genzura user", logo: (f.logoURL && f.logoURL.stringValue) || null, mutual });
+      if (mutual) {
+        const id = [me, u].sort().join("_");
+        writes.push({ update: { name: `${ROOT}/contactLinks/${id}`, fields: { members: strArr([me, u].sort()), at: { timestampValue: new Date().toISOString() } } } });
+      }
+    }
+    for (let i = 0; i < writes.length; i += 400) await commit(writes.slice(i, i + 400));
+
+    /* remove links to people who are no longer mutual contacts */
+    const keep = new Set(people.filter((p) => p.mutual).map((p) => p.id));
+    const dels = [];
+    for (const d of await myLinkDocs()) {
+      const id = d.name.split("/").pop();
+      const other = id.split("_").find((x) => x !== me);
+      if (!keep.has(other)) dels.push({ delete: d.name });
+    }
+    for (let i = 0; i < dels.length; i += 400) await commit(dels.slice(i, i + 400));
+    return ctJ(200, { ok: true, contacts: book.length, people });
+  }
+  return ctJ(400, { error: "bad action" });
+}
+
+async function ctHandle(request, env) {
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CT_H });
+  if (request.method !== "POST") return ctJ(405, { error: "POST only" });
+  const path = new URL(request.url).pathname.replace(/\/+$/, "");
+  try {
+    const idToken = (request.headers.get("Authorization") || "").replace(/^Bearer /i, "").trim();
+    if (!idToken) return ctJ(401, { error: "no token" });
+    const lr = await fetch("https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=" + (env.FIREBASE_API_KEY || CT_KEY_DEFAULT).trim(),
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }) });
+    const ld = await lr.json();
+    const user = ld.users && ld.users[0];
+    if (!user || !user.localId) return ctJ(401, { error: "bad token" });
+    const body = await request.json().catch(() => ({}));
+    if (path === "/translate") return await ctTranslate(body);
+    return await ctContacts(env, user, body);
+  } catch (e) {
+    return ctJ(500, { error: String((e && e.message) || e) });
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const p = new URL(request.url).pathname.replace(/\/+$/, "");
     if (p === "/anon-send") return anHandle(request, env); /* handles its own OPTIONS preflight */
     if (request.method === "POST" && p === "/ring-ack") return rkHandle(request, env);
     if (request.method === "GET" && p === "/sitemap-videos.xml") return smHandle(request, env, ctx);
+    if (p === "/contacts" || p === "/translate") return ctHandle(request, env); /* handles its own OPTIONS preflight */
     if (p === "/view") return VIEWS.fetch(request, env, ctx);
     return API.fetch(request, env, ctx);
   },
