@@ -1,5 +1,5 @@
 /* ================================================================
-   GENZLOOP — Push notifications via Netlify (FREE, no Firebase Blaze).
+   GUPZY — Push notifications via Netlify (FREE, no Firebase Blaze).
    No npm packages needed. Uses the SAME 3 env variables as the sitemap function:
      FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
    The app calls this after sending a message / like / call etc.
@@ -78,7 +78,7 @@ exports.handler = async (event) => {
     if (!targets.length) return out(200, {sent: 0});
 
     /* sender name */
-    let name = "Genzloop";
+    let name = "Gupzy";
     try {
       const nr = await fetch(`${DOCS}/channels/${from}`, {headers: A});
       const nd = await nr.json();

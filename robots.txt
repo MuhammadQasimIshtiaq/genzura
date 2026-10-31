@@ -1,5 +1,5 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://genzloop.com/sitemap.xml
-Sitemap: https://genzloop.com/sitemap-videos.xml
+Sitemap: https://gupzy.com/sitemap.xml
+Sitemap: https://gupzy.com/sitemap-videos.xml

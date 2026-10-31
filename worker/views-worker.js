@@ -1,5 +1,5 @@
 /* ================================================================
-   GENZLOOP — "views" Worker (Cloudflare Workers, free plan is enough)
+   GUPZY — "views" Worker (Cloudflare Workers, free plan is enough)
 
    Why: a view's COUNTRY must come from the server (the visitor's real IP),
    never from the phone/browser, otherwise anybody could claim "US" and take

@@ -1,5 +1,5 @@
 /* ================================================================
-   GENZLOOP - one-tap translate (Urdu / Roman Urdu / English) for captions and comments.
+   GUPZY - one-tap translate (Urdu / Roman Urdu / English) for captions and comments.
    POST {text, to: "ur" | "roman" | "en"}  with  Authorization: Bearer <Firebase ID token>
    Returns {text, roman}.  No API key and no npm package needed:
    uses the free Google Translate web endpoint, falls back to MyMemory.

@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Genzloop Studio</title>
+<title>Gupzy Studio</title>
 <meta name="theme-color" content="#ffffff">
 <meta name="robots" content="noindex">
 <link rel="icon" href="/studio/favicon-32.png">
@@ -149,19 +149,19 @@
 </style>
 </head>
 <body>
-<div id="stBoot"><div class="bt"><img src="/studio/genzura-studio-logo.png" alt="Genzloop Studio"></div></div>
+<div id="stBoot"><div class="bt"><img src="/studio/genzura-studio-logo.png" alt="Gupzy Studio"></div></div>
 <div id="toast"></div>
 <div id="recaptcha-container"></div>
 
 <div id="stLogin" class="hidden">
-  <div class="lg"><img src="/studio/genzura-studio-logo.png" alt="Genzloop Studio"></div>
-  <p>Manage your Genzloop channel: analytics, posts, comments and earnings.</p>
+  <div class="lg"><img src="/studio/genzura-studio-logo.png" alt="Gupzy Studio"></div>
+  <p>Manage your Gupzy channel: analytics, posts, comments and earnings.</p>
   <button id="stGoogle"><svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.7 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.5-.8-3-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.6-4.2-13.5-9.9l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>Sign in with Google</button>
   <div id="stLoginErr" class="hidden"></div>
 </div>
 
 <div id="atStudio" class="hidden">
-  <div class="st-top"><div class="st-logo"><img src="/studio/genzura-g.png" alt=""><div class="nm"><b>Genzloop</b><span>studio</span></div></div><div style="display:flex;align-items:center;gap:6px"><button class="st-x" id="stPlus" title="Upload on Genzloop">&#8853;</button><button id="stAvBtn" aria-label="Account"></button></div></div>
+  <div class="st-top"><div class="st-logo"><img src="/studio/genzura-g.png" alt=""><div class="nm"><b>Gupzy</b><span>studio</span></div></div><div style="display:flex;align-items:center;gap:6px"><button class="st-x" id="stPlus" title="Upload on Gupzy">&#8853;</button><button id="stAvBtn" aria-label="Account"></button></div></div>
   <div class="st-body" id="stBody"></div>
   <div class="st-nav" id="stNav">
     <div class="st-sidechan" id="stSideChan"></div>
@@ -175,11 +175,11 @@
 <div id="stModal"><div class="in" id="stModalIn"></div></div>
 <script>
 /* =====================================================================
-   AT STUDIO  -  creator studio for Genzloop (same Firebase project)
+   AT STUDIO  -  creator studio for Gupzy (same Firebase project)
    ===================================================================== */
 const firebaseConfig = {
   apiKey: "AIzaSyATkLM81knrj_enQUsg1L9XRXt9_jdvL0w",
-  authDomain: "genzloop.com",
+  authDomain: "gupzy.com",
   projectId: "arain-tube-672a1",
   storageBucket: "arain-tube-672a1.firebasestorage.app",
   messagingSenderId: "649325973427",
@@ -187,7 +187,7 @@ const firebaseConfig = {
 };
 const CLOUDINARY_CLOUD_NAME = "rct4qeol", CLOUDINARY_UPLOAD_PRESET = "arain_unsigned";
 const CREATOR_SHARE = 0.96;                       /* 96% creator / 4% platform (same as the old Earn page) */
-const MAIN_APP = location.origin + '/';           /* Genzloop main site */
+const MAIN_APP = location.origin + '/';           /* Gupzy main site */
 
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
@@ -428,7 +428,7 @@ function dash(){
     h += '<div class="st-card" data-open="'+last.id+'" style="cursor:pointer"><div class="st-vrow" style="border:0;padding-top:0">'+pthumb(last)+'<div class="st-vt"><b>'+E(ptitle(last))+'</b><span>'+ago(last.createdAt)+'</span></div></div>'
       + '<div style="display:flex;gap:22px;padding:10px 0;border-top:1px solid var(--border);font-size:16px"><span>&#128077; '+nf(last.likesCount)+'</span><span>&#128172; '+nf(last.commentsCount)+'</span></div>'
       + '<div class="st-line" style="font-size:15px;color:var(--text)"><span>Ranking by likes</span><span>'+rank+' of '+P.length+'</span></div><div class="st-sub" style="margin-top:8px">Tap to see this post\'s analytics</div></div>';
-  } else h += '<div class="st-empty">No posts yet. Share your first post on Genzloop!</div>';
+  } else h += '<div class="st-empty">No posts yet. Share your first post on Gupzy!</div>';
   h += '</div><div class="st-sec stp"><h2>Top posts</h2><div class="st-card"><div class="st-k">Likes &middot; All time</div>'+(top.length ? top.map(v=>'<div class="st-vrow" data-open="'+v.id+'" style="cursor:pointer">'+pthumb(v)+'<div class="st-vt"><b>'+E(ptitle(v))+'</b></div><b>'+nf(v.likesCount)+'</b></div>').join('') : '<div class="st-empty">Nothing yet</div>')+'</div>';
   h += '</div><div class="st-sec scm"><h2>Comments</h2><div class="st-card"><div class="st-k">Comments on your posts</div><div class="st-big">'+nf(t.comments)+'</div><button class="st-btn" data-go="community">View all</button></div></div></div>';
   return h;
@@ -513,7 +513,7 @@ async function openPostAnalytics(p){
 
 /* ---------- EARN (monetization lives here now) ---------- */
 function howCard(){
-  return '<div class="st-card"><h3>How earning works</h3><ol class="st-how"><li><b>Meet the requirements.</b> Get 7 followers, 70 views and refer 3 new channels, all within the last 7 days.</li><li><b>Apply for monetization.</b> Verify your phone number, add your ID and your payment details.</li><li><b>Wait for approval.</b> The Genzloop team reviews every application. Once approved, your channel becomes monetized.</li><li><b>Earn every month.</b> The month\'s ad revenue is shared between all monetized channels by their share of views, country by country &mdash; views from higher-paying countries earn more, and views through a VPN or proxy are paid at the lowest rate. You get <b>96%</b> of your share, Genzloop keeps 4%.</li><li><b>Get paid.</b> Payouts are confirmed by the team at the end of the month and sent by JazzCash, EasyPaisa, bank transfer (Pakistan) or Payoneer (international).</li></ol></div>';
+  return '<div class="st-card"><h3>How earning works</h3><ol class="st-how"><li><b>Meet the requirements.</b> Get 7 followers, 70 views and refer 3 new channels, all within the last 7 days.</li><li><b>Apply for monetization.</b> Verify your phone number, add your ID and your payment details.</li><li><b>Wait for approval.</b> The Gupzy team reviews every application. Once approved, your channel becomes monetized.</li><li><b>Earn every month.</b> The month\'s ad revenue is shared between all monetized channels by their share of views, country by country &mdash; views from higher-paying countries earn more, and views through a VPN or proxy are paid at the lowest rate. You get <b>96%</b> of your share, Gupzy keeps 4%.</li><li><b>Get paid.</b> Payouts are confirmed by the team at the end of the month and sent by JazzCash, EasyPaisa, bank transfer (Pakistan) or Payoneer (international).</li></ol></div>';
 }
 function earn(){
   const mon = !!(currentChannel && currentChannel.monetized);
@@ -522,7 +522,7 @@ function earn(){
     h += '<div class="st-status ok">&#10003; Your channel is monetized</div>';
     if(!S.earn){ loadEarnings(); h += '<div class="st-card"><div class="st-empty">Loading this month\'s earnings…</div></div>'; }
     else if(S.earn.error) h += '<div class="st-card"><div class="st-empty">Couldn\'t load earnings right now.</div></div>';
-    else h += '<div class="st-card"><div class="st-k">'+E(S.earn.label)+' &mdash; estimated earnings</div><div class="st-money">$'+S.earn.amount.toFixed(2)+'</div><div class="st-line"><span>Views from the app</span><b>'+(S.earn.app||0).toLocaleString()+'</b></div><div class="st-line"><span>Views from the web</span><b>'+(S.earn.web||0).toLocaleString()+'</b></div><div class="st-line"><span>Your share of all creator views</span><b>'+(S.earn.share*100).toFixed(2)+'%</b></div><div class="st-sub" style="margin-top:12px;font-size:11.5px">This is an estimate based on this month so far. Final payout is confirmed by the Genzloop team at month end.</div></div>';
+    else h += '<div class="st-card"><div class="st-k">'+E(S.earn.label)+' &mdash; estimated earnings</div><div class="st-money">$'+S.earn.amount.toFixed(2)+'</div><div class="st-line"><span>Views from the app</span><b>'+(S.earn.app||0).toLocaleString()+'</b></div><div class="st-line"><span>Views from the web</span><b>'+(S.earn.web||0).toLocaleString()+'</b></div><div class="st-line"><span>Your share of all creator views</span><b>'+(S.earn.share*100).toFixed(2)+'%</b></div><div class="st-sub" style="margin-top:12px;font-size:11.5px">This is an estimate based on this month so far. Final payout is confirmed by the Gupzy team at month end.</div></div>';
     if(S.earn && !S.earn.error) h += countriesCard();
     return h + howCard();
   }
@@ -537,7 +537,7 @@ function earn(){
 }
 function shareRef(){
   const id = currentChannel && currentChannel.channelId, link = MAIN_APP + (id ? '?ref=' + id : '');
-  if(navigator.share){ navigator.share({ title:'Genzloop', text:'Check out Genzloop!', url:link }).catch(()=>{}); }
+  if(navigator.share){ navigator.share({ title:'Gupzy', text:'Check out Gupzy!', url:link }).catch(()=>{}); }
   else { try{ navigator.clipboard.writeText(link); toast('Referral link copied'); }catch(e){ toast(link); } }
 }
 
@@ -562,8 +562,8 @@ function openApply(){
    +'<label class="f">Channel</label><div class="ro">'+E(c.name||'')+' (@'+E(c.channelId||'')+')</div>'
    +'<label class="f">Phone number *</label><div class="rw"><input type="tel" id="apPhone" placeholder="+92 300 1234567"><button class="mini" id="apSend">Send OTP</button></div><div class="hint">Include your country code, e.g. +92 for Pakistan.</div>'
    +'<div id="apOtpBox" style="display:none"><label class="f">Enter OTP *</label><div class="rw"><input type="text" id="apOtp" placeholder="6-digit code"><button class="mini" id="apVerify">Verify</button></div></div><div id="apPhoneOk" style="display:none;color:var(--green);font-weight:600;font-size:13px;margin-top:8px">&#10003; Phone number verified</div>'
-   +'<label class="f">Gender</label><div class="ro" style="color:var(--text-dim)">'+E(c.gender||'Not set — please add this in Edit Channel (Genzloop) first')+'</div>'
-   +'<label class="f">Country</label><div class="ro" style="color:var(--text-dim)">'+E(c.country||'Not set — please add this in Edit Channel (Genzloop) first')+'</div>'
+   +'<label class="f">Gender</label><div class="ro" style="color:var(--text-dim)">'+E(c.gender||'Not set — please add this in Edit Channel (Gupzy) first')+'</div>'
+   +'<label class="f">Country</label><div class="ro" style="color:var(--text-dim)">'+E(c.country||'Not set — please add this in Edit Channel (Gupzy) first')+'</div>'
    +'<label class="f">Address *</label><textarea id="apAddr" placeholder="Full residential address"></textarea>'
    +'<label class="f">CNIC / National ID number *</label><input type="text" id="apCnic" placeholder="e.g. 12345-1234567-1">'
    +'<label class="f">CNIC photo (front side) *</label><input type="file" id="apPhoto" accept="image/*">'
@@ -629,7 +629,7 @@ function sheet(items){
 el('stNav').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b) return; S.tab=b.dataset.t; render(); el('stBody').scrollTop=0; });
 el('stPlus').addEventListener('click',()=>openArainTube(''));
 el('stAvBtn').addEventListener('click',()=>sheet([
-  { label:'Open Genzloop', fn:()=>openArainTube('') },
+  { label:'Open Gupzy', fn:()=>openArainTube('') },
   { label:(document.documentElement.dataset.theme==='dark'?'Light theme':'Dark theme'), fn:toggleTheme },
   { label:'Switch account', fn:switchAccount },
   { label:'Sign out', red:true, fn:()=>{ clearNativeAccount(); auth.signOut().catch(()=>{}); } }
@@ -670,7 +670,7 @@ auth.onAuthStateChanged(async user=>{
   const first = await db.collection('channels').doc(user.uid).get().catch(()=>null);
   if(!first || !first.exists){
     el('atStudio').classList.remove('hidden');
-    el('stBody').innerHTML='<div class="st-empty" style="padding-top:80px">You do not have a channel yet.<br>Create your channel in Genzloop first, then come back to Studio.<br><br><button class="st-btn pri" id="stGoMain" style="background:var(--blue);color:#fff">Open Genzloop</button></div>';
+    el('stBody').innerHTML='<div class="st-empty" style="padding-top:80px">You do not have a channel yet.<br>Create your channel in Gupzy first, then come back to Studio.<br><br><button class="st-btn pri" id="stGoMain" style="background:var(--blue);color:#fff">Open Gupzy</button></div>';
     el('stGoMain').onclick=()=>openArainTube(''); studioAds(false); stBootDone(); return;
   }
   currentChannel=first.data(); setAvatar(); el('atStudio').classList.remove('hidden'); studioAds(true);

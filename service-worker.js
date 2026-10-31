@@ -1,4 +1,4 @@
-/* Genzloop — service worker (fast version)
+/* Gupzy — service worker (fast version)
    - Sirf apni site ki files (same-origin) handle karta hai. Videos (Cloudinary), Firebase/Firestore,
      ads aur CDN scripts ko browser seedha load karta hai — pehle ye sab SW se guzar kar cache mein
      copy hote the, jis se video/app slow ho jata tha.
@@ -6,7 +6,7 @@
    - Page (index.html): network-first, lekin agar net slow ho (4 sec) to cached copy turant dikha deta hai.
    - Icons/manifest jaisi static files: cache-first + background mein refresh (instant load). */
 
-const CACHE_NAME = 'genzura-shell-v84';
+const CACHE_NAME = 'gupzy-shell-v85';
 const APP_SHELL = [
   './',
   './icon-192.png',
@@ -40,7 +40,7 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;   /* videos, Firebase, ads, CDN: browser handles directly */
   if (url.pathname.endsWith('.apk')) return;          /* big APK download: never cache */
   if (url.pathname.startsWith('/__/')) return;         /* Firebase login handler: never cache */
-  if (url.pathname.startsWith('/studio')) return;     /* Genzloop Studio is a separate app: never serve the main app's cached page for it */
+  if (url.pathname.startsWith('/studio')) return;     /* Gupzy Studio is a separate app: never serve the main app's cached page for it */
   if (req.headers.has('range')) return;              /* video streaming/seeking */
 
   const isPage = req.mode === 'navigate' || req.destination === 'document';
@@ -78,7 +78,7 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('push', (event) => {
   let d = {};
   try { const j = event.data ? event.data.json() : {}; d = j.data || j.notification || j; } catch (e) {}
-  const title = d.title || 'Genzloop';
+  const title = d.title || 'Gupzy';
   event.waitUntil(self.registration.showNotification(title, {
     body: d.body || '', icon: 'icon-192.png', badge: 'badge-mono.png',
     tag: d.tag || undefined, data: d

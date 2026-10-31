@@ -1,5 +1,5 @@
 /* ================================================================
-   GENZLOOP - ring-ack on CLOUDFLARE.
+   GUPZY - ring-ack on CLOUDFLARE.
    The callee's Android app calls this the moment the call notification reaches the phone
    (even if the app is closed). It marks calls/{id}.calleeRinging = true, so the caller sees
    "Ringing" (phone online) instead of "Calling" (phone offline).

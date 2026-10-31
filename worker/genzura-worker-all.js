@@ -1,5 +1,5 @@
 /* ================================================================
-   GENZLOOP (ex Arain Tube) — ONE Cloudflare Worker for everything (free plan)
+   GUPZY (ex Arain Tube) — ONE Cloudflare Worker for everything (free plan)
      POST /push               -> push notifications
      GET  /turn               -> call TURN credentials
      POST /view               -> country-aware view count
@@ -8,7 +8,7 @@
      POST /anon-send          -> anonymous inbox message (server-side rate limit + push)   (NEW)
      POST /contacts           -> contacts sync / "who saved me" count                      (NEW)
      POST /translate          -> one-tap Urdu / English translate                         (NEW)
-     CRON (every 5 min)       -> Real Moments: once a day at the random "Genzloop Time" sends ONE push to everybody   (NEW)
+     CRON (every 5 min)       -> Real Moments: once a day at the random "Gupzy Time" sends ONE push to everybody   (NEW)
    Secrets: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY,
             EXPRESSTURN_USER, EXPRESSTURN_PASS
    Optional: PROXYCHECK_KEY or VPNAPI_KEY (better VPN detection), ALLOWED_ORIGIN, ANON_SALT
@@ -121,7 +121,7 @@ async function push(request, env) {
   }
   if (!targets.length) return out(env, 200, { sent: 0 });
 
-  let name = "Genzloop";
+  let name = "Gupzy";
   try {
     const nd = await (await fetch(`${DOCS}/channels/${from}`, { headers: A })).json();
     if (nd.fields && nd.fields.name) name = nd.fields.name.stringValue;
@@ -360,7 +360,7 @@ return {
 /* ================================================================
    Video sitemap  (GET /sitemap-videos.xml)
 ================================================================ */
-const SM_SITE_BASE = "https://genzloop.com"; /* the domain that serves the videos */
+const SM_SITE_BASE = "https://gupzy.com"; /* the domain that serves the videos */
 
 const smEnc = new TextEncoder();
 function smB64u(bytes) {
@@ -554,7 +554,7 @@ async function rkHandle(request, env) {
    Optional variable: ANON_SALT (lamba random text; na dein to client email use hota hai)
 ================================================================ */
 const anEnc = new TextEncoder();
-const AN_ORIGINS = ["https://genzloop.com", "https://www.genzloop.com", "https://genzura.netlify.app", "https://genzura.muhammadqasimishtiaq0604.workers.dev"]; /* new domain + old links, so nothing breaks while moving */
+const AN_ORIGINS = ["https://gupzy.com", "https://www.gupzy.com", "https://genzura.netlify.app", "https://genzura.muhammadqasimishtiaq0604.workers.dev"]; /* new domain + old links, so nothing breaks while moving */
 const AN_MAX = 300, AN_COOLDOWN_MS = 30000, AN_IP_PER_HOUR = 20, AN_TO_PER_HOUR = 100, AN_HOUR = 3600000;
 
 function anB64u(bytes) {
@@ -691,7 +691,7 @@ async function anHandle(request, env) {
 
 /* ================================================================
    NEW: Real Moments daily push  (Cron Trigger, no URL)
-   Once a day, at the random "Genzloop Time", sends ONE push to every phone with a saved FCM token.
+   Once a day, at the random "Gupzy Time", sends ONE push to every phone with a saved FCM token.
    Free plan allows only 50 outgoing requests per run, so tokens are subscribed to an FCM topic
    (1000 per request) and ONE topic message is sent. A Firestore doc momentPush/{day} makes sure it is sent only once a day.
    The daily time uses the SAME formula as index.html (Real Moments block): keep MM_START_MIN / MM_SPAN_MIN / MM_STEP_MIN equal.
@@ -735,7 +735,7 @@ async function mmRun(env) {
 
   const mr = await fetch("https://fcm.googleapis.com/v1/projects/" + pid + "/messages:send", { method: "POST", headers: A, body: JSON.stringify({ message: {
     topic: MM_TOPIC,
-    data: { title: "Genzloop Time! \u23F0", body: "Post what you are doing right now. You have 2 minutes.", tag: "n_moment", url: "./?moment=1" },
+    data: { title: "Gupzy Time! \u23F0", body: "Post what you are doing right now. You have 2 minutes.", tag: "n_moment", url: "./?moment=1" },
     webpush: { headers: { Urgency: "high", TTL: "300" } }, android: { priority: "HIGH", ttl: "300s" } } }) });
   return { day, tokens: total, sent: mr.ok, status: mr.status };
 }
