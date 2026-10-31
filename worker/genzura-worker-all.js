@@ -137,7 +137,7 @@ async function push(request, env) {
       /* a CALL push must expire after 45 s: a phone that comes online later must NOT ring for an old call */
       const isCall = kind === "call";
       const mr = await fetch(`https://fcm.googleapis.com/v1/projects/${pid}/messages:send`, { method: "POST", headers: A,
-        body: JSON.stringify({ message: { token, data: { title: name,
+        body: JSON.stringify({ message: { token, data: { title: name, fromUid: String(from || ""),
           body: TEXT[kind] + (kind === "call" ? (body.type === "video" ? " (video)" : " (voice)") : ""),
           tag: kind === "message" ? "c_" + (body.chatId || "") : "n_" + kind },
           webpush: { headers: { Urgency: "high", TTL: isCall ? "45" : "86400" } }, android: { priority: "HIGH", ttl: isCall ? "45s" : "86400s" } } }) });
@@ -891,12 +891,13 @@ async function ctContacts(env, user, body) {
     const hashes = [...new Set((Array.isArray(body.hashes) ? body.hashes : [])
       .map((h) => String(h).toLowerCase()).filter((h) => /^[0-9a-f]{64}$/.test(h)))].slice(0, CT_MAX_HASHES);
     const book = await Promise.all(hashes.map(hmac));
+    const origOf = {}; hashes.forEach((h, i) => { origOf[book[i]] = h; });   /* each match echoes back the caller's OWN hash, so the phone can find the saved name locally */
     await setDoc(`contactBooks/${me}`, { h: strArr(book), n: { integerValue: String(book.length) } });
 
     /* which of my contacts are Genzura users? */
     const idx = await batchGet("phoneIndex", book, ["uid"], 300);
     const matches = {};
-    for (const k in idx) { const u = idx[k].uid && idx[k].uid.stringValue; if (u && u !== me) matches[u] = true; }
+    for (const k in idx) { const u = idx[k].uid && idx[k].uid.stringValue; if (u && u !== me) (matches[u] = matches[u] || []).push(origOf[k]); }
     const uids = Object.keys(matches).slice(0, 500);
 
     /* mutual = MY id is inside THEIR contact book */
@@ -907,7 +908,7 @@ async function ctContacts(env, user, body) {
       const list = (books[u] && books[u].h && books[u].h.arrayValue && books[u].h.arrayValue.values) || [];
       const mutual = list.some((v) => mine.includes(v.stringValue));
       const f = chans[u] || {};
-      people.push({ id: u, name: (f.name && f.name.stringValue) || "Genzura user", logo: (f.logoURL && f.logoURL.stringValue) || null, mutual });
+      people.push({ id: u, name: (f.name && f.name.stringValue) || "Gupzy user", logo: (f.logoURL && f.logoURL.stringValue) || null, mutual, h: mutual ? (matches[u] || []).filter(Boolean).slice(0, 5) : [] });
       if (mutual) {
         const id = [me, u].sort().join("_");
         writes.push({ update: { name: `${ROOT}/contactLinks/${id}`, fields: { members: strArr([me, u].sort()), at: { timestampValue: new Date().toISOString() } } } });
