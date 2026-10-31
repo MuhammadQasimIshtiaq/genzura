@@ -6,7 +6,7 @@
    - Page (index.html): network-first, lekin agar net slow ho (4 sec) to cached copy turant dikha deta hai.
    - Icons/manifest jaisi static files: cache-first + background mein refresh (instant load). */
 
-const CACHE_NAME = 'gupzy-shell-v86';
+const CACHE_NAME = 'gupzy-shell-v87';
 const APP_SHELL = [
   './',
   './icon-192.png',
