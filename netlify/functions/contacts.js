@@ -140,6 +140,7 @@ exports.handler = async (event) => {
       const hashes = [...new Set((Array.isArray(body.hashes) ? body.hashes : [])
         .map((h) => String(h).toLowerCase()).filter((h) => /^[0-9a-f]{64}$/.test(h)))].slice(0, MAX_HASHES);
       const book = hashes.map(hmac);
+      const origOf = {}; hashes.forEach((h, i) => { origOf[book[i]] = h; });          // so each match can echo back the caller's OWN hash (lets the phone find the saved name locally)
       await setDoc(`contactBooks/${me}`, {h: strArr(book), n: {integerValue: String(book.length)}});
 
       /* which of my contacts are Gupzy users? */
@@ -150,7 +151,8 @@ exports.handler = async (event) => {
         const rows = await br.json();
         for (const r of (Array.isArray(rows) ? rows : [])) {
           const u = r.found && r.found.fields && r.found.fields.uid && r.found.fields.uid.stringValue;
-          if (u && u !== me) matches[u] = true;
+          const hid = (r.found && r.found.name) ? r.found.name.split("/").pop() : "";
+          if (u && u !== me) (matches[u] = matches[u] || []).push(origOf[hid]);
         }
       }
       const uids = Object.keys(matches).slice(0, 500);
@@ -164,7 +166,7 @@ exports.handler = async (event) => {
         const mutual = list.some((v) => myHash.includes(v.stringValue));
         const ch = await getDoc(`channels/${u}`);
         const f = (ch && ch.fields) || {};
-        people.push({id: u, name: (f.name && f.name.stringValue) || "Gupzy user", logo: (f.logoURL && f.logoURL.stringValue) || null, mutual});
+        people.push({id: u, name: (f.name && f.name.stringValue) || "Gupzy user", logo: (f.logoURL && f.logoURL.stringValue) || null, mutual, h: mutual ? (matches[u] || []).filter(Boolean).slice(0, 5) : []});
         if (mutual) {
           const id = [me, u].sort().join("_");
           writes.push({update: {name: `${ROOT}/contactLinks/${id}`, fields: {members: strArr([me, u].sort()), at: {timestampValue: new Date().toISOString()}}}});

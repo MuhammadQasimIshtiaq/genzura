@@ -120,7 +120,7 @@ exports.handler = async (event) => {
       const tokens = (Array.isArray(rows) ? rows : []).filter((r) => r.document).map((r) => r.document.name.split("/").pop());
       for (const token of tokens) {
         const mr = await fetch(`https://fcm.googleapis.com/v1/projects/${pid}/messages:send`, {method: "POST", headers: A,
-          body: JSON.stringify({message: {token, data: {title: name, body: TEXT[kind] + (kind === "call" ? (body.type === "video" ? " (video)" : " (voice)") : ""), tag: kind === "message" ? "c_" + (body.chatId || "") : "n_" + kind, callId: kind === "call" ? String(body.callId || "").replace(/[^A-Za-z0-9]/g, "") : ""},
+          body: JSON.stringify({message: {token, data: {title: name, fromUid: String(from || ""), body: TEXT[kind] + (kind === "call" ? (body.type === "video" ? " (video)" : " (voice)") : ""), tag: kind === "message" ? "c_" + (body.chatId || "") : "n_" + kind, callId: kind === "call" ? String(body.callId || "").replace(/[^A-Za-z0-9]/g, "") : ""},
             webpush: {headers: {Urgency: "high", TTL: kind === "call" ? "45" : "86400"}}, android: {priority: "HIGH", ttl: kind === "call" ? "45s" : "86400s"}}})});
         if (mr.ok) sent++;
         else if (mr.status === 404 || mr.status === 400) { await fetch(`${DOCS}/fcmTokens/${encodeURIComponent(token)}`, {method: "DELETE", headers: A}).catch(() => {}); }

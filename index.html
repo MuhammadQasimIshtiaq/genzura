@@ -1832,6 +1832,9 @@ function renderPendingUploads(){
 let pending = { kind:null, file:null, url:null, chosenThumbBlob:null, chosenThumbUrl:null };
 
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2500); }
+/* Phone-book name of a contact (read on this phone only, never uploaded). Used ONLY inside chats, the inbox and calls; profiles keep the real profile name. */
+window.__gzCN=null;
+window.__gzLN=function(id,fb){ try{ const k='gz_cn_'+((typeof currentUser!=='undefined'&&currentUser&&currentUser.uid)||''); if(!window.__gzCN||window.__gzCN.__k!==k){ window.__gzCN=JSON.parse(localStorage.getItem(k)||'{}'); Object.defineProperty(window.__gzCN,'__k',{value:k,enumerable:false,writable:true}); } return (id&&window.__gzCN[id])||fb; }catch(e){ return fb; } };
 function colorFor(name){ const c=["#ff5c8a","#7b5cff","#3ea6ff","#25c17a","#ff9d3c","#e64ac9","#4dd0e1","#f6c744"]; let h=0; for(const ch of (name||"")) h=ch.charCodeAt(0)+((h<<5)-h); return c[Math.abs(h)%c.length]; }
 function optimizedVideoUrl(url){
   if(!url || !url.includes('/video/upload/')) return url;
@@ -6851,6 +6854,7 @@ if('serviceWorker' in navigator){
     }, ()=>{}));
   }
   function newState(role, type, peer){
+    if(peer && peer.id) peer = Object.assign({}, peer, { name: window.__gzLN(peer.id, peer.name) });   /* call screen shows the phone-book name */
     return { role, type, peer, id:null, docReady: role !== 'caller', candQueue:[], pc:null, local:null, remote:null, unsubs:[], pending:[], remoteSet:false,
              connected:false, ended:false, facing:'user', cam:null, camInit:false, sharing:false, screenTrack:null, remoteVideo:false, remoteShare:false, hidePrev:false, mini:false, speaker:false, dc:null, ringTimeout:0, discTimer:0, timer:0, startedAt:0 };
   }
@@ -6973,7 +6977,7 @@ if('serviceWorker' in navigator){
     const beat = ()=>{ db.collection('calls').doc(id).update({ calleeBeat: firebase.firestore.FieldValue.serverTimestamp() }).catch(()=>{}); };
     beat(); incoming.beat = setInterval(beat, 4000);   /* proof of life while ringing */   /* tells the caller this phone really got the call */
     $('ciAv').innerHTML = avHtml(d.callerName, d.callerLogo);
-    $('ciName').textContent = d.callerName || 'Someone';
+    $('ciName').textContent = window.__gzLN(d.callerId, d.callerName) || 'Someone';
     $('ciType').textContent = d.type === 'video' ? 'Incoming video call…' : 'Incoming voice call…';
     $('callIncoming').classList.remove('cl-hide');
     let autoAnswer = false;
@@ -6985,7 +6989,7 @@ if('serviceWorker' in navigator){
       const x = doc.data();
       if(!x || x.status !== 'ringing'){
         const gone = incoming && incoming.id === id;
-        if(gone){ const wl = incoming && incoming.locked; dismissIncoming(); flushPendingTaps(); if(x && (x.status === 'ended' || x.status === 'missed')) toast('Missed call from ' + (d.callerName || 'someone')); if(wl) setTimeout(()=>{ if(!C && !incoming) closeAfterLocked(); }, 300); }
+        if(gone){ const wl = incoming && incoming.locked; dismissIncoming(); flushPendingTaps(); if(x && (x.status === 'ended' || x.status === 'missed')) toast('Missed call from ' + (window.__gzLN(d.callerId, d.callerName) || 'someone')); if(wl) setTimeout(()=>{ if(!C && !incoming) closeAfterLocked(); }, 300); }
       }
     }, ()=>{});
     incoming.timer = setTimeout(()=>{ const wl = incoming && incoming.locked; dismissIncoming(); flushPendingTaps(); if(wl) setTimeout(()=>{ if(!C && !incoming) closeAfterLocked(); }, 300); }, RING_MS);
@@ -7897,12 +7901,12 @@ function renderInbox(){
   let a=Object.values(chats).filter(c=>c.lastAt||c.lastText).filter(c=>{if(c.isTemp&&c.expiresAt&&c.expiresAt<Date.now())return false;const p=peerOf(c);if(!p.group){const cl=Number((c.clearedAt||{})[me()])||0;if(cl&&ts(c.lastAt)<=cl)return false;}return p.group||!isBlockedUid(p.id);}).sort((x,y)=>ts(y.lastAt)-ts(x.lastAt));
   if(dmTab==='friends')a=a.filter(isCt);else if(dmTab==='follow')a=a.filter(c=>!isCt(c));
   const row=c=>{const p=peerOf(c),u=unreadN(c)>0;
-    return `<div class="dm-row ${u?'unread':''}" data-c="${c.id}">${avbox(p.name,p.logo,52,p.group?'':p.id)}<div class="tx"><b>${esc(p.name)}${tmpTag(c)}</b><span>${esc((c.lastFrom===me()?'You: ':'')+prev(c))} · ${ago(c.lastAt)}</span></div>${u?'<i class="dot"></i>':''}</div>`;};
+    return `<div class="dm-row ${u?'unread':''}" data-c="${c.id}">${avbox(p.name,p.logo,52,p.group?'':p.id)}<div class="tx"><b>${esc(p.group?p.name:window.__gzLN(p.id,p.name))}${tmpTag(c)}</b><span>${esc((c.lastFrom===me()?'You: ':'')+prev(c))} · ${ago(c.lastAt)}</span></div>${u?'<i class="dot"></i>':''}</div>`;};
   let h=a.map(row).join('');
   if(dmTab==='friends'){
     const have=new Set(a.map(c=>peerOf(c).id));
     const fresh=(typeof contactPeople!=='undefined'&&contactPeople||[]).filter(p=>!have.has(p.id)&&!isBlockedUid(p.id));
-    if(fresh.length)h+='<div class="ig-sec">Contacts on Gupzy · tap to chat</div>'+fresh.map(p=>`<div class="dm-row" data-p="${esc(p.id)}" data-n="${esc(p.name)}" data-l="${esc(p.logo||'')}">${avbox(p.name,p.logo,52,p.id)}<div class="tx"><b>${esc(p.name)}</b><span>In your contacts · no chat yet</span></div></div>`).join('');
+    if(fresh.length)h+='<div class="ig-sec">Contacts on Gupzy · tap to chat</div>'+fresh.map(p=>`<div class="dm-row" data-p="${esc(p.id)}" data-n="${esc(p.name)}" data-l="${esc(p.logo||'')}">${avbox(p.name,p.logo,52,p.id)}<div class="tx"><b>${esc(window.__gzLN(p.id,p.name))}</b><span>In your contacts · no chat yet</span></div></div>`).join('');
     if(!h)h='<div class="ig-empty">No contact friends yet.<br>Tap the pencil → "Find friends from your contacts".</div>';
   }
   $('dmList').innerHTML=h||'<div class="ig-empty">'+(dmTab==='follow'?'No chats with people you follow yet.':'No chats yet.<br>Tap the pencil above to start a new message.')+'</div>';
@@ -7948,7 +7952,37 @@ $('ncBack').onclick=()=>$('igNc').classList.remove('show');
 (function(){
   const NATIVE_CT = ()=> !!(window.AndroidContacts && typeof window.AndroidContacts.getHashes === 'function');
   let ov=null, permCb=null;
-  window.__contactsPerm = function(ok){ if(permCb){ const f=permCb; permCb=null; f(!!ok); } };
+  window.__contactsPerm = function(ok){ if(permCb){ const f=permCb; permCb=null; f(!!ok); } else if(ok){ setTimeout(()=>autoSync(true),800); } };   /* granted with the other first-launch permissions -> sync by itself */
+  /* ---- phone-book names: resolved on this phone from the hashes the server echoes back; names never leave the phone ---- */
+  const CNK=()=>'gz_cn_'+(currentUser?currentUser.uid:''), CHK=()=>'gz_ch_'+(currentUser?currentUser.uid:'');
+  function resolveNames(){
+    try{
+      if(!NATIVE_CT() || typeof window.AndroidContacts.getNameMap!=='function' || !window.AndroidContacts.hasPermission()) return;
+      const nm=JSON.parse(window.AndroidContacts.getNameMap()||'{}'), ch=JSON.parse(localStorage.getItem(CHK())||'{}'), out={};
+      Object.keys(ch).forEach(uid=>{ for(const h of ch[uid]){ if(nm[h]){ out[uid]=String(nm[h]).slice(0,60); break; } } });
+      localStorage.setItem(CNK(), JSON.stringify(out)); window.__gzCN=null;
+      if(typeof window.AndroidContacts.saveNames==='function') window.AndroidContacts.saveNames(JSON.stringify(out));
+      try{ if(typeof renderInbox==='function') renderInbox(); }catch(e){}
+    }catch(e){}
+  }
+  function learnPeople(people){
+    try{ const ch={}; (people||[]).forEach(p=>{ if(p.mutual && Array.isArray(p.h) && p.h.length) ch[p.id]=p.h; }); localStorage.setItem(CHK(), JSON.stringify(ch)); }catch(e){}
+    resolveNames();
+  }
+  function forgetNames(){
+    try{ localStorage.removeItem(CNK()); localStorage.removeItem(CHK()); window.__gzCN=null; if(window.AndroidContacts && typeof window.AndroidContacts.saveNames==='function') window.AndroidContacts.saveNames('{}'); }catch(e){}
+  }
+  /* no manual sync: once the permission is granted, sync happens by itself on app open / login / every few hours */
+  async function autoSync(force){
+    try{
+      const u=currentUser; if(!u || !NATIVE_CT()) return;
+      if(localStorage.getItem('ct_off')) return;                                         /* user pressed "Stop & delete" */
+      if(!(u.phoneNumber || (u.email && u.emailVerified))) return;                       /* needs the one-time phone verify (Contacts screen) */
+      if(!window.AndroidContacts.hasPermission()) return;
+      if(!force && Date.now() - Number(localStorage.getItem('ct_last')||0) < 6*3600*1000){ resolveNames(); return; }
+      await syncNow();
+    }catch(e){}
+  }
   function askPerm(){
     return new Promise(res=>{
       try{ if(window.AndroidContacts.hasPermission()) return res(true); }catch(e){}
@@ -7963,7 +7997,8 @@ $('ncBack').onclick=()=>$('igNc').classList.remove('show');
   async function syncNow(){
     let hashes=[]; try{ hashes = JSON.parse(window.AndroidContacts.getHashes() || '[]'); }catch(e){}
     const d = await callFn({ action:'sync', hashes });
-    try{ localStorage.setItem('ct_on','1'); localStorage.setItem('ct_last', String(Date.now())); }catch(e){}
+    try{ localStorage.setItem('ct_on','1'); localStorage.removeItem('ct_off'); localStorage.setItem('ct_last', String(Date.now())); }catch(e){}
+    learnPeople(d.people);
     if(window.__resetContactPeople) window.__resetContactPeople();
     return d;
   }
@@ -7981,7 +8016,7 @@ $('ncBack').onclick=()=>$('igNc').classList.remove('show');
       + '<div style="padding:16px"><button id="ctSync" class="btn" style="width:100%;margin-bottom:10px">Sync again</button><button id="ctOff" style="width:100%;background:none;border:0;color:#e5484d;font-weight:600;padding:10px">Stop &amp; delete my contacts data</button></div>';
     body().querySelectorAll('[data-p]').forEach(r=>r.onclick=()=>{ ov.classList.remove('show'); $('igNc').classList.remove('show'); openChat({id:r.dataset.p,name:r.dataset.n,logo:r.dataset.l||null}); });
     $('ctSync').onclick=()=>run();
-    $('ctOff').onclick=async()=>{ try{ await callFn({action:'clear'}); localStorage.removeItem('ct_on'); if(window.__resetContactPeople) window.__resetContactPeople(); toast('Contacts data deleted'); ov.classList.remove('show'); }catch(e){ toast('Failed: '+e.message); } };
+    $('ctOff').onclick=async()=>{ try{ await callFn({action:'clear'}); localStorage.removeItem('ct_on'); localStorage.setItem('ct_off','1'); forgetNames(); if(window.__resetContactPeople) window.__resetContactPeople(); toast('Contacts data deleted'); ov.classList.remove('show'); }catch(e){ toast('Failed: '+e.message); } };
   }
   async function run(){
     body().innerHTML='<div class="ig-empty">Syncing contacts…</div>';
@@ -8016,7 +8051,7 @@ $('ncBack').onclick=()=>$('igNc').classList.remove('show');
     body().innerHTML = `<div style="padding:16px;font-size:13.5px;line-height:1.55">
       <b>Chat &amp; call your contacts without follow / follow-back</b><br><br>
       • No phone number needed: your verified Google e-mail is used. If someone is in your contacts (by number or e-mail) <b>and</b> you are in theirs, and you both use Gupzy, you can message and call each other directly.<br>
-      • Contacts are converted to one-way hashes on your phone; names and raw numbers are never uploaded.<br>
+      • Contacts are converted to one-way hashes on your phone; names and raw numbers are never uploaded. Your phone-book names are read on your phone only, to label your chats and calls (profiles keep the real name).<br>
       • You can stop any time — your contacts data is deleted.
       <button id="ctGo" class="btn" style="width:100%;margin-top:16px">Allow contacts &amp; sync</button></div>`;
     $('ctGo').onclick=run;
@@ -8034,17 +8069,9 @@ $('ncBack').onclick=()=>$('igNc').classList.remove('show');
     else if(localStorage.getItem('ct_on')) run();
     else intro();
   };
-  /* keep links fresh: silent re-sync (at most every 12h) once the user opted in and permission is granted */
-  auth.onAuthStateChanged(u=>{
-    if(!u || !NATIVE_CT()) return;
-    setTimeout(async()=>{
-      try{
-        if(!localStorage.getItem('ct_on') || !(u.phoneNumber || (u.email && u.emailVerified)) || !window.AndroidContacts.hasPermission()) return;
-        if(Date.now() - Number(localStorage.getItem('ct_last')||0) < 12*3600*1000) return;
-        await syncNow();
-      }catch(e){}
-    }, 8000);
-  });
+  /* keep links fresh: automatic sync after login, when the app comes back to the front, and right after the first-launch permission */
+  auth.onAuthStateChanged(u=>{ if(!u || !NATIVE_CT()) return; setTimeout(()=>autoSync(false), 4000); });
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') setTimeout(()=>autoSync(false), 1500); });
 })();
 
 /* ---- group creation ---- */
@@ -8101,7 +8128,7 @@ function openChat0(p){
   if(!p.group && isBlockedUid(p.id)){toast('You blocked this user. Unblock to message.');return;}
   if(!currentChannel){toast('Create your channel first');return;}
   peer=p;openId=p.group?p.id:cidOf(me(),p.id);$('chatAud').style.display=$('chatVid').style.display=p.group?'none':'';
-  $('chatWho').innerHTML=avbox(p.name,p.logo,36,p.group?'':p.id)+`<div style="min-width:0"><b id="dmWho">${esc(p.name)}</b><small id="dmTyp"></small></div>`;
+  $('chatWho').innerHTML=avbox(p.name,p.logo,36,p.group?'':p.id)+`<div style="min-width:0"><b id="dmWho">${esc(p.group?p.name:window.__gzLN(p.id,p.name))}</b><small id="dmTyp"></small></div>`;
   $('dmMsgs').innerHTML='';msgs=[];clr=0;$('igChat').classList.add('show');$('dmIn').value='';toggleSend();stopAudio();
   if(window.__tU)window.__tU();rTo=null;
   try{ if(window.__gz) window.__gz.watchPeer(p.group?null:p.id); }catch(e){}
@@ -8109,7 +8136,7 @@ function openChat0(p){
     const x=d.data()||{};
     try{ if(window.__gz2) window.__gz2.chat(x,openId); }catch(e){}
     if(!p.group){
-      const nk=(x.nicks&&x.nicks[p.id])||'';const w0=$('dmWho');if(w0)w0.textContent=nk||p.name;
+      const nk=(x.nicks&&x.nicks[p.id])||'';const w0=$('dmWho');if(w0)w0.textContent=nk||(p.group?p.name:window.__gzLN(p.id,p.name));
       const c2=Number((x.clearedAt||{})[me()])||0;
       if(c2!==clr){clr=c2;if(clr){msgs=msgs.filter(m=>m._pending||ts(m.createdAt)>clr);renderMsgs();}}
       try{ if(window.__gzCi) window.__gzCi.refresh(); }catch(e){}
@@ -8628,6 +8655,91 @@ async function sendOrQueue(blob,type,extra,plainName){
 OB.load().then(()=>{if(navigator.onLine)setTimeout(()=>OB.flush(),5000);});
 window.addEventListener('online',()=>setTimeout(()=>OB.flush(),1500));
 setInterval(()=>{if(OB.items.length&&navigator.onLine)OB.flush();},45000);
+/* ===== NO INTERNET -> SIM FALLBACK (SMS / call through the SIM) =====
+   Only opens the phone's own SMS / dialer app (no SMS permission, nothing is sent silently).
+   The other person's number is typed once and kept ONLY on this phone (localStorage, never uploaded).
+   The SMS wording added by the app is always English. */
+(function(){
+  const KEY=id=>'gz_simnum_'+me()+'_'+id;
+  /* Android app: numbers are encrypted with a hardware-backed Keystore key (AndroidSimVault). Plain browser: kept in localStorage on this device only. */
+  const VAULT=()=>{try{return (window.AndroidSimVault&&typeof window.AndroidSimVault.put==='function')?window.AndroidSimVault:null;}catch(e){return null;}};
+  const getNum=id=>{
+    try{
+      const v=VAULT(), k=KEY(id);
+      if(v){ const n=v.get(k); if(n) return n;
+        const old=localStorage.getItem(k);                      /* move an older plain-text number into the vault */
+        if(old){ if(v.put(k,old)) localStorage.removeItem(k); return old; }
+        return ''; }
+      return localStorage.getItem(k)||'';
+    }catch(e){ return ''; }
+  };
+  const setNum=(id,n)=>{
+    try{
+      const v=VAULT(), k=KEY(id);
+      if(v && v.put(k,n)){ localStorage.removeItem(k); return; }
+      localStorage.setItem(k,n);
+    }catch(e){}
+  };
+  const clean=s=>String(s||'').replace(/[\s\-()]/g,'');
+  const valid=s=>/^\+?\d{7,15}$/.test(s);
+  function openExt(url){
+    try{ if(window.AndroidAuth&&window.AndroidAuth.openExternal){ window.AndroidAuth.openExternal(url); return; } }catch(e){}
+    location.href=url;
+  }
+  function smsBody(){
+    const t=(($('dmIn')&&$('dmIn').value)||'').trim();
+    const nm=(currentChannel&&currentChannel.name)||'';
+    return t ? t+'\n- '+nm+' (sent by SMS, no internet)'
+             : 'Hi, I have no internet right now. Please reply by SMS or call me. - '+nm+' (Gupzy)';
+  }
+  function askNum(pr,done){
+    const old=document.getElementById('gzSimAsk'); if(old) old.remove();
+    const ov=document.createElement('div'); ov.id='gzSimAsk';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100001;display:flex;align-items:center;justify-content:center;padding:20px;';
+    ov.innerHTML='<div style="width:100%;max-width:340px;background:var(--surface);color:var(--text);border-radius:16px;padding:16px;">'
+      +'<div style="font-weight:800;font-size:16px;margin-bottom:4px">Phone number of '+String(pr.name||'this person').replace(/[<>&"]/g,'')+'</div>'
+      +'<div style="font-size:12.5px;opacity:.7;margin-bottom:10px">Saved encrypted on this phone, never uploaded. The SMS itself goes through your mobile network and is not end-to-end encrypted; it uses your SIM balance.</div>'
+      +'<input id="gzSimIn" type="tel" inputmode="tel" placeholder="+92 300 1234567" style="width:100%;box-sizing:border-box;padding:11px;border-radius:10px;border:1px solid var(--border,#444);background:var(--bg);color:var(--text);font-size:15px">'
+      +'<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end"><button id="gzSimNo" style="padding:9px 14px;border-radius:10px;border:0;background:#444;color:#fff">Cancel</button><button id="gzSimOk" style="padding:9px 16px;border-radius:10px;border:0;background:#ec2b8e;color:#fff;font-weight:700">Save</button></div></div>';
+    document.body.appendChild(ov);
+    const inp=ov.querySelector('#gzSimIn'); inp.value=getNum(pr.id); setTimeout(()=>{try{inp.focus();}catch(e){}},50);
+    ov.querySelector('#gzSimNo').onclick=()=>ov.remove();
+    ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
+    ov.querySelector('#gzSimOk').onclick=()=>{
+      const n=clean(inp.value);
+      if(!valid(n)){ toast('Enter a valid number, e.g. +923001234567'); return; }
+      setNum(pr.id,n); ov.remove(); if(done) done(n);
+    };
+  }
+  function go(kind){
+    const pr=peer; if(!pr||pr.group) return;
+    const n=getNum(pr.id);
+    if(!n){ askNum(pr,()=>go(kind)); return; }
+    if(kind==='sms'){ toast('Opening your SMS app…'); openExt('sms:'+n+'?body='+encodeURIComponent(smsBody())); }
+    else { const v=VAULT(); if(v && typeof v.call==='function'){ v.call(n); } else openExt('tel:'+n); }
+  }
+  const bar=document.createElement('div'); bar.id='gzSimBar';
+  bar.style.cssText='display:none;align-items:center;gap:8px;padding:7px 12px;background:var(--surface);border-top:1px solid var(--border,#333);font-size:12.5px;flex-wrap:wrap;';
+  bar.innerHTML='<span style="opacity:.75;flex:1;min-width:90px">No internet — reach them by SIM:</span>'
+    +'<button data-a="sms" style="padding:7px 12px;border-radius:18px;border:0;background:#34C759;color:#fff;font-weight:700">✉ SMS</button>'
+    +'<button data-a="call" style="padding:7px 12px;border-radius:18px;border:0;background:#0A84FF;color:#fff;font-weight:700">📞 Call</button>'
+    +'<button data-a="edit" aria-label="Change number" style="padding:7px 9px;border-radius:18px;border:0;background:#444;color:#fff">✎</button>';
+  const dmBar=$('dmBar'); if(!dmBar||!dmBar.parentNode) return;
+  dmBar.parentNode.insertBefore(bar,dmBar);
+  bar.addEventListener('click',e=>{
+    const b=e.target.closest('button[data-a]'); if(!b) return;
+    const a=b.getAttribute('data-a');
+    if(a==='edit'){ if(peer&&!peer.group) askNum(peer); return; }
+    go(a);
+  });
+  function refresh(){
+    let show=false;
+    try{ show=$('igChat').classList.contains('show') && !navigator.onLine && !!peer && !peer.group; }catch(e){}
+    bar.style.display=show?'flex':'none';
+  }
+  window.addEventListener('online',refresh); window.addEventListener('offline',refresh);
+  setInterval(refresh,1500); setTimeout(refresh,800);
+})();
 function toggleSend(){const has=$('dmIn').value.trim().length>0;$('dmSend').classList.toggle('hidden',!has);$('dmSch').classList.toggle('hidden',!has);$('dmMic').classList.toggle('hidden',has);}
 let tpT=0;$('dmIn').addEventListener('input',()=>{toggleSend();const n=Date.now();if(openId&&peer&&n-tpT>2500){tpT=n;db.collection('chats').doc(openId).set({...(peer.group?{}:{members:[me(),peer.id]}),typing:{[me()]:n}},{merge:true}).catch(()=>{});}});
 async function sendText(){const t=$('dmIn').value.trim();if(!t)return;$('dmIn').value='';toggleSend();try{await sendMsg({type:'text',text:t});}catch(e){toast('Send fail: '+e.message);}}
@@ -13828,7 +13940,7 @@ window.gzConfirm=function(msg,okLabel){
         var o={}; o[p.id]=v?v:FV().delete();
         await chatRef().set({nicks:o,members:[me(),p.id]},{merge:true});
         C.nicks=C.nicks||{}; if(v) C.nicks[p.id]=v; else delete C.nicks[p.id];
-        try{ var w=$('dmWho'); if(w) w.textContent=v||p.name; }catch(er){}
+        try{ var w=$('dmWho'); if(w) w.textContent=v||(p.group?p.name:window.__gzLN(p.id,p.name)); }catch(er){}
         m.remove(); renderMain(); say(v?'Nickname saved':'Nickname removed');
       }catch(er){ say('Could not save: '+(er&&er.message||er)); }
     });
