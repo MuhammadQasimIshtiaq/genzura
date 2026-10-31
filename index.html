@@ -1631,6 +1631,7 @@ nav{border-top:1px solid var(--border);padding:8px 0 12px;}
   <div id="liveViewScreen">
     <video id="liveViewVideo" autoplay playsinline></video>
     <div class="pl-close" id="liveViewCloseBtn" style="top:12px;left:12px;"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+    <div class="pl-close" id="liveViewReportBtn" style="top:12px;left:auto;right:12px;font-size:20px;color:#fff;display:flex;align-items:center;justify-content:center;">&#9873;</div>
     <div class="live-badge">🔴 LIVE</div>
     <div class="live-viewers" id="liveViewViewerCount">👁 —</div>
     <div id="liveViewChannelName" style="position:absolute;top:52px;left:16px;color:#fff;font-weight:600;font-size:14px;background:rgba(0,0,0,.5);padding:6px 12px;border-radius:16px;z-index:4;"></div>
@@ -5230,12 +5231,17 @@ function renderComments(comments){
     c.insertAdjacentHTML('beforeend', `
       <div class="comment-item">
         <div class="avatar" style="background:${colorFor(cm.authorName)}">${cm.authorLogo ? `<img src="${cm.authorLogo}">` : initials(cm.authorName)}</div>
-        <div><div class="c-name">${cm.authorName}${cm.creatorHeart ? ' <span title="Loved by creator">❤️</span>' : ''}</div><div class="c-text">${cm.text}</div><div class="c-meta">${timeAgo(cm.createdAt)}</div></div>
+        <div><div class="c-name">${gzEsc(cm.authorName)}${cm.creatorHeart ? ' <span title="Loved by creator">❤️</span>' : ''}</div><div class="c-text">${gzEsc(cm.text)}</div><div class="c-meta">${timeAgo(cm.createdAt)}${(currentUser && cm.authorId!==currentUser.uid) ? ' · <a data-vcrep="'+gzEsc(cm.id)+'" style="color:#e5484d;cursor:pointer">Report</a>' : ''}</div></div>
       </div>`);
     applyChannelBadgeToAvatar(cm.authorId, c.lastElementChild.querySelector('.avatar'));
   });
   c.scrollTop = c.scrollHeight;
 }
+document.getElementById('commentsListContainer').addEventListener('click', e=>{
+  const a = e.target.closest('[data-vcrep]'); if(!a || !currentCommentItem) return;
+  const id = a.dataset.vcrep, item = a.closest('.comment-item');
+  window.gzReport({type:'vcomment', id:currentCommentItem.id+'.'+id, uid:null, name:(item.querySelector('.c-name')||{}).textContent||'', title:'[Comment] '+(((item.querySelector('.c-text')||{}).textContent)||'').slice(0,80), text:(item.querySelector('.c-text')||{}).textContent||''});
+});
 document.getElementById('commentSendBtn').addEventListener('click', postComment);
 document.getElementById('commentInput').addEventListener('keypress', e=>{ if(e.key==='Enter') postComment(); });
 async function postComment(){
@@ -5659,7 +5665,21 @@ async function loadAdminRevenue(){
 }
 
 
-const REPORT_COLL={post:'posts',story:'stories',lm:'localPosts'};
+const REPORT_LBL2={vcomment:'Video comment',pcomment:'Post comment',voice:'Voice post',clip:'Album clip',live:'Live stream'};
+function reportRef(pf,raw){
+  const two=()=>{const i=raw.indexOf('.');return i>0?[raw.slice(0,i),raw.slice(i+1)]:null;};
+  if(!pf) return db.collection('videos').doc(raw);
+  if(pf==='post') return db.collection('posts').doc(raw);
+  if(pf==='story') return db.collection('stories').doc(raw);
+  if(pf==='lm') return db.collection('localPosts').doc(raw);
+  if(pf==='voice') return db.collection('voicePosts').doc(raw);
+  const t=two(); if(!t) return null;
+  if(pf==='pcomment') return db.collection('posts').doc(t[0]).collection('comments').doc(t[1]);
+  if(pf==='vcomment') return db.collection('videos').doc(t[0]).collection('comments').doc(t[1]);
+  if(pf==='clip') return db.collection('albums').doc(t[0]).collection('clips').doc(t[1]);
+  return null;
+}
+
 const REPORT_LBL={post:'Post',story:'Story',channel:'Channel',user:'User (from chat)',message:'Chat message',lm:'Near Me post'};
 function reportPfx(vid){ const i=String(vid||'').indexOf(':'); return i>0?String(vid).slice(0,i):''; }
 function reportRaw(vid){ const i=String(vid||'').indexOf(':'); return i>0?String(vid).slice(i+1):String(vid||''); }
@@ -5682,7 +5702,7 @@ async function loadAdminReports(){
     groups.forEach(g=>{
       const row = document.createElement('div');
       row.style.cssText = 'display:flex;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;align-items:center;';
-      const pf = reportPfx(g.videoId), tag = pf ? `<span style="font-size:11px;font-weight:700;color:var(--accent2);">${aEsc(REPORT_LBL[pf]||pf)}</span>` : '';
+      const pf = reportPfx(g.videoId), tag = pf ? `<span style="font-size:11px;font-weight:700;color:var(--accent2);">${aEsc(REPORT_LBL[pf]||REPORT_LBL2[pf]||pf)}</span>` : '';
       const th = /^https:\/\//.test(g.videoThumb||'') ? aEsc(g.videoThumb) : '';
       row.innerHTML = `
         ${th ? `<img src="${th}" style="width:56px;height:76px;border-radius:8px;object-fit:cover;flex-shrink:0;">` : `<div style="width:56px;height:76px;border-radius:8px;flex-shrink:0;background:linear-gradient(135deg,${colorFor(g.videoTitle||'')},${colorFor((g.videoTitle||'')+'x')})"></div>`}
@@ -5705,18 +5725,18 @@ async function openReportDetail(group){
   const body = document.getElementById('adminDetailBody');
   document.getElementById('adminDetailOverlay').classList.remove('hidden');
   body.innerHTML = `<div class="empty-state">Loading...</div>`;
-  const pf = reportPfx(group.videoId), isVid = !pf, coll = isVid ? 'videos' : REPORT_COLL[pf], rawId = reportRaw(group.videoId);
+  const pf = reportPfx(group.videoId), isVid = !pf, rawId = reportRaw(group.videoId), rref = reportRef(pf, rawId), coll = !!rref;
 
   let videoStillExists = !!coll;   /* user/channel/message reports have nothing to delete here */
   let fullVideo = null;
   if(coll){
     try{
-      const vDoc = await db.collection(coll).doc(rawId).get();
+      const vDoc = await rref.get();
       videoStillExists = vDoc.exists;
       if(videoStillExists && isVid) fullVideo = { id: vDoc.id, ...vDoc.data() };
     }catch(e){}
   }
-  const kind = isVid ? 'Video' : (REPORT_LBL[pf]||pf);
+  const kind = isVid ? 'Video' : (REPORT_LBL[pf]||REPORT_LBL2[pf]||pf);
   const reasonsHtml = group.reports.map(r=> `<div style="margin-bottom:8px;font-size:13px;"><b>${aEsc(r.reporterName)||'Someone'}</b> — ${aEsc(r.reason)} <span style="color:var(--text-dim);">· ${timeAgo(r.createdAt)}</span>${r.details?`<div style="color:var(--text-dim);margin-top:2px;">“${aEsc(r.details)}”</div>`:''}${r.reportedText?`<div style="background:var(--surface2);border-radius:8px;padding:6px 8px;margin-top:4px;">Message: ${aEsc(r.reportedText)}</div>`:''}</div>`).join('');
   const target = (!isVid && group.channelId) ? `<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;word-break:break-all;">${kind} id: ${aEsc(rawId)} · owner uid: ${aEsc(group.channelId)}</div>` : '';
 
@@ -5745,13 +5765,13 @@ async function openReportDetail(group){
 
 async function resolveReportGroup(group, removeVideo){
   try{
-    const pf = reportPfx(group.videoId), coll = !pf ? 'videos' : REPORT_COLL[pf], rawId = reportRaw(group.videoId);
+    const pf = reportPfx(group.videoId), rref = reportRef(pf, reportRaw(group.videoId));
     const batch = db.batch();
     group.reports.forEach(r=>{
       batch.update(db.collection('reports').doc(r.id), { status: removeVideo===true ? 'removed' : removeVideo==='done' ? 'actioned' : 'dismissed' });
     });
     await batch.commit();
-    if(removeVideo===true && coll){ await db.collection(coll).doc(rawId).delete(); }
+    if(removeVideo===true && rref){ await rref.delete(); }
     toast(removeVideo===true ? 'Removed' : removeVideo==='done' ? 'Marked done' : 'Reports dismissed');
     document.getElementById('adminDetailOverlay').classList.add('hidden');
     loadAdminReports();
@@ -7439,7 +7459,7 @@ function openComments(p){
 function cHTML(c,isReply){
   const likes=c.likes||[],liked=currentUser&&likes.includes(currentUser.uid),n=likes.length;
   const can=currentUser&&(c.authorId===currentUser.uid||(cp&&cp.uid===currentUser.uid));
-  return `<div class="ig-c" data-id="${c.id}"><div class="ig-av" data-bduid="${esc(c.authorId||'')}" style="width:${isReply?26:32}px;height:${isReply?26:32}px;background:${c.authorLogo?'transparent':colorFor(c.authorName)}">${av(c.authorName,c.authorLogo)}</div><div class="t"><b>${esc(c.authorName)}</b>${isReply&&c.replyTo?`<span class="ig-rt">@${esc(c.replyTo)}</span> `:''}${rich(c.text)}<small>${ago(c.createdAt)}${n?' · '+n+' like'+(n>1?'s':''):''} · <a data-rp="${c.id}">Reply</a>${can?' · <a data-d="'+c.id+'">Delete</a>':''}</small></div><button class="clk ${liked?'on':''}" data-cl="${c.id}" aria-label="Like">${ICO.heart}</button></div>`;
+  return `<div class="ig-c" data-id="${c.id}"><div class="ig-av" data-bduid="${esc(c.authorId||'')}" style="width:${isReply?26:32}px;height:${isReply?26:32}px;background:${c.authorLogo?'transparent':colorFor(c.authorName)}">${av(c.authorName,c.authorLogo)}</div><div class="t"><b>${esc(c.authorName)}</b>${isReply&&c.replyTo?`<span class="ig-rt">@${esc(c.replyTo)}</span> `:''}${rich(c.text)}<small>${ago(c.createdAt)}${n?' · '+n+' like'+(n>1?'s':''):''} · <a data-rp="${c.id}">Reply</a>${can?' · <a data-d="'+c.id+'">Delete</a>':''}${(currentUser&&c.authorId!==currentUser.uid)?' · <a data-crp="'+c.id+'" style="color:#e5484d">Report</a>':''}</small></div><button class="clk ${liked?'on':''}" data-cl="${c.id}" aria-label="Like">${ICO.heart}</button></div>`;
 }
 function renderComments(){
   const L=$('igCl'),keep=L.scrollTop;
@@ -7460,6 +7480,8 @@ $('igCl').addEventListener('click',async e=>{
   const tg=t.closest('[data-tag]');if(tg){closeComments();if(window.igOpenTag)window.igOpenTag(tg.dataset.tag.toLowerCase());return;}
   const mn=t.closest('[data-men]');if(mn){closeComments();openHandle(mn.dataset.men);return;}
   const vr=t.closest('[data-vr]');if(vr){const id=vr.dataset.vr;expanded.has(id)?expanded.delete(id):expanded.add(id);renderComments();return;}
+  const crp=t.closest('[data-crp]');
+  if(crp){const c=cDocs.find(x=>x.id===crp.dataset.crp);if(!c)return;window.gzReport({type:'pcomment',id:cp.id+'.'+c.id,uid:c.authorId,name:c.authorName,title:'[Comment] '+String(c.text||'').slice(0,80),text:c.text});return;}
   const rp=t.closest('[data-rp]');
   if(rp){if(!requireAuth())return;const c=cDocs.find(x=>x.id===rp.dataset.rp);if(!c)return;
     replyTo={pid:c.parentId||c.id,name:c.authorName,authorId:c.authorId};expanded.add(replyTo.pid);setRb();renderComments();$('igCi').focus();return;}
@@ -10013,9 +10035,11 @@ function openATStudioApp(tab){
         $q('#albEmpty').style.display=items.length?'none':'block';
         g.innerHTML=items.map(function(c,i){
           var can=(c.uid===uid()||al.owner===uid());
-          return '<div class="alb-cell" data-i="'+i+'">'+(c.mediaType==='video'?'<video src="'+esc(c.mediaURL)+'#t=0.1" preload="metadata" muted playsinline></video><span class="pl">▶</span>':'<img loading="lazy" src="'+esc(c.mediaURL)+'">')+'<span class="by">'+esc(c.name||'')+'</span>'+(can?'<button class="del" data-del="'+esc(c.id)+'">✕</button>':'')+'</div>';
+          return '<div class="alb-cell" data-i="'+i+'">'+(c.mediaType==='video'?'<video src="'+esc(c.mediaURL)+'#t=0.1" preload="metadata" muted playsinline></video><span class="pl">▶</span>':'<img loading="lazy" src="'+esc(c.mediaURL)+'">')+'<span class="by">'+esc(c.name||'')+'</span>'+(can?'<button class="del" data-del="'+esc(c.id)+'">✕</button>':'')+((c.uid!==uid())?'<button class="del" data-rep="'+i+'" style="left:4px;right:auto;top:4px" title="Report">⚑</button>':'')+'</div>';
         }).join('');
         g.onclick=function(e){
+          var rp=e.target.closest('[data-rep]');
+          if(rp){ e.stopPropagation(); var rc=items[+rp.dataset.rep]||{}; window.gzReport({type:'clip',id:al.id+'.'+rc.id,uid:rc.uid,name:rc.name,title:'[Album clip] '+(rc.name||''),thumb:rc.mediaType==='video'?'':rc.mediaURL}); return; }
           var dl=e.target.closest('[data-del]');
           if(dl){ e.stopPropagation(); gzConfirm().then(function(ok){ if(!ok) return; db.collection(COL).doc(al.id).collection('clips').doc(dl.dataset.del).delete().then(function(){ return db.collection(COL).doc(al.id).update({clipCount:FV().increment(-1)}).catch(function(){}); }).catch(function(er){ say('Failed: '+er.message); }); }); return; }
           var c=e.target.closest('[data-i]'); if(!c) return; viewClip(items[+c.dataset.i]);
@@ -10152,9 +10176,10 @@ function openATStudioApp(tab){
   function paint(){
     var l=document.getElementById('vpList'); if(!l) return;
     l.innerHTML=items.length?items.map(function(x){
-      return '<div class="vp-item"><button class="vp-play" data-p="'+esc(x.id)+'">'+(playing===x.id?'⏸':'▶')+'</button><div class="t"><b>'+esc(x.name||'User')+(x.uid===uid()?' (you)':'')+'</b><span>'+ago(x.createdAt)+' · '+fmt(x.dur)+'</span>'+(x.caption?'<i>'+esc(x.caption)+'</i>':'')+'</div>'+(x.uid===uid()?'<button class="vp-del" data-d="'+esc(x.id)+'">🗑</button>':'')+'</div>';
+      return '<div class="vp-item"><button class="vp-play" data-p="'+esc(x.id)+'">'+(playing===x.id?'⏸':'▶')+'</button><div class="t"><b>'+esc(x.name||'User')+(x.uid===uid()?' (you)':'')+'</b><span>'+ago(x.createdAt)+' · '+fmt(x.dur)+'</span>'+(x.caption?'<i>'+esc(x.caption)+'</i>':'')+'</div>'+(x.uid===uid()?'<button class="vp-del" data-d="'+esc(x.id)+'">🗑</button>':'<button class="vp-del" data-rv="'+esc(x.id)+'" title="Report">⚑</button>')+'</div>';
     }).join(''):'<div class="alb-empty">No voice posts in the last 48 hours.<br>Record one — friends will hear it here.</div>';
     l.onclick=function(e){
+      var rv=e.target.closest('[data-rv]'); if(rv){ var vx=(items||[]).find(function(z){return z.id===rv.dataset.rv;})||{}; window.gzReport({type:'voice',id:rv.dataset.rv,uid:vx.uid,name:vx.name,title:'[Voice post] '+(vx.caption||vx.name||'')}); return; }
       var d=e.target.closest('[data-d]'); if(d){ gzConfirm().then(function(ok){ if(ok) db.collection(COL).doc(d.dataset.d).delete().catch(function(er){ say('Failed: '+er.message); }); }); return; }
       var b=e.target.closest('[data-p]'); if(!b) return; var id=b.dataset.p;
       if(playing===id){ stopAudio(); paint(); return; }
@@ -13631,13 +13656,19 @@ window.gzConfirm=function(msg,okLabel){
 </style>
 <script id="gzReportJs">
 (function(){
-  var NAMES={reel:'reel',video:'video',post:'post',story:'story',channel:'channel',user:'user',message:'message',lm:'post'};
+  var NAMES={reel:'reel',video:'video',post:'post',story:'story',channel:'channel',user:'user',message:'message',lm:'post',vcomment:'comment',pcomment:'comment',voice:'voice post',clip:'album clip',live:'live stream'};
   var REASONS=['Spam or scam','Nudity or sexual content','Violence or dangerous content','Harassment or bullying','Hate speech','Copyright or stolen content','Child safety (under 18)','Fake account or impersonation','Something else'];
   var ov=null, onDone=null;
   function say(m){ try{ toast(m); }catch(e){ alert(m); } }
   function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  window.gzEsc=esc;
   function close(){ if(ov){ ov.remove(); ov=null; } var f=onDone; onDone=null; if(typeof f==='function'){ try{ f(); }catch(e){} } }
   /* o: {type,id,uid,name,title,thumb,text,chatId,onClose}  type = reel|video|post|story|channel|user|message|lm */
+  (function(){ var b=document.getElementById('liveViewReportBtn'); if(b) b.addEventListener('click',function(){
+    var id=null; try{ id=currentWatchingChannelId; }catch(e){}
+    if(!id) return; var nm=(document.getElementById('liveViewChannelName')||{}).textContent||'';
+    window.gzReport({type:'live',id:id,uid:id,name:nm,title:'[Live] '+nm});
+  }); })();
   window.gzReport=function(o){
     o=o||{};
     try{ if(typeof requireAuth==='function' && !requireAuth()) return; }catch(e){}
@@ -13648,7 +13679,7 @@ window.gzConfirm=function(msg,okLabel){
     var what=NAMES[type];
     ov=document.createElement('div'); ov.id='gzRptOv';
     ov.innerHTML='<div class="bx"><h3>Report this '+what+'</h3><p class="s">Pick the closest reason. Our team reviews every report. '
-      +(type==='message'?'The message you are reporting will be shared with our team. ':'')+'The other person is not told who reported.</p>'
+      +((type==='message'||type==='vcomment'||type==='pcomment')?'The text you are reporting will be shared with our team. ':'')+'The other person is not told who reported.</p>'
       +REASONS.map(function(r,i){ return '<label class="r"><input type="radio" name="gzRptR" value="'+esc(r)+'"'+(i===0?' checked':'')+'><span>'+esc(r)+'</span></label>'; }).join('')
       +'<textarea id="gzRptD" rows="2" maxlength="200" placeholder="Add details (optional)"></textarea>'
       +'<div class="row"><button type="button" class="no" id="gzRptNo">Cancel</button><button type="button" class="go" id="gzRptGo">Send report</button></div></div>';
@@ -13670,7 +13701,7 @@ window.gzConfirm=function(msg,okLabel){
           reason:reason, details:details, targetType:type, targetId:id, status:'pending',
           createdAt:firebase.firestore.FieldValue.serverTimestamp()
         };
-        if(type==='message'){ d.reportedText=String(o.text||'').slice(0,300); d.chatId=String(o.chatId||'').slice(0,120); }
+        if(type==='message'||type==='vcomment'||type==='pcomment'){ d.reportedText=String(o.text||'').slice(0,300); d.chatId=String(o.chatId||'').slice(0,120); }
         await ref.set(d);
         say('Reported. Thank you, our team will review it');
         close();

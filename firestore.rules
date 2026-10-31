@@ -841,16 +841,15 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.owner == me();
 
       match /clips/{cid} {
-        allow read: if signedIn() && (me() in albumData(aid).members);
+        allow read: if signedIn() && ((me() in albumData(aid).members) || isAdmin());
         allow create: if signedIn()
           && (me() in albumData(aid).members)
           && request.resource.data.uid == me()
           && isStr(request.resource.data.mediaURL, 600)
           && request.resource.data.mediaType in ['image', 'video'];
         allow update: if false;
-        allow delete: if signedIn()
-          && (me() in albumData(aid).members)
-          && (resource.data.uid == me() || albumData(aid).owner == me());
+        allow delete: if signedIn() && (isAdmin() || ((me() in albumData(aid).members)
+          && (resource.data.uid == me() || albumData(aid).owner == me())));
       }
     }
 
