@@ -187,7 +187,8 @@ const firebaseConfig = {
 };
 const CLOUDINARY_CLOUD_NAME = "rct4qeol", CLOUDINARY_UPLOAD_PRESET = "arain_unsigned";
 const CREATOR_SHARE = 0.96;                       /* 96% creator / 4% platform (same as the old Earn page) */
-const MAIN_APP = location.origin + '/';           /* Gupzy main site */
+const ST_SUB = /^studio\./.test(location.hostname);            /* running on studio.gupzy.com */
+const MAIN_APP = ST_SUB ? 'https://gupzy.com/' : location.origin + '/';           /* Gupzy main site */
 
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
@@ -555,7 +556,7 @@ function uploadToCloudinary(file, filename, attempt){
 function modal(html){ el('stModalIn').innerHTML=html; el('stModal').classList.add('show'); el('stModal').scrollTop=0; }
 function closeModal(){ el('stModal').classList.remove('show'); el('stModalIn').innerHTML=''; }
 function openApply(){
-  if(isApk()){ openExternal(location.origin + '/studio/?apply=1'); toast('Opening the application in your browser…'); return; }
+  if(isApk()){ openExternal(location.origin + (ST_SUB ? '/' : '/studio/') + '?apply=1'); toast('Opening the application in your browser…'); return; }
   const c = currentChannel || {};
   let phoneOk=false, confirmation=null, cnicFile=null, local=true;
   modal('<button class="st-x" id="apBack" style="font-size:22px;background:none;border:0;color:inherit;cursor:pointer">&#8592; Back</button><h1>Monetization Application</h1><div class="hint">Complete all steps to submit your application</div>'

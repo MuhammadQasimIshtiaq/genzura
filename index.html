@@ -2461,7 +2461,7 @@ async function loadOrCreateChannelFlow(){
       applyChannelToUI();
       startFeedListeners();
       if(new URLSearchParams(location.search).get('apply')==='1'){
-        location.replace(location.origin + '/studio/?apply=1');   /* monetization now lives in Gupzy Studio */
+        location.replace(((/(^|\.)gupzy\.com$/.test(location.hostname)) ? 'https://studio.gupzy.com/' : location.origin + '/studio/') + '?apply=1');   /* monetization now lives in Gupzy Studio */
       }
     }else{
       showScreen('createChannelScreen');
@@ -9324,7 +9324,7 @@ function openATStudioApp(tab){
     if(!opened) showStudioDownload();
     return;
   }
-  window.open(location.origin + '/studio/' + (tab ? '#' + tab : ''), '_blank');   /* website: Studio opens in a new tab */
+  window.open(((/(^|\.)gupzy\.com$/.test(location.hostname)) ? 'https://studio.gupzy.com/' : location.origin + '/studio/') + (tab ? '#' + tab : ''), '_blank');   /* website: Studio opens in a new tab */
 }
 
 /* ================================================================
