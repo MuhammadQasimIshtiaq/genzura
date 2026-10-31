@@ -2,7 +2,7 @@
   "relation": ["delegate_permission/common.handle_all_urls"],
   "target": {
     "namespace": "android_app",
-    "package_name": "com.genzura.app",
+    "package_name": "com.gupzy.app",
     "sha256_cert_fingerprints": [
       "9D:6B:F3:D2:30:7C:E4:86:AD:08:F2:86:5F:5F:F7:19:7E:63:0E:E3:08:15:22:0C:59:B0:21:2E:D0:C5:2A:15",
       "B1:FA:4F:08:8B:95:96:02:E0:EE:F4:4E:8B:EF:D2:4C:1B:40:67:71:12:1A:7D:A2:B1:37:93:D4:BB:E0:AA:26"
