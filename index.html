@@ -1835,6 +1835,8 @@ function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg
 /* Phone-book name of a contact (read on this phone only, never uploaded). Used ONLY inside chats, the inbox and calls; profiles keep the real profile name. */
 window.__gzCN=null;
 window.__gzLN=function(id,fb){ try{ const k='gz_cn_'+((typeof currentUser!=='undefined'&&currentUser&&currentUser.uid)||''); if(!window.__gzCN||window.__gzCN.__k!==k){ window.__gzCN=JSON.parse(localStorage.getItem(k)||'{}'); Object.defineProperty(window.__gzCN,'__k',{value:k,enumerable:false,writable:true}); } return (id&&window.__gzCN[id])||fb; }catch(e){ return fb; } };
+/* display name for a person in any list: my nickname for them (set in chat info) > phone-book name > profile name */
+window.__gzDN=function(id,fb){ try{ if(id&&typeof chats!=='undefined'&&chats){ for(const k in chats){ const c=chats[k]; if(c&&!c.isGroup&&c.nicks&&c.nicks[id]&&(c.members||[]).indexOf(id)>-1) return c.nicks[id]; } } }catch(e){} return window.__gzLN(id,fb); };
 function colorFor(name){ const c=["#ff5c8a","#7b5cff","#3ea6ff","#25c17a","#ff9d3c","#e64ac9","#4dd0e1","#f6c744"]; let h=0; for(const ch of (name||"")) h=ch.charCodeAt(0)+((h<<5)-h); return c[Math.abs(h)%c.length]; }
 function optimizedVideoUrl(url){
   if(!url || !url.includes('/video/upload/')) return url;
@@ -3007,7 +3009,7 @@ let _adErrToasted = false;
 window.__adSlotFailed = function(id, code, msg){
   const sl = _adSlides[id]; if(sl && !sl.dataset.adOk) sl.style.display = 'none';
   /* ad errors are shown to the ADMIN only (once per session) - normal users never see them */
-  try{ if(!_adErrToasted && typeof __isAdminDev === 'function' && __isAdminDev()){ _adErrToasted = true; toast('AdMob: ' + ({0:'internal error',1:'invalid request (check ad unit ID)',2:'network error',3:'no fill (no ad available)'}[code] || ('error ' + code))); } }catch(e){}
+  /* no on-screen message for ad errors: a failed/unfilled ad just hides its slot */
 };
 window.__adSlotLoaded = function(id){ const sl = _adSlides[id]; if(sl){ sl.dataset.adOk = '1'; sl.style.display = ''; } };
 function renderAdMobSlide(){
@@ -7884,7 +7886,7 @@ function listen(){
       const c=Object.assign({id:ch.doc.id},ch.doc.data());
       if(ch.type==='removed'){delete chats[c.id];if(openId===c.id){$('igGi').classList.remove('show');$('igGa').classList.remove('show');closeChat();if(!gLeaving)toast('You are no longer in this group');}return;}
       const old=chats[c.id];chats[c.id]=c;
-      if(!firstLoad&&c.lastFrom&&c.lastFrom!==me()&&openId!==c.id&&(!old||ts(old.lastAt)!==ts(c.lastAt)))toast(peerOf(c).name+': '+prev(c).slice(0,40));
+      if(!firstLoad&&c.lastFrom&&c.lastFrom!==me()&&openId!==c.id&&(!old||ts(old.lastAt)!==ts(c.lastAt)))toast(((c.nicks&&c.nicks[peerOf(c).id])||window.__gzLN(peerOf(c).id,peerOf(c).name))+': '+prev(c).slice(0,40));
     });
     firstLoad=false;dmBadge();
     if($('igDm').classList.contains('show'))renderInbox();
@@ -7901,12 +7903,12 @@ function renderInbox(){
   let a=Object.values(chats).filter(c=>c.lastAt||c.lastText).filter(c=>{if(c.isTemp&&c.expiresAt&&c.expiresAt<Date.now())return false;const p=peerOf(c);if(!p.group){const cl=Number((c.clearedAt||{})[me()])||0;if(cl&&ts(c.lastAt)<=cl)return false;}return p.group||!isBlockedUid(p.id);}).sort((x,y)=>ts(y.lastAt)-ts(x.lastAt));
   if(dmTab==='friends')a=a.filter(isCt);else if(dmTab==='follow')a=a.filter(c=>!isCt(c));
   const row=c=>{const p=peerOf(c),u=unreadN(c)>0;
-    return `<div class="dm-row ${u?'unread':''}" data-c="${c.id}">${avbox(p.name,p.logo,52,p.group?'':p.id)}<div class="tx"><b>${esc(p.group?p.name:window.__gzLN(p.id,p.name))}${tmpTag(c)}</b><span>${esc((c.lastFrom===me()?'You: ':'')+prev(c))} · ${ago(c.lastAt)}</span></div>${u?'<i class="dot"></i>':''}</div>`;};
+    return `<div class="dm-row ${u?'unread':''}" data-c="${c.id}">${avbox(p.name,p.logo,52,p.group?'':p.id)}<div class="tx"><b>${esc(p.group?p.name:((c.nicks&&c.nicks[p.id])||window.__gzLN(p.id,p.name)))}${tmpTag(c)}</b><span>${esc((c.lastFrom===me()?'You: ':'')+prev(c))} · ${ago(c.lastAt)}</span></div>${u?'<i class="dot"></i>':''}</div>`;};
   let h=a.map(row).join('');
   if(dmTab==='friends'){
     const have=new Set(a.map(c=>peerOf(c).id));
     const fresh=(typeof contactPeople!=='undefined'&&contactPeople||[]).filter(p=>!have.has(p.id)&&!isBlockedUid(p.id));
-    if(fresh.length)h+='<div class="ig-sec">Contacts on Gupzy · tap to chat</div>'+fresh.map(p=>`<div class="dm-row" data-p="${esc(p.id)}" data-n="${esc(p.name)}" data-l="${esc(p.logo||'')}">${avbox(p.name,p.logo,52,p.id)}<div class="tx"><b>${esc(window.__gzLN(p.id,p.name))}</b><span>In your contacts · no chat yet</span></div></div>`).join('');
+    if(fresh.length)h+='<div class="ig-sec">Contacts on Gupzy · tap to chat</div>'+fresh.map(p=>`<div class="dm-row" data-p="${esc(p.id)}" data-n="${esc(p.name)}" data-l="${esc(p.logo||'')}">${avbox(p.name,p.logo,52,p.id)}<div class="tx"><b>${esc(window.__gzDN(p.id,p.name))}</b><span>In your contacts · no chat yet</span></div></div>`).join('');
     if(!h)h='<div class="ig-empty">No contact friends yet.<br>Tap the pencil → "Find friends from your contacts".</div>';
   }
   $('dmList').innerHTML=h||'<div class="ig-empty">'+(dmTab==='follow'?'No chats with people you follow yet.':'No chats yet.<br>Tap the pencil above to start a new message.')+'</div>';
@@ -7925,7 +7927,7 @@ async function loadFollowing(){
   return followList;
 }
 function renderPeople(arr,title){
-  $('ncList').innerHTML=(title?`<div class="ig-sec">${title}</div>`:'')+(arr.length?arr.map(p=>`<div class="dm-row" data-p="${esc(p.id)}" data-n="${esc(p.name)}" data-l="${esc(p.logo||'')}">${avbox(p.name,p.logo,46)}<div class="tx"><b>${esc(p.name)}</b></div></div>`).join(''):'<div class="ig-empty">No one found.</div>');
+  $('ncList').innerHTML=(title?`<div class="ig-sec">${title}</div>`:'')+(arr.length?arr.map(p=>`<div class="dm-row" data-p="${esc(p.id)}" data-n="${esc(p.name)}" data-l="${esc(p.logo||'')}">${avbox(p.name,p.logo,46)}<div class="tx"><b>${esc(window.__gzDN(p.id,p.name))}</b></div></div>`).join(''):'<div class="ig-empty">No one found.</div>');
 }
 let contactPeople=null;
 async function loadContactPeople(){
@@ -8006,7 +8008,7 @@ $('ncBack').onclick=()=>$('igNc').classList.remove('show');
   function rows(people){
     if(!people.length) return '<div class="ig-empty">None of your contacts are on Gupzy yet.<br>Invite them!</div>';
     const ok = people.filter(p=>p.mutual), wait = people.filter(p=>!p.mutual);
-    const row = (p,can)=>`<div class="dm-row" ${can?`data-p="${esc(p.id)}" data-n="${esc(p.name)}" data-l="${esc(p.logo||'')}"`:''}>${avbox(p.name,p.logo,46)}<div class="tx"><b>${esc(p.name)}</b><span style="font-size:12px;opacity:.7">${can?'Tap to chat · call from the chat':'Waiting: they must also sync contacts and have your number'}</span></div></div>`;
+    const row = (p,can)=>`<div class="dm-row" ${can?`data-p="${esc(p.id)}" data-n="${esc(p.name)}" data-l="${esc(p.logo||'')}"`:''}>${avbox(p.name,p.logo,46)}<div class="tx"><b>${esc(window.__gzDN(p.id,p.name))}</b><span style="font-size:12px;opacity:.7">${can?'Tap to chat · call from the chat':'Waiting: they must also sync contacts and have your number'}</span></div></div>`;
     return (ok.length?`<div class="ig-sec">Contacts you can chat &amp; call (${ok.length})</div>`+ok.map(p=>row(p,true)).join(''):'')
          + (wait.length?`<div class="ig-sec">On Gupzy, not unlocked yet (${wait.length})</div>`+wait.map(p=>row(p,false)).join(''):'');
   }
@@ -8277,7 +8279,7 @@ function renderGi(){
   let h='<div style="padding:16px 16px 0;display:flex;align-items:center;gap:14px">'+avbox((c.name||'Group'),c.logo||null,64,'')+(own?'<div style="display:flex;flex-direction:column;gap:6px"><button id="giPhoto" style="'+btn+'">'+(c.logo?'Change photo':'Add photo')+'</button>'+(c.logo?'<button id="giPhotoRm" style="'+btn+';color:#ed4956">Remove photo</button>':'')+'</div>':'')+'</div>';
   h+='<div style="padding:16px;display:flex;gap:8px;align-items:center">'+(own?`<input id="giName" value="${esc(c.name||'')}" maxlength="40" style="${inp}"><button id="giSave" style="border:0;background:#4a5cff;color:#fff;border-radius:10px;padding:9px 14px;font-weight:700;cursor:pointer">Save</button>`:`<b style="font-size:16px">${esc(c.name||'Group')}</b>`)+'</div>';
   h+=`<div class="ig-sec">Members (${mem.length})</div>`;
-  h+=mem.map(u=>{const i=inf[u]||{};return `<div class="dm-row" style="cursor:default">${avbox(i.name||'User',i.logo||null,44,u)}<div class="tx"><b>${u===me()?'You':esc(i.name||'User')}</b>${u===c.owner?'<span>Admin</span>':''}</div>${own&&u!==me()?`<button data-rm="${esc(u)}" style="border:0;background:none;color:#ed4956;font-weight:700;font-size:13px;cursor:pointer;padding:6px">Remove</button>`:''}</div>`;}).join('');
+  h+=mem.map(u=>{const i=inf[u]||{};return `<div class="dm-row" style="cursor:default">${avbox(i.name||'User',i.logo||null,44,u)}<div class="tx"><b>${u===me()?'You':esc(window.__gzDN(u,i.name||'User'))}</b>${u===c.owner?'<span>Admin</span>':''}</div>${own&&u!==me()?`<button data-rm="${esc(u)}" style="border:0;background:none;color:#ed4956;font-weight:700;font-size:13px;cursor:pointer;padding:6px">Remove</button>`:''}</div>`;}).join('');
   if(own)h+='<div class="dm-row" id="giAdd"><b style="color:#4a5cff;padding:6px 0">➕ Add members</b></div>';
   h+='<div class="dm-row" id="giLeave"><b style="color:#ed4956;padding:6px 0">🚪 Leave group</b></div>';
   if(!own)h+='<div class="ig-empty" style="padding:8px 16px;font-size:12px">Only the admin can rename the group or add/remove members.</div>';
@@ -8329,7 +8331,7 @@ let aSel={},aQt;
 function gaCount(){$('gaGo').textContent='Add ('+Object.keys(aSel).length+')';}
 function gaRender(arr,title){
   const have=new Set((chats[openId]||{}).members||[]);arr=arr.filter(p=>!have.has(p.id));
-  $('gaList').innerHTML=(title?`<div class="ig-sec">${title}</div>`:'')+(arr.length?arr.map(p=>`<div class="dm-row ${aSel[p.id]?'gsel':''}" data-p="${esc(p.id)}" data-n="${esc(p.name)}" data-l="${esc(p.logo||'')}">${avbox(p.name,p.logo,46)}<div class="tx"><b>${esc(p.name)}</b></div></div>`).join(''):'<div class="ig-empty">No one found.</div>');
+  $('gaList').innerHTML=(title?`<div class="ig-sec">${title}</div>`:'')+(arr.length?arr.map(p=>`<div class="dm-row ${aSel[p.id]?'gsel':''}" data-p="${esc(p.id)}" data-n="${esc(p.name)}" data-l="${esc(p.logo||'')}">${avbox(p.name,p.logo,46)}<div class="tx"><b>${esc(window.__gzDN(p.id,p.name))}</b></div></div>`).join(''):'<div class="ig-empty">No one found.</div>');
 }
 async function openAddMembers(){
   aSel={};gaCount();$('gaQ').value='';$('igGa').classList.add('show');
