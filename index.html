@@ -3515,10 +3515,29 @@ document.getElementById('shortsScroll').addEventListener('click', e=>{
   /* single tap: pause / play (tiny delay so a double-tap does not pause) */
   slide._tapTimer = setTimeout(()=>{
     slide._tapT = 0;
-    if(vidEl){ vidEl.paused ? vidEl.play().catch(()=>{}) : vidEl.pause(); }
+    if(vidEl){
+      if(vidEl.paused){ vidEl.play().catch(()=>{}); reelPPIcon(slide, 'play'); }
+      else{ vidEl.pause(); reelPPIcon(slide, 'pause'); }
+    }
   }, 260);
 });
 
+
+
+/* big centre icon on a reel: PAUSE icon stays while the reel is paused, PLAY icon flashes when it resumes */
+function reelPPIcon(slide, kind){
+  let el = slide.querySelector('.gz-pp');
+  if(!el){ el = document.createElement('div'); el.className = 'gz-pp'; slide.appendChild(el); }
+  clearTimeout(el._t); el.dataset.k = kind;
+  el.innerHTML = kind === 'pause'
+    ? '<svg viewBox="0 0 24 24" width="38" height="38" fill="#fff"><rect x="6" y="4.5" width="4.2" height="15" rx="1.2"/><rect x="13.8" y="4.5" width="4.2" height="15" rx="1.2"/></svg>'
+    : '<svg viewBox="0 0 24 24" width="38" height="38" fill="#fff"><path d="M8 5.2v13.6a1 1 0 0 0 1.5.86l11-6.8a1 1 0 0 0 0-1.72l-11-6.8A1 1 0 0 0 8 5.2z"/></svg>';
+  el.className = 'gz-pp show';
+  if(kind === 'play'){ el._t = setTimeout(()=>{ el.className = 'gz-pp'; }, 650); }
+}
+
+/* a reel that starts playing again by itself (scrolled back to it) must not keep the pause icon */
+document.addEventListener('play', ev=>{ try{ const sl = ev.target && ev.target.closest && ev.target.closest('.short-slide'); const p = sl && sl.querySelector('.gz-pp'); if(p && p.dataset.k === 'pause'){ p.className = 'gz-pp'; p.dataset.k = ''; } }catch(e){} }, true);
 
 /* ================================================================
    ONE REEL PER SWIPE — however hard/fast the swipe (or however long a
@@ -14454,6 +14473,10 @@ window.gzConfirm=function(msg,okLabel){
   })();
 })();
 </script>
+<style id="gzPPcss">
+.gz-pp{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.85);width:76px;height:76px;border-radius:50%;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:6;pointer-events:none;opacity:0;transition:opacity .18s ease,transform .18s ease;}
+.gz-pp.show{opacity:1;transform:translate(-50%,-50%) scale(1);}
+</style>
 <style id="gzReelsBars">
 /* Reels tab: top bar + bottom nav turn black (rest of the app stays as is) */
 body.gz-on-reels #app > header, body.gz-on-reels #app > nav{--bg:#000;--text:#fff;--text-faint:#a8a8a8;--border:#1c1c1c;--surface:#111;--surface2:#1a1a1a;background:#000 !important;color:#fff;border-color:#1c1c1c;}
@@ -14463,7 +14486,7 @@ body.gz-on-reels #app > nav .nav-btn:not(.active) svg{stroke:#a8a8a8;}
 body.gz-on-reels #app > nav .nav-btn.active, body.gz-on-reels #app > nav .nav-btn.active svg{color:#fff;stroke:#fff;}
 </style>
 <script>
-(function(){ function sync(){ try{ var v=document.getElementById('shortsView'); document.body.classList.toggle('gz-on-reels', !!(v&&v.classList.contains('active'))); }catch(e){} }
+(function(){ function sync(){ try{ var v=document.getElementById('shortsView'); var on=!!(v&&v.classList.contains('active')); document.body.classList.toggle('gz-on-reels', on); try{ if(window.AndroidUi) window.AndroidUi.setBars(on); }catch(e2){} }catch(e){} }
  function init(){ var v=document.getElementById('shortsView'); if(!v){ return setTimeout(init,300); } new MutationObserver(sync).observe(v,{attributes:true,attributeFilter:['class']}); sync(); }
  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init(); })();
 </script>
