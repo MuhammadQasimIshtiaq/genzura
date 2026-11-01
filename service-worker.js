@@ -6,7 +6,7 @@
    - Page (index.html): network-first, lekin agar net slow ho (4 sec) to cached copy turant dikha deta hai.
    - Icons/manifest jaisi static files: cache-first + background mein refresh (instant load). */
 
-const CACHE_NAME = 'gupzy-shell-v100';
+const CACHE_NAME = 'gupzy-shell-v101';
 const APP_SHELL = [
   './',
   './icon-192.png',
@@ -46,18 +46,18 @@ self.addEventListener('fetch', (event) => {
   const isPage = req.mode === 'navigate' || req.destination === 'document';
 
   if (isPage) {
+    /* OPEN INSTANTLY: show the saved copy of the app right away and refresh it in the background (new version is used on the next launch).
+       Only the very first launch (nothing saved yet) has to wait for the network. */
     event.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME);
-      try {
-        const res = await Promise.race([
-          fetch(req),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('slow network')), 4000))
-        ]);
-        if (res && res.ok) cache.put(req, res.clone()).catch(() => {});
+      const key = url.origin + url.pathname;            /* ?v=… / ?qa=… links share one saved copy */
+      const cached = (await cache.match(key)) || (await cache.match('./'));
+      const refresh = fetch(req).then((res) => {
+        if (res && res.ok && res.status === 200) { cache.put(key, res.clone()).catch(() => {}); }
         return res;
-      } catch (e) {
-        return (await cache.match(req)) || (await cache.match('./')) || Response.error();
-      }
+      });
+      if (cached) { event.waitUntil(refresh.catch(() => {})); return cached; }
+      try { return await refresh; } catch (e) { return Response.error(); }
     })());
     return;
   }
