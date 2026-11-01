@@ -5038,9 +5038,15 @@ document.getElementById('channelCloseBtn').addEventListener('click', ()=>{
 });
 
 async function openChannelScreen(channelId, fallbackName, fallbackLogo){
-  if(currentUser && channelId !== currentUser.uid && await blockedMe(channelId)){ toast('This profile is not available'); return; }
+  /* start every network read at once, show the screen immediately (before: one read after another = several seconds) */
+  const _chP = db.collection('channels').doc(channelId).get();
+  const _subP = (currentUser && channelId !== currentUser.uid) ? db.collection('subscriptions').doc(`${currentUser.uid}_${channelId}`).get() : null;
+  const _vidP = db.collection('videos').where('channelId','==',channelId).get();
+  if(_subP) _subP.catch(()=>{});
+  _chP.catch(()=>{});
   document.querySelectorAll('#shortsScroll video').forEach(v=> v.pause());
   channelScreen.classList.add('show');
+  if(currentUser && channelId !== currentUser.uid){ blockedMe(channelId).then(b=>{ if(b){ channelScreen.classList.remove('show'); toast('This profile is not available'); } }).catch(()=>{}); }
   document.getElementById('chName').textContent = fallbackName || '—';
   document.getElementById('chAvatarBig').style.background = fallbackLogo ? 'transparent' : colorFor(fallbackName);
   document.getElementById('chAvatarBig').innerHTML = fallbackLogo ? `<img src="${fallbackLogo}">` : initials(fallbackName);
@@ -5051,7 +5057,7 @@ async function openChannelScreen(channelId, fallbackName, fallbackLogo){
     .then(sn=>{ document.getElementById('chFollowing').textContent = fmtCount(sn.size); }).catch(()=>{});
 
   try{
-    const doc = await db.collection('channels').doc(channelId).get();
+    const doc = await _chP;
     const ch = doc.exists ? doc.data() : { name: fallbackName, logoURL: fallbackLogo };
     document.getElementById('chName').textContent = ch.name;
     document.getElementById('chHandle').textContent = '@' + ch.name.toLowerCase().replace(/[^a-z0-9]+/g,'');
@@ -5104,7 +5110,7 @@ async function openChannelScreen(channelId, fallbackName, fallbackLogo){
   }else{
     joinBtn.style.display = '';
     if(currentUser){
-      const subDoc = await db.collection('subscriptions').doc(`${currentUser.uid}_${channelId}`).get();
+      const subDoc = await _subP;
       joinBtn.textContent = subDoc.exists ? 'Following ✓' : 'Follow';
       joinBtn.classList.toggle('joined', subDoc.exists);
     }
@@ -5120,7 +5126,7 @@ async function openChannelScreen(channelId, fallbackName, fallbackLogo){
   try{ if(window.__gz2) window.__gz2.paintProfile(channelId); }catch(e){}
   try{ if(window.__gzSpark) window.__gzSpark.paint(channelId); }catch(e){}
   try{ if(window.__gzGhost) window.__gzGhost.paint(channelId); }catch(e){}
-  db.collection('videos').where('channelId','==',channelId).get().then(snap=>{
+  _vidP.then(snap=>{
     const list = snap.docs.map(d=>({id:d.id,...d.data()}));
     list.sort((a,b)=> (b.createdAt ? b.createdAt.toMillis() : 0) - (a.createdAt ? a.createdAt.toMillis() : 0));
     document.getElementById('chStats').textContent = `${document.getElementById('chStats').textContent.split('·')[0].trim()} · ${list.length} video${list.length===1?'':'s'}`;
@@ -8412,7 +8418,7 @@ const E2E=(()=>{
   const enc=new TextEncoder(),dec=new TextDecoder();
   const b64=u=>btoa(String.fromCharCode(...new Uint8Array(u)));
   const unb64=t=>Uint8Array.from(atob(t),c=>c.charCodeAt(0));
-  const idb=()=>new Promise((res,rej)=>{const r=indexedDB.open('at-e2ee',1);r.onupgradeneeded=()=>r.result.createObjectStore('k');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});
+  let idbP=null;const idb=()=>{ if(idbP)return idbP; idbP=new Promise((res,rej)=>{const r=indexedDB.open('at-e2ee',1);r.onupgradeneeded=()=>r.result.createObjectStore('k');r.onsuccess=()=>{ r.result.onclose=()=>{idbP=null;}; res(r.result); };r.onerror=()=>{idbP=null;rej(r.error);};}); return idbP; };
   const idbGet=async k=>{const d=await idb();return new Promise((res,rej)=>{const q=d.transaction('k').objectStore('k').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});};
   const idbSet=async(k,v)=>{const d=await idb();return new Promise((res,rej)=>{const q=d.transaction('k','readwrite').objectStore('k').put(v,k);q.onsuccess=()=>res();q.onerror=()=>rej(q.error);});};
   let my=null,initP=null,shared={},cache=new Map();
@@ -8433,9 +8439,15 @@ const E2E=(()=>{
         await idbSet('k_'+uid,rec);
       }
       const ref=db.collection('userKeys').doc(uid);
-      let cur=null;try{const d=await ref.get();cur=d.exists?d.data().pub:null;}catch(e){}
-      if(cur!==rec.pub)await ref.set({uid,pub:rec.pub,updatedAt:FV.serverTimestamp()});
-      shared={};cache=new Map();my={uid,priv:rec.priv,pub:rec.pub,old};return my;
+      shared={};cache=new Map();my={uid,priv:rec.priv,pub:rec.pub,old};
+      /* publishing my public key no longer blocks opening chats: check/upload it in the background (cached once per device) */
+      (async()=>{ try{
+        const ck='at_kpub_'+uid; if(localStorage.getItem(ck)===rec.pub) return;
+        let cur=null;try{const d=await ref.get();cur=d.exists?d.data().pub:null;}catch(e){}
+        if(cur!==rec.pub)await ref.set({uid,pub:rec.pub,updatedAt:FV.serverTimestamp()});
+        localStorage.setItem(ck,rec.pub);
+      }catch(e){} })();
+      return my;
     })();
     initP={uid,p};
     try{return await p;}catch(e){initP=null;throw e;}
@@ -8443,7 +8455,15 @@ const E2E=(()=>{
   const ppCache=new Map();
   async function peerPub(uid){
     const c=ppCache.get(uid);if(c&&Date.now()-c.t<300000)return c.p;
-    try{const d=await db.collection('userKeys').doc(uid).get();const p=d.exists?d.data().pub:null;if(p)ppCache.set(uid,{p,t:Date.now()});return p;}
+    try{
+      /* answer from the local copy right away (instant), then refresh from the server in the background */
+      let lc=null; try{ const d0=await db.collection('userKeys').doc(uid).get({source:'cache'}); lc=d0.exists?d0.data().pub:null; }catch(e0){}
+      if(lc){
+        ppCache.set(uid,{p:lc,t:Date.now()-240000});
+        db.collection('userKeys').doc(uid).get().then(d=>{ const np=d.exists?d.data().pub:null; if(np){ ppCache.set(uid,{p:np,t:Date.now()}); if(np!==lc){ cache.forEach((v,k)=>{ if(v&&v.t===FAIL) cache.delete(k); }); } } }).catch(()=>{});
+        return lc;
+      }
+      const d=await db.collection('userKeys').doc(uid).get();const p=d.exists?d.data().pub:null;if(p)ppCache.set(uid,{p,t:Date.now()});return p;}
     catch(e){if(c)return c.p;try{const l=(await idbGet('p_'+uid))||[];return l.length?l[l.length-1]:null;}catch(e2){return null;}}
   }
   /* every public key ever published by the peer (only the peer can write their own userKeys doc) */
