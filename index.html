@@ -7435,10 +7435,10 @@ function postHTML(p){
   return `<article class="ig-post" data-pid="${p.id}">
    <div class="ig-ph"><div class="ig-av" data-ch data-bduid="${esc(p.uid||'')}" style="background:${p.channelLogo?'transparent':colorFor(p.channelName)}">${av(p.channelName,p.channelLogo)}</div>
     <div class="ig-who"><b data-ch>${esc(p.channelName)}</b><small>${ago(p.createdAt)}${p.edited?' · edited':''}${(p.capsule&&!lk)?' · ⏳ Time capsule':''}</small></div>
-    ${mine?'<button class="ig-more" data-menu title="Options">&#8943;</button>':'<button class="ig-more" data-prep title="Report">&#8943;</button>'}</div>
+    ${mine?'<button class="ig-more" data-menu title="Options">&#8943;</button>':''}</div>
    ${mediaHTML(p)}
    ${lk?'':(p.tagged&&p.tagged.length)?`<div class="ig-with">With ${p.tagged.map(u=>`<span class="ig-men" data-tguid="${esc(u.uid)}" data-tgn="${esc(u.name||'')}" data-tgl="${esc(u.logo||'')}">@${esc(u.handle||u.name||'user')}</span>`).join(', ')}</div>`:''}
-   ${lk?'':`<div class="ig-act"><button class="ig-like ${likedSet[p.id]?'on':''}" data-like>${ICO.heart}</button><button data-cmt>${ICO.cmt}</button><button data-share>${ICO.share}</button><button class="ig-save ${savedSet[p.id]?'on':''}" data-save aria-label="Save">${ICO.bm}</button></div>`}
+   ${lk?'':`<div class="ig-act"><button class="ig-like ${likedSet[p.id]?'on':''}" data-like>${ICO.heart}</button><button data-cmt>${ICO.cmt}</button><button data-share>${ICO.share}</button>${mine?'':'<button data-prep aria-label="Report" title="Report"><svg viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg></button>'}<button class="ig-save ${savedSet[p.id]?'on':''}" data-save aria-label="Save">${ICO.bm}</button></div>`}
    ${lk?'':`<div class="ig-likes" data-lc>${fmtCount(p.likesCount||0)} likes</div>`}
    ${cap?`<div class="ig-cap"><b>${esc(p.channelName)}</b><span data-ct>${rich(long?cap.slice(0,110)+'… ':cap)}</span>${long?'<span class="ig-moretxt" data-more>more</span>':''}</div>`:''}
    ${lk?'':`<button class="ig-vc" data-cmt data-cc>${(p.commentsCount||0)>0?'View all '+fmtCount(p.commentsCount)+' comments':'Add a comment…'}</button>`}</article>`;
