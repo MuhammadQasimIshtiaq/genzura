@@ -14391,5 +14391,18 @@ window.gzConfirm=function(msg,okLabel){
   })();
 })();
 </script>
+<style id="gzReelsBars">
+/* Reels tab: top bar + bottom nav turn black (rest of the app stays as is) */
+body.gz-on-reels #app > header, body.gz-on-reels #app > nav{--bg:#000;--text:#fff;--text-faint:#a8a8a8;--border:#1c1c1c;--surface:#111;--surface2:#1a1a1a;background:#000 !important;color:#fff;border-color:#1c1c1c;}
+body.gz-on-reels #app > header svg, body.gz-on-reels #app > header .top-icons svg{stroke:#fff;}
+body.gz-on-reels #app > header .brand span{color:#fff;}
+body.gz-on-reels #app > nav .nav-btn:not(.active) svg{stroke:#a8a8a8;}
+body.gz-on-reels #app > nav .nav-btn.active, body.gz-on-reels #app > nav .nav-btn.active svg{color:#fff;stroke:#fff;}
+</style>
+<script>
+(function(){ function sync(){ try{ var v=document.getElementById('shortsView'); document.body.classList.toggle('gz-on-reels', !!(v&&v.classList.contains('active'))); }catch(e){} }
+ function init(){ var v=document.getElementById('shortsView'); if(!v){ return setTimeout(init,300); } new MutationObserver(sync).observe(v,{attributes:true,attributeFilter:['class']}); sync(); }
+ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init(); })();
+</script>
 </body>
 </html>
