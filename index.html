@@ -3233,11 +3233,12 @@ function appendShortsBatch(scroll){
           if(nx){
             if(nx._hydrate) nx._hydrate();
             const nextVid = nx.querySelector('video');
-            if(nextVid){ if(!nextVid.src && nextVid.dataset.src){ nextVid.preload = 'auto'; nextVid.src = optimizedVideoUrl(nextVid.dataset.src); } else if(nextVid.preload !== 'auto'){ nextVid.preload = 'auto'; } }
-            /* also warm the reel after next (headers + first chunk) so a quick double swipe is still instant */
-            let nx2 = nx.nextElementSibling; if(nx2 && nx2.classList.contains('sponsored-slide')) nx2 = nx2.nextElementSibling;
-            const v2 = nx2 && nx2.querySelector && nx2.querySelector('video');
-            if(v2 && !v2.src && v2.dataset.src){ v2.preload = 'metadata'; v2.src = optimizedVideoUrl(v2.dataset.src); }
+            if(nextVid){
+              if(!nextVid.src && nextVid.dataset.src){ nextVid.preload = 'metadata'; nextVid.src = optimizedVideoUrl(nextVid.dataset.src); }
+              /* only start buffering the next reel fully AFTER the current one has buffered enough, so the two never fight over bandwidth (that caused play 2s / stall / play) */
+              const up = ()=>{ try{ nextVid.preload = 'auto'; }catch(e){} };
+              if(vidEl.readyState >= 4) up(); else vidEl.addEventListener('canplaythrough', up, {once:true});
+            }
           }
         }
       });
@@ -3408,7 +3409,7 @@ function releaseFarVideos(activeSlide){
   for(let i = 0; i < kids.length; i++){
     const v = kids[i].querySelector && kids[i].querySelector('video');
     if(!v) continue;
-    if(i - ai <= 2 && i - ai >= -1){ if(i !== ai && !v.paused) v.pause(); continue; } /* keep 1 behind + 2 ahead loaded */
+    if(Math.abs(i - ai) <= 1){ if(i !== ai && !v.paused) v.pause(); continue; }
     if(v.getAttribute('src')){ v.pause(); v.removeAttribute('src'); v.load(); }
   }
 }
