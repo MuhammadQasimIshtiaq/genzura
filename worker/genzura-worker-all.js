@@ -782,6 +782,15 @@ async function ctGoogle(text, tl) {
   if (!r.ok) throw new Error("google " + r.status);
   return ctParseGoogle(await r.json());
 }
+async function ctGoogle2(text, tl) {
+  const r = await fetch("https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=" + tl + "&q=" + encodeURIComponent(text),
+    { headers: { "User-Agent": "Mozilla/5.0" } });
+  if (!r.ok) throw new Error("google2 " + r.status);
+  const d = await r.json();
+  const first = Array.isArray(d) ? d[0] : null;
+  const t = Array.isArray(first) ? first[0] : (typeof first === "string" ? first : "");
+  return { text: String(t || "").trim(), roman: "" };
+}
 async function ctMyMemory(text, tl) {
   const r = await fetch("https://api.mymemory.translated.net/get?q=" + encodeURIComponent(text.slice(0, 450)) + "&langpair=autodetect|" + tl);
   if (!r.ok) throw new Error("mymemory " + r.status);
@@ -794,9 +803,14 @@ async function ctTranslate(body) {
   const text = String(body.text || "").trim().slice(0, 1500);
   if (!text) return ctJ(400, { error: "empty" });
   const tl = String(body.to || "ur") === "en" ? "en" : "ur";
-  let res;
+  let res = null;
   try { res = await ctGoogle(text, tl); if (!res.text) throw new Error("empty"); }
-  catch (e) { res = await ctMyMemory(text, tl); }
+  catch (e) {
+    res = null;
+    try { res = await ctGoogle2(text, tl); if (!res.text) throw new Error("empty"); } catch (e2) { res = null; }
+    if (!res) { try { res = await ctMyMemory(text, tl); } catch (e3) { res = null; } }
+  }
+  if (!res) res = { text, roman: "" }; /* every provider failed: show the original instead of an error */
   return ctJ(200, { text: res.text, roman: res.roman });
 }
 

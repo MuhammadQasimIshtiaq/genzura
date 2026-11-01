@@ -11306,7 +11306,7 @@ function openATStudioApp(tab){
       o.innerHTML=LANGS.map(function(l){ return '<a data-l="'+l[0]+'" class="'+(l[0]===to?'on':'')+'">'+l[1]+'</a>'; }).join('')+'<a data-x="1">Hide</a>';
       box.appendChild(o);
       o.onclick=function(e){ e.stopPropagation(); var a=e.target.closest('a'); if(!a) return; if(a.dataset.x){ box.remove(); return; } run(link,host,kind,a.dataset.l); };
-    }catch(e){ box.textContent='Translation is not available right now.'; }
+    }catch(e){ box.textContent='Translation is not available right now.'+(e&&e.message&&/^tr \d+/.test(e.message)?' ('+e.message.replace('tr ','code ')+')':''); }
   }
   function decorate(root){
     if(!root||!root.querySelectorAll) return;
