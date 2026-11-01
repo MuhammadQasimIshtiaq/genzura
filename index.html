@@ -14434,5 +14434,32 @@ body.gz-on-reels #app > nav .nav-btn.active, body.gz-on-reels #app > nav .nav-bt
  function init(){ var v=document.getElementById('shortsView'); if(!v){ return setTimeout(init,300); } new MutationObserver(sync).observe(v,{attributes:true,attributeFilter:['class']}); sync(); }
  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init(); })();
 </script>
+<script id="gzBackJs">
+/* Android Back button: close the top-most open screen first (chat -> inbox -> ...), then go to Home, and only on Home let the app close.
+   MainActivity calls window.__gzBack(); it returns true when it handled the press. */
+(function(){
+  var SCREENS=[['searchScreen','searchCloseBtn'],['playerScreen','playerCloseBtn'],['commentsScreen','commentsCloseBtn'],['channelScreen','channelCloseBtn'],['editChannelScreen','editChannelCloseBtn'],['uploadScreen','uploadCloseBtn'],['editScreen','editCloseBtn'],['liveViewScreen','liveViewCloseBtn'],['goLiveSetupScreen','goLiveCloseBtn'],['exOv','exBack'],['permOv','permClose']];
+  function vis(el){ return el && el.classList && el.classList.contains('show'); }
+  function z(el){ var v=parseInt(getComputedStyle(el).zIndex,10); return isNaN(v)?0:v; }
+  window.__gzBack=function(){
+    try{
+      var st=history.state; if(st&&(st.atOverlay||st.atCall||st.lm)){ history.back(); return true; }
+      var c=[], order=0;
+      document.querySelectorAll('.ig-ov.show').forEach(function(el){ c.push({el:el,z:z(el),o:order++,btn:el.querySelector('.ig-ov-h button, .dm-head button, button')}); });
+      SCREENS.forEach(function(p){ var el=document.getElementById(p[0]); if(vis(el)) c.push({el:el,z:z(el),o:order++,btn:document.getElementById(p[1])}); });
+      var sh=document.getElementById('profileMenuSheet'); if(vis(sh)) c.push({el:sh,z:99999,o:order++,btn:null});
+      if(vis(document.getElementById('goLiveActiveScreen'))) return true; /* never close a running live by accident */
+      if(c.length){
+        c.sort(function(a,b){ return (b.z-a.z)||(b.o-a.o); });
+        var t=c[0]; if(t.btn) t.btn.click(); else t.el.classList.remove('show');
+        return true;
+      }
+      var act=document.querySelector('.view.active');
+      if(act && act.id!=='homeView'){ var hb=document.querySelector('.nav-btn[data-view="homeView"]'); if(hb){ hb.click(); return true; } }
+    }catch(e){}
+    return false;
+  };
+})();
+</script>
 </body>
 </html>
