@@ -138,6 +138,8 @@
       where = m ? (' [' + m[1] + ' ' + m[2] + ']') : (fr ? ' [' + fr.trim().slice(0, 80) + ']' : '');
     }catch(x){}
     try{ console.error('Unhandled rejection:', e.reason); }catch(x){}
+    /* no internet / Firestore offline is normal on a phone — never show it as a red error */
+    if((e.reason && e.reason.code === 'unavailable') || /offline|network|Failed to get document|Failed to fetch|Load failed/i.test(String(msg))) return;
     showGlobalErrorBanner('Unhandled error: ' + msg + where);
   });
   /* Slow internet: if the app has not started after 12 s it reloads itself, up to 3 times, before showing an error */
@@ -1716,7 +1718,7 @@ const auth = firebase.auth();
 auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
 const db = firebase.firestore();
 try{ db.settings({experimentalAutoDetectLongPolling:true, merge:true}); }catch(e){}
-(function(){ function upd(){ var b=document.getElementById('offBar'); if(b) b.style.display = navigator.onLine ? 'none' : 'block'; }
+(function(){ function upd(){ var b=document.getElementById('offBar'); if(b) b.style.display = 'none'; } /* the orange 'No internet' bar is switched off */
   window.addEventListener('online', upd); window.addEventListener('offline', upd); document.addEventListener('DOMContentLoaded', upd); setTimeout(upd, 500); })();
 /* offline mode: chats/feed are cached on the device; messages written offline are sent automatically when the internet returns */
 try{ db.enablePersistence({ synchronizeTabs:true }).catch(()=>{}); }catch(e){}
