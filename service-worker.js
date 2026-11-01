@@ -6,7 +6,7 @@
    - Page (index.html): network-first, lekin agar net slow ho (4 sec) to cached copy turant dikha deta hai.
    - Icons/manifest jaisi static files: cache-first + background mein refresh (instant load). */
 
-const CACHE_NAME = 'gupzy-shell-v101';
+const CACHE_NAME = 'gupzy-shell-v102';
 const APP_SHELL = [
   './',
   './icon-192.png',
@@ -44,6 +44,10 @@ self.addEventListener('fetch', (event) => {
   if (req.headers.has('range')) return;              /* video streaming/seeking */
 
   const isPage = req.mode === 'navigate' || req.destination === 'document';
+  /* Only the app itself ( / and /index.html ) may be served from the saved shell. Every other page (privacy, terms, contact, copyright, about …)
+     is a real page: always load it straight from the network. (Before, a not-yet-saved page fell back to the app shell -> logo animation + white screen.) */
+  const isApp = url.pathname === '/' || url.pathname === '/index.html';
+  if (isPage && !isApp) return;
 
   if (isPage) {
     /* OPEN INSTANTLY: show the saved copy of the app right away and refresh it in the background (new version is used on the next launch).
