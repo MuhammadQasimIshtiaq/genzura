@@ -2973,7 +2973,8 @@ function interleaveBoosted(list, boosted){
    inserted, alternating between Adsterra, HilltopAds (web) / AdMob only (inside the Android app).
 ================================================================ */
 const AD_EVERY = 3; /* har kitne reels ke baad 1 ad slide aaye */
-const ADS_ENABLED = true;
+/* Website: NO third-party ads (needed for Google AdSense approval). Ads only run inside the Android app (AdMob). */
+const ADS_ENABLED = !!window.AndroidAdBridge;
 
 /* ---- ADSTERRA (unique container — sirf pehli baar asli tareeke se load hota hai) ---- */
 const ADSTERRA_CID = 'container-ebe1a2087b1b8d34bbe48d344eabc108';
