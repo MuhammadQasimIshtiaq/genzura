@@ -1664,7 +1664,7 @@ nav{border-top:1px solid var(--border);padding:8px 0 12px;}
 
   <input type="file" id="channelLogoInput" accept="image/*" class="hidden">
   <input type="file" id="channelBannerInput" accept="image/*" class="hidden">
-  <input type="file" id="videoFileInput" accept="video/*" class="hidden">
+  <input type="file" id="videoFileInput" accept="video/*,.mp4,.m4v,.mov,.mkv,.avi,.wmv,.flv,.webm,.3gp,.3g2,.mpg,.mpeg,.mts,.m2ts,.ts,.ogv,.ogg,.vob,.mxf,.asf,.f4v,.rm,.rmvb,.divx" class="hidden">
   <input type="file" id="upThumbFileInput" accept="image/*" class="hidden">
 </div>
 
@@ -4607,7 +4607,7 @@ function startUpload(kind){
     alert('You can only upload 3 reels per day. Please try again after 24 hours.');
     return;
   }
-  pending = { kind, file:null, url:null, chosenThumbBlob:null, chosenThumbUrl:null };
+  pending = { kind, file:null, url:null, chosenThumbBlob:null, chosenThumbUrl:null, noPreview:false };
   videoFileInput.value = '';
   videoFileInput.click();
 }
@@ -4629,6 +4629,7 @@ videoFileInput.addEventListener('change', e=>{
       return;
     }
     pending.file = file; pending.url = url;
+    if(!isFinite(duration) || !probe.videoWidth) pending.noPreview = true;
     openUploadScreen();
   };
 
@@ -4647,10 +4648,11 @@ videoFileInput.addEventListener('change', e=>{
     }
   };
   probe.onerror = ()=>{
+    /* this browser cannot decode the file (HEVC/H.265, MKV, AVI, WMV …): it can still be uploaded — the server converts it.
+       Only the on-screen preview and the automatic thumbnail are unavailable. */
     if(settled) return;
-    settled = true;
-    alert('Could not read this video file. Please try a different video.');
-    videoFileInput.value = '';
+    pending.noPreview = true;
+    proceedWithDuration(NaN);
   };
   /* absolute fallback: never let the upload silently do nothing */
   setTimeout(()=>{
@@ -4709,7 +4711,18 @@ function captureThumbFromScrub(setAsChosen){
     const canvas = document.createElement('canvas');
     canvas.width = scrubVideo.videoWidth || 320;
     canvas.height = scrubVideo.videoHeight || 180;
-    canvas.getContext('2d').drawImage(scrubVideo, 0, 0, canvas.width, canvas.height);
+    const cx = canvas.getContext('2d');
+    cx.drawImage(scrubVideo, 0, 0, canvas.width, canvas.height);
+    /* a black/empty frame means this browser cannot show the video picture (e.g. HEVC): do not use it as the thumbnail */
+    let dark = !scrubVideo.videoWidth;
+    if(!dark){ try{ const d = cx.getImageData(0, 0, canvas.width, canvas.height).data; let sum = 0, n = 0; for(let i = 0; i < d.length; i += 4 * 97){ sum += d[i] + d[i+1] + d[i+2]; n++; } dark = (sum / Math.max(1, n)) < 6; }catch(e0){} }
+    if(dark){
+      pending.chosenThumbBlob = null; pending.chosenThumbUrl = null;
+      const row = document.getElementById('upThumbPreviewRow');
+      if(row) row.innerHTML = '<div style="font-size:12.5px;color:var(--text-faint);padding:8px 2px">This video format cannot be previewed in your browser. It will upload fine and the thumbnail is made automatically — or tap "Upload image instead" to choose your own.</div>';
+      if(setAsChosen) toast('Preview not available for this video — it will still upload');
+      return;
+    }
     canvas.toBlob(blob=>{
       const url = URL.createObjectURL(blob);
       if(setAsChosen){
@@ -4956,12 +4969,19 @@ async function runBackgroundUpload(u){
     item.status = 'Compressing 0%'; renderPendingUploads();
     const pr = await smartCompressVideo(u.file, 'upload', pct=>{ item.status = `Compressing ${pct}%`; renderPendingUploads(); });
     fileToUpload = pr.file; ext = pr.ext;
+    if(!pr.compressed){ const oe = ((u.file.name||'').split('.').pop()||'').toLowerCase(); if(/^(mp4|m4v|mov|mkv|avi|wmv|flv|webm|3gp|3g2|mpg|mpeg|mts|m2ts|ts|ogv|ogg|vob|mxf|asf|f4v)$/.test(oe)) ext = oe; }
     item.status = 'Uploading…'; renderPendingUploads();
 
-    const videoURL = await uploadToCloudinary(fileToUpload, 'video', null, `video_${currentUser.uid}_${ts}.${ext}`);
+    let videoURL = await uploadToCloudinary(fileToUpload, 'video', null, `video_${currentUser.uid}_${ts}.${ext}`);
+    /* other formats (mov, mkv, avi …) are stored as uploaded; ask Cloudinary for the web-playable MP4 version of it */
+    if(videoURL && videoURL.includes('/video/upload/') && !/\.(mp4|webm)(\?.*)?$/i.test(videoURL)) videoURL = videoURL.replace(/\.[a-z0-9]+(\?.*)?$/i, '.mp4');
     let thumbURL = null;
     if(u.thumbBlob){
       thumbURL = await uploadToCloudinary(u.thumbBlob, 'image', null, `thumb_${currentUser.uid}_${ts}.jpg`);
+    }
+    if(!thumbURL && videoURL && videoURL.includes('/video/upload/')){
+      /* no usable local thumbnail: let Cloudinary cut one frame (second 1) out of the uploaded video */
+      thumbURL = videoURL.replace('/video/upload/', '/video/upload/so_1,f_jpg,q_auto,w_540/').replace(/\.[a-z0-9]+(\?.*)?$/i, '.jpg');
     }
     await db.collection('videos').add({
       title: u.title, desc: u.desc, category: u.category, visibility: u.visibility, kind: u.kind,
