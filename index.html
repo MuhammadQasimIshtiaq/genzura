@@ -9307,7 +9307,7 @@ $('xArS').onclick=async()=>{if(!selMode){selMode=true;$('xArS').textContent='Add
  try{await db.collection('highlights').add({uid:me(),title,cover:items[0].type==='image'?items[0].url:null,items,createdAt:FV.serverTimestamp()});toast('Highlight added ✓');$('xAr').classList.remove('show');loadHL('own');}catch(er){toast('Failed: '+er.message);}};
 /* highlights row (own profile + other channels) */
 async function hlRow(uid,own){const L=(await db.collection('highlights').where('uid','==',uid).limit(30).get().catch(()=>({docs:[]}))).docs.map(d=>Object.assign({id:d.id},d.data())).sort((a,b)=>ms(a.createdAt)-ms(b.createdAt));
- return {L,html:(own?'<div class="c" data-a="ar"><i>🗂</i>Archive</div>':'')+L.map(h=>`<div class="c" data-h="${h.id}"><i style="${h.cover?`background-image:url(${esc(M(h.cover))})`:''}">${h.cover?'':'★'}</i>${esc(h.title)}</div>`).join('')};}
+ return {L,html:(own?'<div class="c" data-a="ar"><i><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><rect x="3" y="4" width="18" height="4.5" rx="1.2"/><path d="M5 8.5V18a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5"/><path d="M9.5 12.5h5"/></svg></i>Archive</div>':'')+L.map(h=>`<div class="c" data-h="${h.id}"><i style="${h.cover?`background-image:url(${esc(M(h.cover))})`:''}">${h.cover?'':'★'}</i>${esc(h.title)}</div>`).join('')};}
 function wire(box,L){box.onclick=e=>{const c=e.target.closest('.c');if(!c)return;if(c.dataset.a)return openArchive();const h=L.find(x=>x.id===c.dataset.h);if(h)playHL(h);};
  box.oncontextmenu=e=>{const c=e.target.closest('[data-h]');if(!c||!box.dataset.own)return;e.preventDefault();gzConfirm().then(ok=>{if(ok)db.collection('highlights').doc(c.dataset.h).delete().then(()=>loadHL('own'));});};}
 async function loadHL(k){if(!currentUser)return;const box=$('xHlOwn');if(!box)return;const r=await hlRow(me(),true);box.innerHTML=r.html;wire(box,r.L);}
@@ -14490,6 +14490,12 @@ window.gzConfirm=function(msg,okLabel){
   })();
 })();
 </script>
+<style id="gzDesktopCenter">
+/* desktop: the home feed (stories, aura row, posts) sits in the middle of the page */
+@media (min-width:900px){
+  #homeView > #homeStories, #homeView > #auStrip, #homeView > #homeFeed{width:min(630px,100%);margin-left:auto;margin-right:auto;box-sizing:border-box;}
+}
+</style>
 <style id="gzPPcss">
 .gz-pp{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.85);width:76px;height:76px;border-radius:50%;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:6;pointer-events:none;opacity:0;transition:opacity .18s ease,transform .18s ease;}
 .gz-pp.show{opacity:1;transform:translate(-50%,-50%) scale(1);}
