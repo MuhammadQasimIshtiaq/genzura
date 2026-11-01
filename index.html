@@ -2653,14 +2653,28 @@ function applyChannelToUI(){
    FEED LISTENERS (real-time from Firestore)
 ================================================================ */
 function startPublicFeedListener(){
-  db.collection('videos').where('kind','==','short').limit(20)
-    .onSnapshot(async snap=>{
+  /* Newest reels first. Before: .limit(20) with no order always returned the same 20 reels (by document id), so new uploads never showed up.
+     Now: newest 80 by createdAt; if Firestore wants a composite index for that, fall back to a bigger unordered read sorted on the phone. */
+  const cms = v => (v && v.createdAt && v.createdAt.toMillis) ? v.createdAt.toMillis() : 0;
+  let usedFallback = false;
+  const handle = async snap=>{
       if(window.__wpActive) return; /* Watch Party: everyone keeps the same shared playlist */
       await sharedVideoReady; /* shared-link video must be known before the first render */
       const structural = snap.docChanges().some(ch => ch.type === 'added' || ch.type === 'removed');
       if(structural || shortsData.length===0){
         let fresh = snap.docs.map(d=>({id:d.id,...d.data()})).filter(v=> !isBlockedUid(v.channelId));
-        shortsData = applyFeedWeighting(fresh);
+        fresh.sort((a,b)=> cms(b)-cms(a));
+        if(usedFallback) fresh = fresh.slice(0,120);
+        const DAY3 = Date.now() - 3*86400000;
+        const brandNew = fresh.filter(v => cms(v) > DAY3);
+        let list = applyFeedWeighting(fresh);
+        /* uploads from the last 3 days always come first (newest first), then the rest in the usual mixed order */
+        const nid = new Set(brandNew.map(v=>v.id));
+        const pinned = (list[0] && list[0].id === SHARED_VID_ID) ? [list[0]] : [];
+        list = [...pinned, ...brandNew.filter(v=>pinned.indexOf(v)<0), ...list.filter(v=>!nid.has(v.id) && pinned.indexOf(v)<0)];
+        /* every reel exactly once per round (boosts/promos could repeat one) - the feed only restarts after all have been shown */
+        const seen = new Set(); list = list.filter(v=>{ if(seen.has(v.id)) return false; seen.add(v.id); return true; });
+        shortsData = list;
         renderShorts();
         handleSharedVideoLink();
       }else{
@@ -2672,7 +2686,13 @@ function startPublicFeedListener(){
         shortsData = shortsData.map(item => freshById[item.id] || item);
         updateShortsCounts();
       }
-    }, err=>{ console.error(err); toast('Reels error: ' + err.message); });
+  };
+  db.collection('videos').where('kind','==','short').orderBy('createdAt','desc').limit(80)
+    .onSnapshot(handle, err=>{
+      console.warn('reels ordered query failed, using fallback:', err && err.message);
+      usedFallback = true;
+      db.collection('videos').where('kind','==','short').limit(300).onSnapshot(handle, e2=>{ console.error(e2); toast('Reels error: ' + e2.message); });
+    });
 }
 
 /* if someone opened a shared video link (?v=VIDEO_ID), jump straight to that video —
