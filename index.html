@@ -6178,7 +6178,7 @@ if('serviceWorker' in navigator){
 
   function renderTray(){
     const tray = $('storyTray'); if(!tray) return;
-    if(!currentUser){ tray.classList.add('st-empty'); tray.innerHTML = ''; return; }
+    if(!currentUser){ tray.classList.add('st-empty'); tray.innerHTML = ''; try{ localStorage.removeItem('gz_tray'); }catch(e){} return; }
     tray.classList.remove('st-empty');
     const myName = (currentChannel && currentChannel.name) || 'You';
     const myLogo = currentChannel && currentChannel.logoURL;
@@ -6193,6 +6193,10 @@ if('serviceWorker' in navigator){
         <div class="st-name">${esc(g.name)}</div></div>`;
     });
     tray.innerHTML = html;
+    attachTray(tray);
+    try{ localStorage.setItem('gz_tray', JSON.stringify({u:currentUser.uid, h:html})); }catch(e){}
+  }
+  function attachTray(tray){
     tray.querySelectorAll('.st-item').forEach(el=>{
       el.addEventListener('click', e=>{
         const act = (e.target.closest('[data-act="create"]') ? 'create' : el.dataset.act);
@@ -6201,6 +6205,8 @@ if('serviceWorker' in navigator){
       });
     });
   }
+  /* show the story row INSTANTLY from the last visit (no empty gap, no jump when the real data arrives) */
+  try{ const c = JSON.parse(localStorage.getItem('gz_tray')||'null'); const tray = $('storyTray'); if(c && c.h && tray){ tray.classList.remove('st-empty'); tray.innerHTML = c.h; attachTray(tray); } }catch(e){}
 
   /* ---------------- viewer ---------------- */
   const V = { gi:0, ii:0, open:false, paused:false, ready:false, elapsed:0, last:0, raf:0, sent:{} };
@@ -12568,9 +12574,8 @@ function openATStudioApp(tab){
     var u=uid(), s=strip(); if(!u||!s||busy) return;
     busy=true;
     try{
-      if(force||!cache.loaded) await loadMine();
-      await loadMyPresence();
-      var ids=await friendIds(), auras={}, pres={};
+      var _r=await Promise.all([ (force||!cache.loaded)?loadMine():null, loadMyPresence(), friendIds() ]);
+      var ids=_r[2], auras={}, pres={};
       if(ids.length){ var r=await Promise.all([fetchIn('auras',ids),fetchIn('presence',ids)]); auras=r[0]; pres=r[1]; }
       items=ids.filter(function(id){ return auras[id] && !auras[id].hidden; }).map(function(id){
         var A=normalise(auras[id]); return {id:id,A:A,owner:auras[id].owner,r:reaction(pres[id])};
@@ -12582,12 +12587,13 @@ function openATStudioApp(tab){
         return '<div class="au-it" data-id="'+esc(f.id)+'"><div class="au-ring" style="background:linear-gradient(135deg,'+f.A.c[0]+','+f.A.c[1]+')"><div class="au-av">'+avatarSvg(f.A.av,f.A.c,f.r?f.r.x:'happy')+'</div></div>'+bubble(f.r)+'<div class="au-nm">'+esc((f.owner||'Friend').split(' ')[0])+'</div></div>';
       }).join('');
       s.innerHTML=h; s.classList.toggle('empty',!h);
+      try{ if(h) localStorage.setItem('gz_aura_strip',JSON.stringify({u:u,h:h})); else localStorage.removeItem('gz_aura_strip'); }catch(e3){}
     }catch(e){}
     busy=false;
   }
   function startStrip(){
     if(timer) clearInterval(timer);
-    setTimeout(function(){ refreshStrip(true); },1500);
+    setTimeout(function(){ refreshStrip(true); },200);
     timer=setInterval(function(){ if(!document.hidden) refreshStrip(false); },90000);
   }
 
@@ -12598,9 +12604,14 @@ function openATStudioApp(tab){
     $('auPill').addEventListener('click',openMine);
   }
   mountPill();
+  /* show the Aura row instantly from the last visit */
+  try{ var c1=JSON.parse(localStorage.getItem('gz_aura_strip')||'null'); if(c1&&c1.h){ var s1=strip(); if(s1){ s1.innerHTML=c1.h; s1.classList.remove('empty'); } } }catch(e){}
   auth.onAuthStateChanged(function(user){
     cache={mine:null,loaded:false}; items=[]; fr={u:null,t:0,list:[]};
-    var s=$('auStrip'); if(s){ s.innerHTML=''; s.classList.add('empty'); }
+    var s=$('auStrip'), keep=false;
+    try{ var c0=JSON.parse(localStorage.getItem('gz_aura_strip')||'null'); keep=!!(user && c0 && c0.u===user.uid && s && s.innerHTML); }catch(e){}
+    if(s && !keep){ s.innerHTML=''; s.classList.add('empty'); }
+    if(!user){ try{ localStorage.removeItem('gz_aura_strip'); }catch(e){} }
     if(user) startStrip(); else if(timer){ clearInterval(timer); timer=null; }
   });
   window.__gzAura={open:openMine,svg:avatarSvg};
