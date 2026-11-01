@@ -3239,6 +3239,8 @@ function appendShortsBatch(scroll){
           if(vidEl.currentTime > 0.15){ vidEl.currentTime = 0; } /* only seek when actually resuming a previously-watched reel — avoids a pointless buffering stall on first-time views */
           if(window.__reelsBlocked && window.__reelsBlocked()) return; /* Messages/Explore is open on top — stay paused */
           vidEl.play().catch(()=>{ vidEl.muted = true; vidEl.play().catch(()=>{}); });
+          /* the address bar always shows the link of the reel that is playing (like YouTube Shorts) */
+          try{ const sv = document.getElementById('shortsView'); if(sv && sv.classList.contains('active') && s.id){ history.replaceState(history.state, '', location.pathname + '?v=' + encodeURIComponent(s.id)); if(s.title) document.title = String(s.title).slice(0,70) + ' - Gupzy'; } }catch(e){}
           if(!viewedThisSession.has(s.id)){
             viewTimer = setTimeout(()=> registerView(s.id), 3000);
           }
@@ -3529,8 +3531,9 @@ document.getElementById('shortsScroll').addEventListener('click', e=>{
 
 /* big centre icon on a reel: PAUSE icon stays while the reel is paused, PLAY icon flashes when it resumes */
 function reelPPIcon(slide, kind){
+  const host = slide.querySelector('.short-video-box') || slide;   /* centred on the video itself (desktop: the 400px box, not the whole page) */
   let el = slide.querySelector('.gz-pp');
-  if(!el){ el = document.createElement('div'); el.className = 'gz-pp'; slide.appendChild(el); }
+  if(!el){ el = document.createElement('div'); el.className = 'gz-pp'; host.appendChild(el); }
   clearTimeout(el._t); el.dataset.k = kind;
   el.innerHTML = kind === 'pause'
     ? '<svg viewBox="0 0 24 24" width="38" height="38" fill="#fff"><rect x="6" y="4.5" width="4.2" height="15" rx="1.2"/><rect x="13.8" y="4.5" width="4.2" height="15" rx="1.2"/></svg>'
@@ -14498,10 +14501,29 @@ body.gz-on-reels #app > header svg, body.gz-on-reels #app > header .top-icons sv
 body.gz-on-reels #app > header .brand span{color:#fff;}
 body.gz-on-reels #app > nav .nav-btn:not(.active) svg{stroke:#a8a8a8;}
 body.gz-on-reels #app > nav .nav-btn.active, body.gz-on-reels #app > nav .nav-btn.active svg{color:#fff;stroke:#fff;}
+body.gz-on-reels, html.gz-on-reels{background:#000 !important;}
+.gz-ud{display:none;position:absolute;right:28px;top:50%;transform:translateY(-50%);flex-direction:column;gap:14px;z-index:20;}
+.gz-ud button{width:46px;height:46px;border-radius:50%;border:0;background:rgba(255,255,255,.16);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.gz-ud button:hover{background:rgba(255,255,255,.3);}
+.gz-ud svg{width:24px;height:24px;stroke:#fff;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;}
+@media (min-width:900px){ body.gz-on-reels .gz-ud{display:flex;} }
 </style>
 <script>
-(function(){ function sync(){ try{ var v=document.getElementById('shortsView'); var on=!!(v&&v.classList.contains('active')); document.body.classList.toggle('gz-on-reels', on); try{ if(window.AndroidUi) window.AndroidUi.setBars(on); }catch(e2){} }catch(e){} }
- function init(){ var v=document.getElementById('shortsView'); if(!v){ return setTimeout(init,300); } new MutationObserver(sync).observe(v,{attributes:true,attributeFilter:['class']}); sync(); }
+(function(){ function sync(){ try{ var v=document.getElementById('shortsView'); var on=!!(v&&v.classList.contains('active')); document.body.classList.toggle('gz-on-reels', on); document.documentElement.classList.toggle('gz-on-reels', on); if(!on){ try{ if(/[?&]v=/.test(location.search)){ history.replaceState(history.state,'',location.pathname); document.title=window.__gzTitle0||document.title; } }catch(e0){} } try{ if(window.AndroidUi) window.AndroidUi.setBars(on); }catch(e2){} }catch(e){} }
+ function init(){ var v=document.getElementById('shortsView'); if(!v){ return setTimeout(init,300); } new MutationObserver(sync).observe(v,{attributes:true,attributeFilter:['class']}); sync();
+   window.__gzTitle0=document.title;
+   if(!document.getElementById('gzUD')){ var ud=document.createElement('div'); ud.id='gzUD'; ud.className='gz-ud';
+     ud.innerHTML='<button type="button" id="gzUp" aria-label="Previous reel"><svg viewBox="0 0 24 24"><polyline points="6 15 12 9 18 15"/></svg></button><button type="button" id="gzDn" aria-label="Next reel"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button>';
+     v.appendChild(ud);
+     ud.addEventListener('click',function(e){ var b=e.target.closest('button'); if(!b) return; if(b.id==='gzUp'){ window.__reelPrev&&window.__reelPrev(); } else { window.__reelNext&&window.__reelNext(); } });
+     document.addEventListener('keydown',function(e){
+       if(!document.body.classList.contains('gz-on-reels')) return;
+       var t=e.target, tag=t&&t.tagName; if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||(t&&t.isContentEditable)) return;
+       if(document.querySelector('.ig-ov.show,#commentsScreen.show,#searchScreen.show,#channelScreen.show,#playerScreen.show,#uploadScreen.show')) return;
+       if(e.key==='ArrowDown'||e.key==='PageDown'||e.key==='j'){ e.preventDefault(); window.__reelNext&&window.__reelNext(); }
+       else if(e.key==='ArrowUp'||e.key==='PageUp'||e.key==='k'){ e.preventDefault(); window.__reelPrev&&window.__reelPrev(); }
+     });
+   } }
  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init(); })();
 </script>
 <script id="gzBackJs">
