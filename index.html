@@ -7419,8 +7419,12 @@ function mixFeed(list){
     return {p,k:Math.random()+0.3*(1-i/n)+(own?5:0)};
   }).sort((a,b)=>b.k-a.k).map(x=>x.p);
 }
-async function loadFeed(){
+let feedUid=null;
+/* the feed is mixed ONLY when it is loaded / refreshed (app start, tap Home again, new post, login change) — never while you are scrolling or switching tabs */
+async function loadFeed(force){
   const f=$('homeFeed');
+  const uidNow=(currentUser&&currentUser.uid)||'';
+  if(loaded&&!force&&feedUid===uidNow)return;
   if(!loaded)f.innerHTML='<div class="ig-skel"></div><div class="ig-skel"></div>';
   try{
     if(window.__chrono&&window.__chrono.on()){
@@ -7433,10 +7437,10 @@ async function loadFeed(){
       const chk=await Promise.all(posts.map(p=>db.collection('postLikes').doc(currentUser.uid+'_'+p.id).get().catch(()=>null)));
       likedSet={};chk.forEach((c,i)=>{if(c&&c.exists)likedSet[posts[i].id]=1;});
     }
-    loaded=true;renderFeed();
+    loaded=true;feedUid=uidNow;renderFeed();
   }catch(e){f.innerHTML='<div class="ig-empty">Could not load feed: '+esc(e.message)+'</div>';}
 }
-window.__ig=window.__ig||{};window.__ig.reloadFeed=()=>loadFeed();
+window.__ig=window.__ig||{};window.__ig.reloadFeed=()=>loadFeed(true);
 /* ---- Time Capsule: a post that stays locked until unlockAt ---- */
 function capMs(p){const t=p&&p.unlockAt;return t?(t.toMillis?t.toMillis():(t.seconds?t.seconds*1000:(+t||0))):0;}
 function capLocked(p){return capMs(p)>Date.now();}
@@ -7482,6 +7486,24 @@ function renderFeed(){
   f.innerHTML=posts.map((p,i)=>postHTML(p)+((adsOn&&(i+1)%3===0)?window.gzPostAds.html(adN++):'')).join('');
   if(adsOn)try{window.gzPostAds.mount(f);}catch(e){}
   observeVideos();
+  feedPass=1;feedAdN=adN;armFeedLoop();
+}
+/* endless feed: when the last post is reached, the same posts come again (like Reels) — it never runs out */
+let feedPass=1,feedAdN=0,feedLoopIO=null;
+function armFeedLoop(){
+  const f=$('homeFeed'),last=f&&f.lastElementChild;
+  if(feedLoopIO){feedLoopIO.disconnect();feedLoopIO=null;}
+  if(!last||!posts.length)return;
+  feedLoopIO=new IntersectionObserver(es=>{
+    if(!es.some(e=>e.isIntersecting))return;
+    feedLoopIO.disconnect();feedLoopIO=null;
+    if(feedPass>=40)return;feedPass++;
+    const adsOn=!!(window.gzPostAds&&window.gzPostAds.on());
+    f.insertAdjacentHTML('beforeend',posts.map((p,i)=>postHTML(p)+((adsOn&&(i+1)%3===0)?window.gzPostAds.html(feedAdN++):'')).join(''));
+    if(adsOn)try{window.gzPostAds.mount(f);}catch(e){}
+    observeVideos();armFeedLoop();
+  },{root:$('homeView'),rootMargin:'800px 0px'});
+  feedLoopIO.observe(last);
 }
 let vo;
 function observeVideos(){
@@ -7696,7 +7718,7 @@ $('igShare').onclick=async()=>{
     tagged.forEach(u=>notify(u.uid,'tag',{postId:nref.id,thumb:thumbOf({media})}));
     busy=false;$('igProg').classList.remove('show');$('igHint').textContent='';
     $('igNew').classList.remove('show');files.forEach(f=>URL.revokeObjectURL(f.url));files=[];tagged=[];renderTags();
-    toast(unlockMs>0?'⏳ Time capsule sealed until '+capDateStr(unlockMs):'Post shared!');goTab('homeView');loadFeed();document.dispatchEvent(new Event('ig:posted'));
+    toast(unlockMs>0?'⏳ Time capsule sealed until '+capDateStr(unlockMs):'Post shared!');goTab('homeView');loadFeed(true);document.dispatchEvent(new Event('ig:posted'));
   }catch(er){console.error('post fail',stage,er);busy=false;$('igShare').disabled=false;$('igProg').classList.remove('show');$('igHint').style.color='#ff5c5c';$('igHint').textContent='Post fail ('+(stage==='upload'?'Cloudinary upload':'Firebase save')+'): '+(er&&er.message||er);toast('Post fail');}
 };
 
@@ -7813,11 +7835,13 @@ sheetBox.querySelector('.sheet-handle').insertAdjacentHTML('afterend','<div clas
 $('sheetPost').addEventListener('click',()=>{$('sheetBackdrop').classList.remove('show');openNew();});
 
 /* ---------- tab helper + home/notif tab behaviour ---------- */
+window.__igCurTab='homeView';
 function goTab(id){const b=document.querySelector('.nav-btn[data-view="'+id+'"]');if(b)b.click();}
 document.addEventListener('click',e=>{
   const b=e.target.closest('.nav-btn[data-view]');if(!b)return;
   const id=b.dataset.view;
-  if(id!=='homeView')igPauseHome();else{loadFeed();$('homeView').scrollTop=0;setTimeout(observeVideos,300);}
+  const tapAgain=(id==='homeView'&&window.__igCurTab==='homeView'); window.__igCurTab=id;
+  if(id!=='homeView')igPauseHome();else if(tapAgain){loadFeed(true);$('homeView').scrollTop=0;setTimeout(observeVideos,300);}else{setTimeout(observeVideos,300);}
   if(id==='notifView'){if(!currentUser){requireAuth();return;}renderNotifs();markRead();}
 });
 
