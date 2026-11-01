@@ -5037,11 +5037,24 @@ document.getElementById('channelCloseBtn').addEventListener('click', ()=>{
   if(visible){ const v = visible.querySelector('video'); if(v) v.play().catch(()=>{}); }
 });
 
+/* INSTANT reads: answer from the phone's local copy right away (0 s) when we have one, and still ask the server so the copy is fresh for next time.
+   First ever open of a screen needs the network once; every open after that is instant. */
+function fastGet(ref){
+  const server = ref.get();
+  return ref.get({source:'cache'}).then(c=>{
+    const has = (c && (c.exists === true || (c.exists === undefined && c.empty === false)));
+    if(has){ server.catch(()=>{}); return c; }
+    return server;
+  }).catch(()=> server);
+}
 async function openChannelScreen(channelId, fallbackName, fallbackLogo){
   /* start every network read at once, show the screen immediately (before: one read after another = several seconds) */
-  const _chP = db.collection('channels').doc(channelId).get();
+  const _chP = fastGet(db.collection('channels').doc(channelId));
   const _subP = (currentUser && channelId !== currentUser.uid) ? db.collection('subscriptions').doc(`${currentUser.uid}_${channelId}`).get() : null;
-  const _vidP = db.collection('videos').where('channelId','==',channelId).get();
+  const _vq = db.collection('videos').where('channelId','==',channelId);
+  let _vSeen = false; try{ _vSeen = !!localStorage.getItem('gz_vf_'+channelId); }catch(e){}
+  /* the local copy of a channel's videos is only trusted after the full list was downloaded once on this phone */
+  const _vidP = _vSeen ? fastGet(_vq) : _vq.get().then(r=>{ try{ localStorage.setItem('gz_vf_'+channelId,'1'); }catch(e){} return r; });
   if(_subP) _subP.catch(()=>{});
   _chP.catch(()=>{});
   document.querySelectorAll('#shortsScroll video').forEach(v=> v.pause());
