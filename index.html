@@ -3219,7 +3219,7 @@ function appendShortsBatch(scroll){
           if(viewTimer){ clearTimeout(viewTimer); viewTimer = null; }
         }
       });
-    }, {threshold:0.6}).observe(slide);
+    }, {threshold:0.45}).observe(slide);
 
     /* when this reel comes into view: load its like/follow/badge state, and warm up the NEXT reel
        (its state + its video) so swiping feels instant. Ad slides have no video, so skip over them. */
@@ -3233,7 +3233,11 @@ function appendShortsBatch(scroll){
           if(nx){
             if(nx._hydrate) nx._hydrate();
             const nextVid = nx.querySelector('video');
-            if(nextVid && !nextVid.src && nextVid.dataset.src){ nextVid.preload = 'metadata'; nextVid.src = optimizedVideoUrl(nextVid.dataset.src); }
+            if(nextVid){ if(!nextVid.src && nextVid.dataset.src){ nextVid.preload = 'auto'; nextVid.src = optimizedVideoUrl(nextVid.dataset.src); } else if(nextVid.preload !== 'auto'){ nextVid.preload = 'auto'; } }
+            /* also warm the reel after next (headers + first chunk) so a quick double swipe is still instant */
+            let nx2 = nx.nextElementSibling; if(nx2 && nx2.classList.contains('sponsored-slide')) nx2 = nx2.nextElementSibling;
+            const v2 = nx2 && nx2.querySelector && nx2.querySelector('video');
+            if(v2 && !v2.src && v2.dataset.src){ v2.preload = 'metadata'; v2.src = optimizedVideoUrl(v2.dataset.src); }
           }
         }
       });
@@ -3404,7 +3408,7 @@ function releaseFarVideos(activeSlide){
   for(let i = 0; i < kids.length; i++){
     const v = kids[i].querySelector && kids[i].querySelector('video');
     if(!v) continue;
-    if(Math.abs(i - ai) <= 1){ if(i !== ai && !v.paused) v.pause(); continue; }
+    if(i - ai <= 2 && i - ai >= -1){ if(i !== ai && !v.paused) v.pause(); continue; } /* keep 1 behind + 2 ahead loaded */
     if(v.getAttribute('src')){ v.pause(); v.removeAttribute('src'); v.load(); }
   }
 }
