@@ -8,7 +8,13 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/gupchats/gupchats-favicon-32.png">
 <link rel="icon" type="image/png" sizes="48x48" href="/gupchats/gupchats-favicon-48.png">
 <link rel="apple-touch-icon" href="/gupchats/gupchats-apple-touch-icon.png">
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
 <style>
+#boot{position:fixed;inset:0;z-index:200;background:#fff;display:flex;align-items:center;justify-content:center;transition:opacity .25s}
+#boot img{width:150px;height:auto;animation:bootpulse 1.4s ease-in-out infinite}
+#boot.out{opacity:0;pointer-events:none}
+@keyframes bootpulse{0%,100%{transform:scale(.94);opacity:.85}50%{transform:scale(1.04);opacity:1}}
 :root{--bg:#fff;--surface:#f0f2f5;--text:#050505;--dim:#65676b;--blue:#0866ff;--blue-soft:#e7f0ff;--border:#e4e6eb;--red:#e41e3f;--green:#31a24c}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
@@ -152,6 +158,8 @@ hr{border:0;border-top:1px solid var(--border);margin:8px 0}
 </style>
 </head>
 <body>
+<div id="boot"><img src="/gupchats/gupchats-emblem.png" alt=""></div>
+<script>setTimeout(function(){var b=document.getElementById("boot");if(b&&!b.querySelector("button")){var t=document.createElement("button");t.textContent="Slow connection – tap to retry";t.style.cssText="position:absolute;bottom:18%;border:0;background:#0866ff;color:#fff;padding:12px 24px;border-radius:22px;font-size:16px";t.onclick=function(){location.reload()};b.appendChild(t)}},15000)</script>
 
 <div id="login" class="screen hidden">
   <img class="wordmark logo" src="/gupchats/gupchats-logo.png" alt="GupChats">
@@ -282,13 +290,13 @@ function fmtTime(t){
   return d.toLocaleDateString([], {month:'short',day:'numeric'});
 }
 function fmtDur(s){ s=Math.max(0,Math.round(s||0)); return Math.floor(s/60)+':'+('0'+(s%60)).slice(-2); }
-function show(id){ ['login','nochannel','app'].forEach(function(x){ $(x).classList.toggle('hidden', x!==id); }); }
+function show(id){ var bt=document.getElementById('boot'); if(bt){ bt.classList.add('out'); setTimeout(function(){ bt.remove(); },300); } ['login','nochannel','app'].forEach(function(x){ $(x).classList.toggle('hidden', x!==id); }); }
 function safeUrl(u){ return typeof u==='string' && /^https:\/\/res\.cloudinary\.com\//.test(u); }
 
 /* small in-page confirm (alert/confirm are not reliable inside a WebView) */
 function ask(title,text,okLabel,danger){
   return new Promise(function(res){
-    var bg=document.createElement('div'); bg.className='sheetbg'; bg.style.zIndex=90;
+    var bg=document.createElement('div'); bg.className='sheetbg'; bg.style.zIndex=120;
     bg.innerHTML='<div class="sheet"><div class="sh-t">'+esc(title)+'</div><p class="sh-p">'+esc(text)+'</p><button class="btn" id="aOk" style="width:100%;padding:13px;'+(danger?'background:var(--red)':'')+'">'+esc(okLabel||'OK')+'</button><button class="btn gray" id="aNo" style="width:100%;padding:13px;margin-top:8px">Cancel</button></div>';
     document.body.appendChild(bg);
     bg.querySelector('#aOk').onclick=function(){ bg.remove(); res(true); };
