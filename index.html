@@ -13500,7 +13500,7 @@ window.gzConfirm=function(msg,okLabel){
         +'<div class="ld-row"><button class="ld-btn" id="ldPost">Post ETA</button><button class="ld-btn alt" id="ldCancel">Cancel</button></div></div>';
     } else h+='<button class="ld-btn wide" id="ldNewEta">＋ I am coming… (post ETA)</button>';
     var list=items.filter(function(x){return x.kind==='eta';});
-    if(!list.length) return h+'<div class="ld-empty">No ETAs yet.<br>A friend said "I'll be there in 5 min"? Write it here — if they're late, the group will hit "Busted" 🚨</div>';
+    if(!list.length) return h+'<div class="ld-empty">No ETAs yet.<br>A friend said "I will be there in 5 min"? Write it here — if they are late, the group will hit "Busted" 🚨</div>';
     return h+list.map(function(x){
       var mine=x.uid===me(), due=x.etaAt||0, now=Date.now(), over=now>due, canBust=now>due+GRACE;
       var cls=x.status==='busted'?'bust':(x.status==='ok'?'ok':''), badge='';
