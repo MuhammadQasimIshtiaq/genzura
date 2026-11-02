@@ -484,6 +484,27 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Gupchats key backup: private. Holds the user's private key encrypted with their own backup PIN (server never sees the PIN).
+    match /gcKeyBackups/{uid} {
+      allow read: if signedIn() && me() == uid;
+      allow create, update: if signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['v', 'iter', 'salt', 'iv', 'ct', 'pub', 'updatedAt'])
+        && request.resource.data.ct is string && request.resource.data.ct.size() < 4000
+        && request.resource.data.pub is string && request.resource.data.pub.size() < 200;
+      allow delete: if signedIn() && me() == uid;
+    }
+
+    // Gupchats online status: readable by signed-in users, written only by the owner
+    match /gcPresence/{uid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['uid', 'online', 'hidden', 'lastSeen'])
+        && request.resource.data.uid == me()
+        && request.resource.data.online is bool
+        && request.resource.data.get('hidden', false) is bool;
+      allow delete: if signedIn() && me() == uid;
+    }
+
     match /gcChats/{chatId} {
       allow read: if signedIn() && (
         (resource == null && inDmId(chatId))

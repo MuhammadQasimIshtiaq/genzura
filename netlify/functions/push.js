@@ -29,6 +29,7 @@ const TEXT = {
   follow: "started following you", reelLike: "liked your reel", reelComment: "commented on your reel",
   mention: "mentioned you", reply: "replied to your comment", commentLike: "liked your comment", tag: "tagged you in a post",
   game: "invited you to play Truth · Dare · Roast 🎲",
+  gcmessage: "sent you a message",   // Gupchats app (separate FCM tokens: app == "gc")
 };
 
 exports.handler = async (event) => {
@@ -68,6 +69,13 @@ exports.handler = async (event) => {
       const cr = await fetch(`${DOCS}/chats/${cid}`, {headers: A});
       const cd = await cr.json();
       const members = ((cd.fields && cd.fields.members && cd.fields.members.arrayValue.values) || []).map((v) => v.stringValue);
+      if (!members.includes(from)) return out(403, {error: "not a member"});
+      targets = members.filter((u) => u !== from);
+    } else if (kind === "gcmessage") {
+      const cid = String(body.chatId || "").replace(/[^A-Za-z0-9_\-]/g, "");
+      const cr = await fetch(`${DOCS}/gcChats/${cid}`, {headers: A});
+      const cd = await cr.json();
+      const members = ((cd.fields && cd.fields.members && cd.fields.members.arrayValue && cd.fields.members.arrayValue.values) || []).map((v) => v.stringValue);
       if (!members.includes(from)) return out(403, {error: "not a member"});
       targets = members.filter((u) => u !== from);
     } else {
@@ -117,10 +125,13 @@ exports.handler = async (event) => {
         from: [{collectionId: "fcmTokens"}],
         where: {fieldFilter: {field: {fieldPath: "uid"}, op: "EQUAL", value: {stringValue: uid}}}, limit: 10}})});
       const rows = await qr.json();
-      const tokens = (Array.isArray(rows) ? rows : []).filter((r) => r.document).map((r) => r.document.name.split("/").pop());
+      const isGc = kind === "gcmessage";
+      const tokens = (Array.isArray(rows) ? rows : []).filter((r) => r.document)
+        .filter((r) => { const f = r.document.fields || {}; const a = f.app && f.app.stringValue; return isGc ? a === "gc" : a !== "gc"; })
+        .map((r) => r.document.name.split("/").pop());
       for (const token of tokens) {
         const mr = await fetch(`https://fcm.googleapis.com/v1/projects/${pid}/messages:send`, {method: "POST", headers: A,
-          body: JSON.stringify({message: {token, data: {title: name, fromUid: String(from || ""), body: TEXT[kind] + (kind === "call" ? (body.type === "video" ? " (video)" : " (voice)") : ""), tag: kind === "message" ? "c_" + (body.chatId || "") : "n_" + kind, callId: kind === "call" ? String(body.callId || "").replace(/[^A-Za-z0-9]/g, "") : ""},
+          body: JSON.stringify({message: {token, data: {title: name, fromUid: String(from || ""), body: TEXT[kind] + (kind === "call" ? (body.type === "video" ? " (video)" : " (voice)") : ""), tag: (kind === "message" || kind === "gcmessage") ? "c_" + (body.chatId || "") : "n_" + kind, app: isGc ? "gc" : "gupzy", callId: kind === "call" ? String(body.callId || "").replace(/[^A-Za-z0-9]/g, "") : ""},
             webpush: {headers: {Urgency: "high", TTL: kind === "call" ? "45" : "86400"}}, android: {priority: "HIGH", ttl: kind === "call" ? "45s" : "86400s"}}})});
         if (mr.ok) sent++;
         else if (mr.status === 404 || mr.status === 400) { await fetch(`${DOCS}/fcmTokens/${encodeURIComponent(token)}`, {method: "DELETE", headers: A}).catch(() => {}); }

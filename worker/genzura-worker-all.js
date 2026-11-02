@@ -87,6 +87,7 @@ const TEXT = {
   follow: "started following you", reelLike: "liked your reel", reelComment: "commented on your reel",
   mention: "mentioned you", reply: "replied to your comment", commentLike: "liked your comment", tag: "tagged you in a post",
   game: "invited you to play Truth · Dare · Roast 🎲",
+  gcmessage: "sent you a message",   // Gupchats app (separate app, separate FCM tokens: app == "gc")
 };
 
 async function push(request, env) {
@@ -114,6 +115,13 @@ async function push(request, env) {
     if (!members.includes(from)) return out(env, 403, { error: "not a member" });
     const mf = (cd.fields && cd.fields.mute && cd.fields.mute.mapValue && cd.fields.mute.mapValue.fields) || {};
     targets = members.filter((x) => x !== from && !(mf[x] && mf[x].booleanValue === true));
+  } else if (kind === "gcmessage") {
+    /* Gupchats DM: chat id = "uidA_uidB"; the chat doc only exists if the two were allowed to talk */
+    const cid = String(body.chatId || "").replace(/[^A-Za-z0-9_\-]/g, "");
+    const cd = await (await fetch(`${DOCS}/gcChats/${cid}`, { headers: A })).json();
+    const members = ((cd.fields && cd.fields.members && cd.fields.members.arrayValue && cd.fields.members.arrayValue.values) || []).map((v) => v.stringValue);
+    if (!members.includes(from)) return out(env, 403, { error: "not a member" });
+    targets = members.filter((x) => x !== from);
   } else {
     const to = String(body.toUid || "");
     if (!to || to === from) return out(env, 200, { sent: 0 });
@@ -132,14 +140,19 @@ async function push(request, env) {
     const rows = await (await fetch(`${DOCS}:runQuery`, { method: "POST", headers: A, body: JSON.stringify({ structuredQuery: {
       from: [{ collectionId: "fcmTokens" }],
       where: { fieldFilter: { field: { fieldPath: "uid" }, op: "EQUAL", value: { stringValue: uid } } }, limit: 10 } }) })).json();
-    const tokens = (Array.isArray(rows) ? rows : []).filter((r) => r.document).map((r) => r.document.name.split("/").pop());
+    /* Gupchats phones (app == "gc") only get Gupchats pushes; Gupzy phones/browsers never get them */
+    const isGc = kind === "gcmessage";
+    const tokens = (Array.isArray(rows) ? rows : []).filter((r) => r.document)
+      .filter((r) => { const f = r.document.fields || {}; const a = f.app && f.app.stringValue; return isGc ? a === "gc" : a !== "gc"; })
+      .map((r) => r.document.name.split("/").pop());
     for (const token of tokens) {
       /* a CALL push must expire after 45 s: a phone that comes online later must NOT ring for an old call */
       const isCall = kind === "call";
       const mr = await fetch(`https://fcm.googleapis.com/v1/projects/${pid}/messages:send`, { method: "POST", headers: A,
         body: JSON.stringify({ message: { token, data: { title: name, fromUid: String(from || ""),
           body: TEXT[kind] + (kind === "call" ? (body.type === "video" ? " (video)" : " (voice)") : ""),
-          tag: kind === "message" ? "c_" + (body.chatId || "") : "n_" + kind },
+          tag: (kind === "message" || kind === "gcmessage") ? "c_" + (body.chatId || "") : "n_" + kind,
+          app: isGc ? "gc" : "gupzy" },
           webpush: { headers: { Urgency: "high", TTL: isCall ? "45" : "86400" } }, android: { priority: "HIGH", ttl: isCall ? "45s" : "86400s" } } }) });
       if (mr.ok) sent++;
       else if (mr.status === 404 || mr.status === 400) {
