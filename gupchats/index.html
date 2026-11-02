@@ -95,6 +95,18 @@ hr{border:0;border-top:1px solid var(--border);margin:8px 0}
 .b .mph{display:flex;align-items:center;justify-content:center;min-width:150px;min-height:48px;padding:10px;font-size:14px;opacity:.8}
 .b audio{display:block;width:230px;max-width:100%;height:40px}
 .b .dur{font-size:11.5px;opacity:.75;padding:2px 8px 4px}
+.b.post{padding:4px;cursor:pointer;white-space:normal;width:240px;max-width:78%}
+.b.post .pth{border-radius:15px;overflow:hidden;background:rgba(0,0,0,.08)}
+.b.post .pth img,.b.post .pth video{display:block;width:100%;max-height:300px;object-fit:cover;pointer-events:none}
+.b.post .pth .ph{padding:22px 10px;text-align:center;font-size:14px;opacity:.85}
+.b.post .pt{padding:7px 9px 2px;font-size:14.5px;line-height:1.3;white-space:pre-wrap;word-wrap:break-word}
+.b.post .ps{padding:0 9px 6px;font-size:12px;opacity:.75}
+#pv{background:var(--bg);color:var(--text)}
+#pv .pvtop{display:flex;align-items:center;gap:10px;padding:calc(8px + env(safe-area-inset-top,0px)) 10px 8px;border-bottom:1px solid var(--border)}
+#pvBody{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+#pvBody .pvm{display:block;width:100%;max-height:78vh;object-fit:contain;background:#000}
+#pvBody .pvc{padding:12px 16px;font-size:16px;line-height:1.4;white-space:pre-wrap;word-wrap:break-word}
+#pvBody .pvl{padding:40px 20px;text-align:center;color:var(--dim)}
 .pend{align-self:flex-end;font-size:13px;color:var(--dim);padding:6px 10px}
 #composer .iconbtn{flex:none;color:var(--blue)}
 #composer .iconbtn:disabled{opacity:.35}
@@ -201,7 +213,7 @@ hr{border:0;border-top:1px solid var(--border);margin:8px 0}
   <div id="recBar" class="hidden"><span class="rd"></span><span class="sp" id="recT">0:00</span><button class="btn gray" id="recCancel">Cancel</button><button class="btn" id="recSend">Send</button></div>
 </div>
 
-<input type="file" id="fileIn" accept="image/*" class="hidden">
+<input type="file" id="fileIn" accept="image/*,video/*" class="hidden">
 <input type="file" id="fileStory" accept="image/*,video/*" class="hidden">
 
 <div id="sv" class="ovl hidden">
@@ -218,6 +230,11 @@ hr{border:0;border-top:1px solid var(--border);margin:8px 0}
 </div>
 
 <div id="iv" class="ovl hidden" style="z-index:75"></div>
+
+<div id="pv" class="ovl hidden" style="z-index:76">
+  <div class="pvtop"><button class="iconbtn" id="pvBack" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><div id="pvAv"></div><div id="pvName" style="flex:1;min-width:0;font-weight:700;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div><button class="btn gray" id="pvOpen" style="padding:8px 12px;font-size:14px">Open in Gupzy</button></div>
+  <div id="pvBody"></div>
+</div>
 
 <div id="picker" class="screen hidden" style="z-index:40">
   <div class="top" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border)">
@@ -1176,6 +1193,7 @@ async function parseMsg(m, peerUid, chatId){
   var o=null;
   if(m.enc){ o=await openMsg(chatId, peerUid, m); if(!o) return Object.assign(base,{kind:'lock'}); }
   var ty=m.type||'text';
+  if(ty==='text' && !m.enc && m.postId){ return Object.assign(base,{ kind:'post', postId:String(m.postId), text:String(m.text||'\uD83D\uDCCE Post') }); }   /* a post shared from Gupzy */
   if(ty==='text'){ return Object.assign(base,{ kind:'text', text:m.enc?o.t:String(m.text||''), q:(o&&o.q)||'' }); }
   if(ty==='image'||ty==='audio'||ty==='video'){
     var k=ty==='image'?'img':ty==='audio'?'aud':'vid';
@@ -1197,11 +1215,12 @@ async function renderMsgs(snap, tok){
     if(day!==lastDay){ lastDay=day; html+='<div class="tm">'+esc(fmtTime(m.at))+'</div>'; }
     var side=m.mine?'me':'th';
     if(m.kind==='lock'){ html+='<div class="b '+side+' lock">🔒 Can’t read this message</div>'; return; }
+    if(m.kind==='post'){ html+='<div class="b '+side+' post" data-post="'+esc(m.postId)+'"><div class="pth" data-pid="'+esc(m.postId)+'"><div class="ph">\uD83D\uDCCE</div></div><div class="pt">'+esc(m.text)+'</div><div class="ps">Tap to view post</div></div>'; return; }
     if(m.media){ mediaSpec.set(m.media.u,m.media); html+='<div class="b '+side+' media">'+mediaInner(m.media)+'</div>'; if(m.media.enc && !mediaUrls.has(m.media.u)) toLoad.push(m.media); return; }
     html+='<div class="b '+side+'">'+(m.q?'<div class="rq">'+esc(m.q)+'</div>':'')+esc(m.text)+'</div>';
   });
   box.innerHTML = html || '<div class="empty">Say hi to '+esc(peer.name)+' 👋</div>';
-  bindBig(box);
+  bindBig(box); fillPostThumbs();
   if(atBottom || out.length<=30) box.scrollTop=box.scrollHeight;
   toLoad.forEach(function(x){
     loadMedia(x).then(function(){
@@ -1249,8 +1268,8 @@ async function sendText(){
 $('sendBtn').onclick=sendText;
 function addPending(txt){ var b=$('msgs'), d=document.createElement('div'); d.className='pend'; d.textContent=txt; b.appendChild(d); b.scrollTop=b.scrollHeight; return d; }
 async function sendMedia(ty, blob, extra, peer, id){
-  var gty = ty==='img' ? 'image' : 'audio';
-  var pend=($('chat').classList.contains('hidden')||!cur||cur.id!==id)?null:addPending(ty==='img'?'📷 Sending photo…':'🎤 Sending voice message…');
+  var gty = ty==='img' ? 'image' : ty==='vid' ? 'video' : 'audio';
+  var pend=($('chat').classList.contains('hidden')||!cur||cur.id!==id)?null:addPending(ty==='img'?'📷 Sending photo…':ty==='vid'?'🎥 Sending video…':'🎤 Sending voice message…');
   try{
     var ef=await encFileG(blob), url=null, lastErr=null, exts=['bin','txt','json','pdf','zip','jpg','png','webm'];
     for(var i=0;i<exts.length;i++){
@@ -1268,6 +1287,19 @@ $('attBtn').onclick=function(){ if(!cur||!cur.canSend) return; $('fileIn').value
 $('fileIn').onchange=async function(){
   var f=this.files&&this.files[0]; if(!f||!cur||!cur.canSend) return;
   var id=cur.id, peer=cur.peer;
+  if(/^video\//i.test(f.type||'')){
+    if(f.size>300*1024*1024){ toast('Video is too big'); return; }
+    var vf=f, cp=null;
+    try{
+      cp=addPending('🎥 Compressing video… 0%');
+      var pr=await smartCompressVideo(f,'short',function(pct){ if(cp) cp.textContent='🎥 Compressing video… '+pct+'%'; });
+      if(pr && pr.file) vf=pr.file;
+    }catch(e){ vf=f; }
+    finally{ if(cp&&cp.parentNode) cp.remove(); }
+    if(vf.size>30*1024*1024){ toast('Video is too big (max 30 MB)'); return; }
+    try{ await sendMedia('vid',vf,{d:0},peer,id); }catch(e){ toast('Could not send that video'); }
+    return;
+  }
   try{ var b=await compressImage(f,1280,0.8); await sendMedia('img',b.blob,{w:b.w,h:b.h},peer,id); }
   catch(e){ toast('Could not send that photo'); }
 };
@@ -1299,8 +1331,57 @@ function finishRec(R){
 }
 $('micBtn').onclick=recStart; $('recSend').onclick=recStop; $('recCancel').onclick=function(){ recCancel(false); };
 
+/* ---------------- posts shared from Gupzy ---------------- */
+var postCache=new Map();
+function getPostG(id){
+  if(!postCache.has(id)) postCache.set(id, db.collection('posts').doc(id).get().then(function(d){ return d.exists?Object.assign({id:d.id},d.data()):null; }).catch(function(){ postCache.delete(id); return undefined; }));
+  return postCache.get(id);
+}
+function postLockedUntil(p){ var u=ms(p&&p.unlockAt); return u>Date.now()?u:0; }
+function okMedia(u){ return typeof u==='string' && /^https:\/\//.test(u); }
+function postThumb(p){
+  var m=(p.media||[])[0]; if(!m||!okMedia(m.url)) return '';
+  if(m.type==='video'){ return okMedia(p.thumbURL)?'<img src="'+esc(p.thumbURL)+'" alt="">':'<video src="'+esc(m.url)+'#t=0.1" preload="metadata" muted playsinline></video>'; }
+  var u=m.url.indexOf('/image/upload/')>=0 ? m.url.replace('/image/upload/','/image/upload/f_auto,q_auto,w_500/') : m.url;
+  return '<img src="'+esc(u)+'" alt="">';
+}
+function fillPostThumbs(){
+  $('msgs').querySelectorAll('.pth[data-pid]:not([data-done])').forEach(function(el){
+    var id=el.getAttribute('data-pid'); el.setAttribute('data-done','1');
+    getPostG(id).then(function(p){
+      if(!el.isConnected) return;
+      if(p===undefined){ el.removeAttribute('data-done'); return; }
+      if(p===null){ el.innerHTML='<div class="ph">Post no longer available</div>'; return; }
+      if(postLockedUntil(p)){ el.innerHTML='<div class="ph">⏳🔒 Time capsule</div>'; return; }
+      var t=postThumb(p); if(t) el.innerHTML=t; else el.style.display='none';
+      var b2=$('msgs'); if(b2.scrollHeight-b2.scrollTop-b2.clientHeight<400) b2.scrollTop=b2.scrollHeight;
+    });
+  });
+}
+var pvCur=null;
+function closePost(){ $('pv').classList.add('hidden'); $('pvBody').querySelectorAll('video').forEach(function(v){ try{ v.pause(); }catch(e){} }); $('pvBody').innerHTML=''; pvCur=null; }
+async function openPost(id){
+  if(!id) return; pvCur=id;
+  $('pvAv').innerHTML=''; $('pvName').textContent='Post'; $('pvBody').innerHTML='<div class="pvl">Loading…</div>'; $('pv').classList.remove('hidden');
+  var p=await getPostG(id); if(pvCur!==id) return;
+  if(p===undefined){ closePost(); toast('Could not load the post'); return; }
+  if(p===null){ closePost(); toast('Post no longer available'); return; }
+  $('pvAv').innerHTML=av(p.channelLogo,p.channelName||'User','sm'); $('pvName').textContent=p.channelName||'Post';
+  var lk=postLockedUntil(p);
+  if(lk){ $('pvBody').innerHTML='<div class="pvl">⏳🔒 This post is a time capsule.<br>It opens on '+esc(new Date(lk).toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'}))+'.</div>'; return; }
+  var h=(p.media||[]).filter(function(m){ return m && okMedia(m.url); }).map(function(m){
+    return m.type==='video' ? '<video class="pvm" controls playsinline preload="metadata" src="'+esc(m.url)+'"></video>' : '<img class="pvm" src="'+esc(m.url)+'" alt="">';
+  }).join('');
+  if(p.caption) h+='<div class="pvc">'+esc(p.caption)+'</div>';
+  $('pvBody').innerHTML=h||'<div class="pvl">Nothing to show</div>';
+}
+$('pvBack').onclick=closePost;
+$('pvOpen').onclick=function(){ if(!pvCur) return; var u='https://gupzy.com/?post='+encodeURIComponent(pvCur); try{ if(window.AndroidAuth && window.AndroidAuth.openExternal){ window.AndroidAuth.openExternal(u); return; } }catch(e){} window.open(u,'_blank'); };
+$('msgs').addEventListener('click',function(e){ var b=e.target.closest('.b.post'); if(b) openPost(b.getAttribute('data-post')); });
+
 /* Android back button */
 window.__gcBack=function(){
+  if(!$('pv').classList.contains('hidden')){ closePost(); return true; }
   if(!$('iv').classList.contains('hidden')){ $('iv').classList.add('hidden'); $('iv').innerHTML=''; return true; }
   if(!$('sv').classList.contains('hidden')){ svClose(); return true; }
   if(!$('sc').classList.contains('hidden')){ if(!SC.posting) $('sc').classList.add('hidden'); return true; }
