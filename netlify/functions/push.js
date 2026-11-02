@@ -73,7 +73,7 @@ exports.handler = async (event) => {
       targets = members.filter((u) => u !== from);
     } else if (kind === "gcmessage") {
       const cid = String(body.chatId || "").replace(/[^A-Za-z0-9_\-]/g, "");
-      const cr = await fetch(`${DOCS}/gcChats/${cid}`, {headers: A});
+      const cr = await fetch(`${DOCS}/chats/${cid}`, {headers: A});
       const cd = await cr.json();
       const members = ((cd.fields && cd.fields.members && cd.fields.members.arrayValue && cd.fields.members.arrayValue.values) || []).map((v) => v.stringValue);
       if (!members.includes(from)) return out(403, {error: "not a member"});
@@ -127,7 +127,7 @@ exports.handler = async (event) => {
       const rows = await qr.json();
       const isGc = kind === "gcmessage";
       const tokens = (Array.isArray(rows) ? rows : []).filter((r) => r.document)
-        .filter((r) => { const f = r.document.fields || {}; const a = f.app && f.app.stringValue; return isGc ? a === "gc" : a !== "gc"; })
+        .filter((r) => { const f = r.document.fields || {}; const a = f.app && f.app.stringValue; return (kind === "message" || kind === "gcmessage") ? true : a !== "gc"; })
         .map((r) => r.document.name.split("/").pop());
       for (const token of tokens) {
         const mr = await fetch(`https://fcm.googleapis.com/v1/projects/${pid}/messages:send`, {method: "POST", headers: A,

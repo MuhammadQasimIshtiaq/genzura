@@ -116,9 +116,9 @@ async function push(request, env) {
     const mf = (cd.fields && cd.fields.mute && cd.fields.mute.mapValue && cd.fields.mute.mapValue.fields) || {};
     targets = members.filter((x) => x !== from && !(mf[x] && mf[x].booleanValue === true));
   } else if (kind === "gcmessage") {
-    /* Gupchats DM: chat id = "uidA_uidB"; the chat doc only exists if the two were allowed to talk */
+    /* Gupchats now shares the Gupzy inbox (collection "chats"), so this reads the same chat doc as kind "message" */
     const cid = String(body.chatId || "").replace(/[^A-Za-z0-9_\-]/g, "");
-    const cd = await (await fetch(`${DOCS}/gcChats/${cid}`, { headers: A })).json();
+    const cd = await (await fetch(`${DOCS}/chats/${cid}`, { headers: A })).json();
     const members = ((cd.fields && cd.fields.members && cd.fields.members.arrayValue && cd.fields.members.arrayValue.values) || []).map((v) => v.stringValue);
     if (!members.includes(from)) return out(env, 403, { error: "not a member" });
     targets = members.filter((x) => x !== from);
@@ -140,10 +140,10 @@ async function push(request, env) {
     const rows = await (await fetch(`${DOCS}:runQuery`, { method: "POST", headers: A, body: JSON.stringify({ structuredQuery: {
       from: [{ collectionId: "fcmTokens" }],
       where: { fieldFilter: { field: { fieldPath: "uid" }, op: "EQUAL", value: { stringValue: uid } } }, limit: 10 } }) })).json();
-    /* Gupchats phones (app == "gc") only get Gupchats pushes; Gupzy phones/browsers never get them */
+    /* chat messages (from Gupzy OR Gupchats) go to every phone of the person (Gupzy + Gupchats); all other pushes stay on Gupzy phones only */
     const isGc = kind === "gcmessage";
     const tokens = (Array.isArray(rows) ? rows : []).filter((r) => r.document)
-      .filter((r) => { const f = r.document.fields || {}; const a = f.app && f.app.stringValue; return isGc ? a === "gc" : a !== "gc"; })
+      .filter((r) => { const f = r.document.fields || {}; const a = f.app && f.app.stringValue; return (kind === "message" || kind === "gcmessage") ? true : a !== "gc"; })
       .map((r) => r.document.name.split("/").pop());
     for (const token of tokens) {
       /* a CALL push must expire after 45 s: a phone that comes online later must NOT ring for an old call */

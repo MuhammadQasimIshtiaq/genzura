@@ -135,6 +135,8 @@ hr{border:0;border-top:1px solid var(--border);margin:8px 0}
 #sc .scbar{padding:10px 14px calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px}
 #sc textarea{border:0;border-radius:14px;padding:11px 14px;font-size:16px;font-family:inherit;resize:none;outline:none}
 #iv img{max-width:100%;max-height:100%;margin:auto;object-fit:contain}
+.rq{font-size:13px;opacity:.8;border-left:3px solid currentColor;padding-left:8px;margin-bottom:4px}
+.mv{display:block;max-width:240px;width:100%;border-radius:14px;background:#000}
 </style>
 </head>
 <body>
@@ -283,130 +285,162 @@ var followingSet=new Set(), friends=[], requests=[], followers=[];
 var cur=null, unsubMsgs=null, msgTok=0, peopleMode='F';
 var myTok='', pendingOpen=null;
 
-/* ---------------- E2E (own key per account; can be backed up with a password) ---------------- */
-function b64(u8){ var s=''; u8.forEach(function(b){ s+=String.fromCharCode(b); }); return btoa(s); }
+/* ---------------- E2E: SAME keys + SAME message format as Gupzy chats, so Gupzy and Gupchats share one inbox ---------------- */
+function b64(u8){ var s='', a=new Uint8Array(u8); for(var i=0;i<a.length;i++) s+=String.fromCharCode(a[i]); return btoa(s); }
 function unb64(t){ return Uint8Array.from(atob(t), function(c){ return c.charCodeAt(0); }); }
-function unb64u(t){ t=String(t).replace(/-/g,'+').replace(/_/g,'/'); while(t.length%4) t+='='; return unb64(t); }
 var idbP=null;
-function idb(){ if(idbP) return idbP; idbP=new Promise(function(res,rej){ var r=indexedDB.open('gupchats-e2ee',1); r.onupgradeneeded=function(){ r.result.createObjectStore('k'); }; r.onsuccess=function(){ res(r.result); }; r.onerror=function(){ idbP=null; rej(r.error); }; }); return idbP; }
+function idb(){ if(idbP) return idbP; idbP=new Promise(function(res,rej){ var r=indexedDB.open('at-e2ee',1); r.onupgradeneeded=function(){ r.result.createObjectStore('k'); }; r.onsuccess=function(){ r.result.onclose=function(){ idbP=null; }; res(r.result); }; r.onerror=function(){ idbP=null; rej(r.error); }; }); return idbP; }
 function idbGet(k){ return idb().then(function(d){ return new Promise(function(res,rej){ var q=d.transaction('k').objectStore('k').get(k); q.onsuccess=function(){ res(q.result); }; q.onerror=function(){ rej(q.error); }; }); }); }
 function idbSet(k,v){ return idb().then(function(d){ return new Promise(function(res,rej){ var q=d.transaction('k','readwrite').objectStore('k').put(v,k); q.onsuccess=function(){ res(); }; q.onerror=function(){ rej(q.error); }; }); }); }
-var myKP=null, ppCache=new Map(), skCache=new Map(), backupState='unknown';
+var myKP=null, ppCache=new Map(), shared={}, backupState='unknown', myBlocked=[];
 
+function sheet(html){ var bg=document.createElement('div'); bg.className='sheetbg'; bg.innerHTML='<div class="sheet">'+html+'</div>'; document.body.appendChild(bg); return bg; }
 async function genKey(){
-  /* extractable on purpose: that is what makes the password backup (and so multi-device / reinstall) possible */
+  /* extractable on purpose: that is what makes the password backup (and so a new phone / reinstall) possible */
   var kp = await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'}, true, ['deriveBits']);
-  var rec = { priv: kp.privateKey, pub: b64(new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey))), ext: true };
-  await idbSet('k_'+me.uid, rec); skCache.clear();
+  var rec = { priv: kp.privateKey, pub: b64(await crypto.subtle.exportKey('raw', kp.publicKey)) };
+  await idbSet('k_'+me.uid, rec); shared={}; ppCache.clear();
   return rec;
 }
 async function publishPub(rec){
-  var ref = db.collection('gcKeys').doc(me.uid), cp=null;
-  try{ var d=await ref.get(); cp = d.exists ? d.data().pub : null; }catch(e){}
-  if(cp !== rec.pub) await ref.set({ uid: me.uid, pub: rec.pub, updatedAt: FV.serverTimestamp() });
+  await db.collection('userKeys').doc(me.uid).set({ uid: me.uid, pub: rec.pub, updatedAt: FV.serverTimestamp() });
+  try{ localStorage.setItem('at_kpub_'+me.uid, rec.pub); }catch(e){}
 }
 async function pwKey(pw, salt, iter){
   var base = await crypto.subtle.importKey('raw', te.encode(pw), 'PBKDF2', false, ['deriveKey']);
-  return crypto.subtle.deriveKey({name:'PBKDF2', salt:salt, iterations:iter, hash:'SHA-256'}, base, {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']);
+  return crypto.subtle.deriveKey({name:'PBKDF2', hash:'SHA-256', salt:salt, iterations:iter}, base, {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']);
 }
+/* backup = exactly the Gupzy "Chat backup" format (doc keyBackups/{uid}), so one password works in both apps */
 async function makeBackup(pw){
-  var iter=310000, salt=crypto.getRandomValues(new Uint8Array(16)), iv=crypto.getRandomValues(new Uint8Array(12));
-  var jwk = await crypto.subtle.exportKey('jwk', myKP.priv);
-  var k = await pwKey(pw, salt, iter);
-  var ct = await crypto.subtle.encrypt({name:'AES-GCM', iv:iv}, k, te.encode(JSON.stringify(jwk)));
-  await db.collection('gcKeyBackups').doc(me.uid).set({ v:1, iter:iter, salt:b64(salt), iv:b64(iv), ct:b64(new Uint8Array(ct)), pub:myKP.pub, updatedAt:FV.serverTimestamp() });
+  var items=[], all=[myKP].concat(myKP.old||[]);
+  for(var i=0;i<all.length;i++){ if(all[i].priv.extractable) items.push({ pub:all[i].pub, k:b64(await crypto.subtle.exportKey('pkcs8', all[i].priv)) }); }
+  if(!items.length) throw new Error('no key can be backed up');
+  var iter=600000, salt=crypto.getRandomValues(new Uint8Array(16)), iv=crypto.getRandomValues(new Uint8Array(12));
+  var ct=await crypto.subtle.encrypt({name:'AES-GCM', iv:iv, additionalData:te.encode('keybackup|'+me.uid)}, await pwKey(pw,salt,iter), te.encode(JSON.stringify(items)));
+  await db.collection('keyBackups').doc(me.uid).set({ v:1, iter:iter, salt:b64(salt), iv:b64(iv), ct:b64(ct), n:items.length, updatedAt:FV.serverTimestamp() });
   backupState='on';
 }
 async function openBackup(bk, pw){
-  var k = await pwKey(pw, unb64(bk.salt), bk.iter);
-  var pt = await crypto.subtle.decrypt({name:'AES-GCM', iv:unb64(bk.iv)}, k, unb64(bk.ct));   /* throws on a wrong password */
-  var jwk = JSON.parse(td.decode(pt));
-  var priv = await crypto.subtle.importKey('jwk', jwk, {name:'ECDH',namedCurve:'P-256'}, true, ['deriveBits']);
-  var x=unb64u(jwk.x), y=unb64u(jwk.y), raw=new Uint8Array(1+x.length+y.length); raw[0]=4; raw.set(x,1); raw.set(y,1+x.length);
-  if(b64(raw) !== bk.pub) throw new Error('mismatch');
-  return { priv: priv, pub: bk.pub, ext: true };
+  var items;
+  try{ var pt=await crypto.subtle.decrypt({name:'AES-GCM', iv:unb64(bk.iv), additionalData:te.encode('keybackup|'+me.uid)}, await pwKey(pw,unb64(bk.salt),bk.iter), unb64(bk.ct)); items=JSON.parse(td.decode(pt)); }
+  catch(e){ throw new Error('badpass'); }
+  var keys=[]; for(var i=0;i<items.length;i++) keys.push({ pub:items[i].pub, priv:await crypto.subtle.importKey('pkcs8', unb64(items[i].k), {name:'ECDH',namedCurve:'P-256'}, true, ['deriveBits']) });
+  if(!keys.length) throw new Error('empty');
+  var cur=null, oldL=[]; try{ cur=await idbGet('k_'+me.uid); oldL=(await idbGet('o_'+me.uid))||[]; }catch(e){}
+  var rest=keys.slice(1), seen={}; keys.forEach(function(k){ seen[k.pub]=1; });
+  [cur].concat(oldL).forEach(function(k){ if(k&&k.priv&&k.pub&&!seen[k.pub]){ seen[k.pub]=1; rest.push(k); } });
+  await idbSet('k_'+me.uid, keys[0]); await idbSet('o_'+me.uid, rest); shared={}; ppCache.clear();
+  return { priv:keys[0].priv, pub:keys[0].pub, old:rest };
 }
-function sheet(html){ var bg=document.createElement('div'); bg.className='sheetbg'; bg.innerHTML='<div class="sheet">'+html+'</div>'; document.body.appendChild(bg); return bg; }
 /* new phone / reinstall: ask for the backup password */
 function restoreFlow(bk){
   return new Promise(function(resolve){
-    var bg=sheet('<div class="sh-t">Restore your chats</div><p class="sh-p">You have a chat backup. Enter your backup password to read your old messages on this phone.</p><input id="rsPw" type="password" class="inp" placeholder="Backup password" autocomplete="off"><div class="err" id="rsErr"></div><button class="btn" id="rsGo" style="width:100%;padding:13px;margin-top:8px">Restore</button><button class="btn gray" id="rsNew" style="width:100%;padding:13px;margin-top:8px">Forgot password – start fresh</button>');
+    var bg=sheet('<div class="sh-t">Restore your chats</div><p class="sh-p">Your Gupzy chats have a backup. Enter your <b>Gupzy chat backup password</b> to read your messages here. It is the same password you made in Gupzy.</p><input id="rsPw" type="password" class="inp" placeholder="Backup password" autocomplete="off"><div class="err" id="rsErr"></div><button class="btn" id="rsGo" style="width:100%;padding:13px;margin-top:8px">Restore</button><button class="btn gray" id="rsNew" style="width:100%;padding:13px;margin-top:8px">Forgot password – start fresh</button>');
+    bg.style.zIndex=95;
     var go=bg.querySelector('#rsGo'), err=bg.querySelector('#rsErr');
     go.onclick=async function(){
       var pw=bg.querySelector('#rsPw').value; if(!pw){ err.textContent='Enter your password'; return; }
       go.disabled=true; err.textContent='Checking…';
-      try{ var rec=await openBackup(bk,pw); await idbSet('k_'+me.uid, rec); skCache.clear(); bg.remove(); resolve(rec); }
-      catch(e){ go.disabled=false; err.textContent='Wrong password. Try again.'; }
+      try{ var rec=await openBackup(bk,pw); bg.remove(); resolve(rec); }
+      catch(e){ go.disabled=false; err.textContent=(e&&e.message==='badpass')?'Wrong password. Try again.':'Could not restore: '+(e&&e.message||e); }
     };
     bg.querySelector('#rsNew').onclick=function(){
-      ask('Start fresh?','You will get a new encryption key. Your old messages will stay unreadable (for you and for your friends\u2019 older history with you).','Start fresh',true).then(function(ok){ if(ok){ bg.remove(); resolve(null); } });
+      ask('Start fresh?','You get a new encryption key. Older messages stay unreadable, and Gupzy on your other phone will also need a backup restore. Only do this if you really forgot the password.','Start fresh',true).then(function(ok){ if(ok){ bg.remove(); resolve(null); } });
+    };
+  });
+}
+/* the account already has Gupzy chats but no backup: the secret key only lives in the Gupzy app */
+function linkFlow(){
+  return new Promise(function(resolve){
+    var bg=sheet('<div class="sh-t">Link with your Gupzy chats</div><p class="sh-p">Your Gupzy chats are protected by a key that is only inside the Gupzy app. To see the same chats here:<br><br>1. Open <b>Gupzy</b> → Menu → <b>Chat backup</b><br>2. Create a backup password<br>3. Come back here and tap the button below.</p><div class="err" id="lkErr"></div><button class="btn" id="lkGo" style="width:100%;padding:13px;margin-top:8px">I made the backup</button><button class="btn gray" id="lkNew" style="width:100%;padding:13px;margin-top:8px">Skip – start fresh (not recommended)</button>');
+    bg.style.zIndex=95;
+    var go=bg.querySelector('#lkGo'), err=bg.querySelector('#lkErr');
+    go.onclick=async function(){
+      go.disabled=true; err.textContent='Checking…';
+      try{ var d=await db.collection('keyBackups').doc(me.uid).get(); if(!d.exists){ go.disabled=false; err.textContent='No backup found yet. Create it in Gupzy first.'; return; } bg.remove(); resolve({bk:d.data()}); }
+      catch(e){ go.disabled=false; err.textContent='Could not check: '+(e&&e.message||e); }
+    };
+    bg.querySelector('#lkNew').onclick=function(){
+      ask('Start fresh?','This gives you a NEW key. Your old Gupzy chats become unreadable in the Gupzy app as well, until you restore a backup there. Not recommended.','Start fresh',true).then(function(ok){ if(ok){ bg.remove(); resolve({fresh:true}); } });
     };
   });
 }
 /* set up / change the backup password */
 async function backupSheet(first){
   if(!myKP) return;
-  if(!myKP.ext){
-    var ok=await ask('Reset encryption key?','This phone uses an older key that cannot be backed up. To turn on backup, a new key is needed: your existing chat history will become unreadable (for you and your friends).','Reset & continue',true);
-    if(!ok) return;
-    try{ myKP=await genKey(); await publishPub(myKP); ppCache.clear(); backupState='off'; }catch(e){ toast('Could not reset the key'); return; }
-  }
-  var bg=sheet('<div class="sh-t">'+(first?'Protect your chats':'Chat backup password')+'</div><p class="sh-p">Your messages are end-to-end encrypted. Create a backup password so you can read them again on a new phone or after reinstalling. We never see this password \u2013 if you forget it, the backup cannot be recovered.</p><input id="bpA" type="password" class="inp" placeholder="Backup password (min 8 characters)" autocomplete="off"><input id="bpB" type="password" class="inp" placeholder="Repeat password" autocomplete="off"><div class="err" id="bpE"></div><button class="btn" id="bpGo" style="width:100%;padding:13px;margin-top:8px">Save backup</button><button class="btn gray" id="bpNo" style="width:100%;padding:13px;margin-top:8px">'+(first?'Skip for now':'Cancel')+'</button>');
+  var bg=sheet('<div class="sh-t">'+(first?'Protect your chats':'Chat backup password')+'</div><p class="sh-p">Your messages are end-to-end encrypted. A backup password lets you read them again on a new phone or after reinstalling. It is the <b>same backup as in Gupzy</b>, so one password works in both apps. We never see it – if you forget it, it cannot be recovered.</p><input id="bpA" type="password" class="inp" placeholder="Backup password (min 10 characters)" autocomplete="off"><input id="bpB" type="password" class="inp" placeholder="Repeat password" autocomplete="off"><div class="err" id="bpE"></div><button class="btn" id="bpGo" style="width:100%;padding:13px;margin-top:8px">Save backup</button><button class="btn gray" id="bpNo" style="width:100%;padding:13px;margin-top:8px">'+(first?'Skip for now':'Cancel')+'</button>');
   var e=bg.querySelector('#bpE'), go=bg.querySelector('#bpGo');
   bg.querySelector('#bpNo').onclick=function(){ bg.remove(); };
   go.onclick=async function(){
     var a=bg.querySelector('#bpA').value, b=bg.querySelector('#bpB').value;
-    if(a.length<8){ e.textContent='Use at least 8 characters.'; return; }
+    if(a.length<10){ e.textContent='Use at least 10 characters.'; return; }
     if(a!==b){ e.textContent='Passwords do not match.'; return; }
     go.disabled=true; e.textContent='Saving…';
-    try{ await makeBackup(a); bg.remove(); toast('Backup saved \u2713'); }
+    try{ await makeBackup(a); bg.remove(); toast('Backup saved ✓'); }
     catch(err){ go.disabled=false; e.textContent='Could not save: '+(err&&err.message||err); }
   };
 }
 async function initKeys(){
-  var rec = await idbGet('k_'+me.uid), bk=null;
-  try{ var d=await db.collection('gcKeyBackups').doc(me.uid).get(); bk=d.exists?d.data():null; }catch(e){}
+  var rec=await idbGet('k_'+me.uid), old=(await idbGet('o_'+me.uid))||[], bk=null, pubDoc=null;
+  try{ var d=await db.collection('keyBackups').doc(me.uid).get(); bk=d.exists?d.data():null; }catch(e){}
+  try{ var d2=await db.collection('userKeys').doc(me.uid).get(); pubDoc=d2.exists?d2.data().pub:null; }catch(e){}
   if(rec && rec.priv){
-    myKP=rec; await publishPub(rec);
-    backupState = (bk && bk.pub===rec.pub) ? 'on' : 'off';
+    myKP={ priv:rec.priv, pub:rec.pub, old:old };
+    backupState = bk ? 'on' : 'off';
+    if(!pubDoc){ await publishPub(myKP); }
+    else if(pubDoc!==rec.pub){
+      /* the key published for this account is a different one (it was changed in Gupzy): never overwrite it, restore it instead */
+      if(bk){ var r0=await restoreFlow(bk); if(r0){ myKP=r0; backupState='on'; } }
+      else toast('Your chat key differs from Gupzy. Make a Chat backup in Gupzy, then reopen Gupchats.');
+    }
     return;
   }
   /* no key on this phone */
+  if(!bk && pubDoc){ var lk=await linkFlow(); if(lk.bk) bk=lk.bk; else bk=null; if(lk.fresh){ myKP=await genKey(); myKP.old=[]; await publishPub(myKP); backupState='off'; setTimeout(function(){ backupSheet(true); },700); return; } }
   if(bk){
     var r=await restoreFlow(bk);
-    if(r){ myKP=r; await publishPub(r); backupState='on'; toast('Chats restored \u2713'); return; }
+    if(r){ myKP=r; backupState='on'; toast('Chats restored ✓'); return; }
   }
-  myKP=await genKey(); await publishPub(myKP); backupState='off';
+  myKP=await genKey(); myKP.old=[]; await publishPub(myKP); backupState='off';
   setTimeout(function(){ backupSheet(true); }, 700);
 }
 async function peerPub(uid){
-  var c=ppCache.get(uid); if(c && Date.now()-c.t<120000) return c.p;
-  var d=await db.collection('gcKeys').doc(uid).get();
+  var c=ppCache.get(uid); if(c && Date.now()-c.t<300000) return c.p;
+  var d=await db.collection('userKeys').doc(uid).get();
   var p = d.exists ? d.data().pub : null;
-  ppCache.set(uid,{p:p,t:Date.now()}); return p;
+  if(p) ppCache.set(uid,{p:p,t:Date.now()});
+  return p;
 }
-async function sharedKey(peerUid){
-  var pub=await peerPub(peerUid); if(!pub) throw new Error('nokey');
-  var ck=peerUid+':'+pub; if(skCache.has(ck)) return skCache.get(ck);
-  var pk=await crypto.subtle.importKey('raw', unb64(pub), {name:'ECDH',namedCurve:'P-256'}, false, []);
-  var bits=await crypto.subtle.deriveBits({name:'ECDH',public:pk}, myKP.priv, 256);
+/* every public key the peer ever published (a sender key must be one of them) */
+async function knownPubs(uid){
+  var cur=await peerPub(uid), list=(await idbGet('p_'+uid))||[];
+  if(cur && list.indexOf(cur)<0){ list=list.concat([cur]); await idbSet('p_'+uid,list); }
+  return { cur:cur, list:list };
+}
+async function skey(pubB64, k){
+  k=k||myKP; var ck=k.pub+'|'+pubB64; if(shared[ck]) return shared[ck];
+  var pk=await crypto.subtle.importKey('raw', unb64(pubB64), {name:'ECDH',namedCurve:'P-256'}, false, []);
+  var bits=await crypto.subtle.deriveBits({name:'ECDH',public:pk}, k.priv, 256);
   var hk=await crypto.subtle.importKey('raw', bits, 'HKDF', false, ['deriveKey']);
-  var aes=await crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt:te.encode(dmId(me.uid,peerUid)),info:te.encode('gupchats-v1')}, hk, {name:'AES-GCM',length:256}, false, ['encrypt','decrypt']);
-  skCache.set(ck,aes); return aes;
+  return shared[ck]=await crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt:new Uint8Array(32),info:te.encode('arain-e2ee-v1')}, hk, {name:'AES-GCM',length:128}, false, ['encrypt','decrypt']);
 }
-/* message payload = {t:text, m:media?} (old messages are just {t}) */
-async function encPayload(peerUid, obj){
-  var key=await sharedKey(peerUid), iv=crypto.getRandomValues(new Uint8Array(12));
-  var ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:iv}, key, te.encode(JSON.stringify(obj)));
-  return { iv:b64(iv), ct:b64(new Uint8Array(ct)) };
+function kfor(p){ var all=[myKP].concat(myKP.old||[]); for(var i=0;i<all.length;i++){ if(all[i].pub===p) return all[i]; } return myKP; }
+/* payload = {t:text, q:quote, m:media info}; the chat id is bound to the ciphertext (same as Gupzy) */
+async function encPayload(chatId, peerUid, obj){
+  var pp=await peerPub(peerUid); if(!pp) throw new Error('nokey');
+  var key=await skey(pp), iv=crypto.getRandomValues(new Uint8Array(12));
+  var ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:iv,additionalData:te.encode(chatId)}, key, te.encode(JSON.stringify(obj)));
+  return { enc:1, ct:b64(ct), iv:b64(iv), spk:myKP.pub, rpk:pp };
 }
-async function decPayload(peerUid, iv, ct){
-  var key=await sharedKey(peerUid);
-  var pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(iv)}, key, unb64(ct));
-  var o=JSON.parse(td.decode(pt)); if(typeof o.t!=='string') o.t='';
-  return o;
+async function openMsg(chatId, peerUid, m){
+  try{
+    var kp=await knownPubs(peerUid), mine=m.from===me.uid, theirs=mine?m.rpk:m.spk;
+    if(!mine && kp.list.indexOf(m.spk)<0) return null;     /* sender key not published by that person */
+    var key=await skey(theirs, kfor(mine?m.spk:m.rpk));
+    var pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(m.iv),additionalData:te.encode(chatId)}, key, unb64(m.ct));
+    var o=JSON.parse(td.decode(pt)); o.t=(o.t==null)?'':String(o.t); return o;
+  }catch(e){ return null; }
 }
-function previewOf(o){ return o.t ? o.t : (o.m ? (o.m.ty==='img'?'\uD83D\uDCF7 Photo':'\uD83C\uDFA4 Voice message') : ''); }
 
 /* ---------------- media: encrypted on the phone, hosted on Cloudinary (same as Gupzy) ---------------- */
 function uploadCloud(blob, resType, filename, onProg){
@@ -426,22 +460,24 @@ async function compressImage(file,max,q){
   var blob=await new Promise(function(res){ cv.toBlob(res,'image/jpeg',q); }); if(!blob) throw new Error('compress failed');
   return { blob:blob, w:cw, h:ch };
 }
-async function encBlob(blob){
-  var raw=crypto.getRandomValues(new Uint8Array(32)), iv=crypto.getRandomValues(new Uint8Array(12));
-  var key=await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt']);
+/* Gupzy-compatible encrypted file: [12-byte iv][AES-GCM-128 ciphertext], the key travels inside the encrypted message */
+async function encFileG(blob){
+  var key=await crypto.subtle.generateKey({name:'AES-GCM',length:128}, true, ['encrypt']), iv=crypto.getRandomValues(new Uint8Array(12));
   var ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:iv}, key, await blob.arrayBuffer());
-  return { data:new Blob([ct],{type:'application/octet-stream'}), k:b64(raw), i:b64(iv) };
+  var raw=await crypto.subtle.exportKey('raw', key);
+  return { blob:new Blob([iv,new Uint8Array(ct)],{type:'application/octet-stream'}), k:b64(raw) };
 }
-var mediaCache=new Map(), mediaUrls=new Map();
-function loadMedia(m){
-  if(!safeUrl(m.u)) return Promise.reject(new Error('bad url'));
-  var c=mediaCache.get(m.u); if(c) return c;
-  var p=fetch(m.u).then(function(r){ if(!r.ok) throw new Error('http '+r.status); return r.arrayBuffer(); }).then(async function(buf){
-    var key=await crypto.subtle.importKey('raw', unb64(m.k), 'AES-GCM', false, ['decrypt']);
-    var pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(m.i)}, key, buf);
-    var bu=URL.createObjectURL(new Blob([pt],{type:m.mt||'application/octet-stream'})); mediaUrls.set(m.u,bu); return bu;
+var mediaCache=new Map(), mediaUrls=new Map(), mediaSpec=new Map();
+function loadMedia(x){
+  if(!safeUrl(x.u)) return Promise.reject(new Error('bad url'));
+  var c=mediaCache.get(x.u); if(c) return c;
+  var p=fetch(x.u).then(function(r){ if(!r.ok) throw new Error('http '+r.status); return r.arrayBuffer(); }).then(async function(buf){
+    var u8=new Uint8Array(buf), key=await crypto.subtle.importKey('raw', unb64(x.k), 'AES-GCM', false, ['decrypt']);
+    var pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:u8.slice(0,12)}, key, u8.slice(12));
+    var mt=x.mt || (x.kind==='img'?'image/jpeg':x.kind==='aud'?'audio/webm':'video/mp4');
+    var bu=URL.createObjectURL(new Blob([pt],{type:mt})); mediaUrls.set(x.u,bu); return bu;
   });
-  mediaCache.set(m.u,p); p.catch(function(){ mediaCache.delete(m.u); });
+  mediaCache.set(x.u,p); p.catch(function(){ mediaCache.delete(x.u); });
   return p;
 }
 
@@ -459,7 +495,7 @@ function enablePush(){ if(window.AndroidPush && window.AndroidPush.request){ try
 async function pushNotify(chatId){
   try{
     var t=await auth.currentUser.getIdToken();
-    fetch(API_BASE+'/push',{ method:'POST', keepalive:true, headers:{'Content-Type':'application/json',Authorization:'Bearer '+t}, body:JSON.stringify({kind:'gcmessage',chatId:chatId}) }).catch(function(){});
+    fetch(API_BASE+'/push',{ method:'POST', keepalive:true, headers:{'Content-Type':'application/json',Authorization:'Bearer '+t}, body:JSON.stringify({kind:'message',chatId:chatId}) }).catch(function(){});
   }catch(e){}
 }
 /* tapping a notification opens that chat */
@@ -557,7 +593,7 @@ auth.onAuthStateChanged(async function(u){
     var d=await db.collection('channels').doc(u.uid).get();
     if(!d.exists){ show('nochannel'); return; }
     var c=d.data();
-    me={ uid:u.uid, name:c.name||u.displayName||'User', logo:c.logoURL||null, handle:c.channelId||'' };
+    me={ uid:u.uid, name:c.name||u.displayName||'User', logo:c.logoURL||null, handle:c.channelId||'' }; myBlocked=c.blockedUids||[];
     chInfo.set(u.uid,{name:me.name,logo:me.logo});
     loadSeen();
     show('app'); setTab(0);
@@ -915,8 +951,8 @@ $('scShare').onclick=async function(){
 function peerOf(c){ var o=(c.members||[]).filter(function(x){ return x!==me.uid; })[0]; var i=(c.info&&c.info[o])||chInfo.get(o)||{}; return {uid:o,name:i.name||'User',logo:i.logo||null}; }
 function startChats(){
   if(unsubChats) unsubChats();
-  unsubChats = db.collection('gcChats').where('members','array-contains',me.uid).limit(200).onSnapshot(function(snap){
-    chats={}; snap.docs.forEach(function(d){ var x=d.data(); x.id=d.id; chats[d.id]=x; });
+  unsubChats = db.collection('chats').where('members','array-contains',me.uid).limit(200).onSnapshot(function(snap){
+    chats={}; snap.docs.forEach(function(d){ var x=d.data(); x.id=d.id; if(x.isGroup || !/^[^_]+_[^_]+$/.test(d.id) || (x.members||[]).length!==2) return; chats[d.id]=x; });   /* Gupzy inbox: 1-to-1 chats only */
     renderChats(); syncPresenceWatch();
     var anyUnread=Object.keys(chats).some(function(k){ return ((chats[k].unread||{})[me.uid]||0)>0; });
     $('d0').classList.toggle('hidden', !anyUnread);
@@ -942,16 +978,26 @@ function renderChats(){
   list.forEach(fillPreview);
   renderStrip();
 }
+var pvBusy=0;
+function pvSet(id,txt){ var e2=$('chatList').querySelector('[data-pv="'+id+'"]'); if(e2) e2.textContent=txt; }
 function fillPreview(c){
   var el=$('chatList').querySelector('[data-pv="'+c.id+'"]'); if(!el) return;
-  if(!c.lastCt){ el.textContent=''; return; }
-  var ck=c.id+':'+ms(c.lastAt)+':'+c.lastCt.length;
+  var t=c.lastType||'text', pre=(c.lastFrom===me.uid?'You: ':'');
+  if(t==='image'){ el.textContent=pre+'\uD83D\uDCF7 Photo'; return; }
+  if(t==='audio'){ el.textContent=pre+'\uD83C\uDFA4 Voice message'; return; }
+  if(t==='video'){ el.textContent=pre+'\uD83C\uDFA5 Video'; return; }
+  if(t!=='text'){ el.textContent=pre+'\uD83D\uDD17 Shared on Gupzy'; return; }
+  if(c.lastText && c.lastText!=='\uD83D\uDD12 Message'){ el.textContent=pre+c.lastText; return; }   /* old unencrypted message */
+  var ck=c.id+':'+ms(c.lastAt);
   if(pvCache.has(ck)){ el.textContent=pvCache.get(ck); return; }
+  el.textContent='\uD83D\uDD12 Message';
+  if(pvBusy>=4) return;
+  pvBusy++;
   var p=peerOf(c);
-  decPayload(p.uid,c.lastIv,c.lastCt).then(function(o){
-    var s=(c.lastFrom===me.uid?'You: ':'')+previewOf(o); pvCache.set(ck,s);
-    var e2=$('chatList').querySelector('[data-pv="'+c.id+'"]'); if(e2) e2.textContent=s;
-  }).catch(function(){ var e2=$('chatList').querySelector('[data-pv="'+c.id+'"]'); if(e2) e2.textContent='\uD83D\uDD12 Message'; });
+  db.collection('chats').doc(c.id).collection('messages').orderBy('createdAt','desc').limit(1).get().then(function(q){
+    if(q.empty) return; var m=q.docs[0].data();
+    return openMsg(c.id,p.uid,m).then(function(o){ if(o && m.type==='text'){ var s2=(m.from===me.uid?'You: ':'')+o.t; pvCache.set(ck,s2); pvSet(c.id,s2); } });
+  }).catch(function(){}).then(function(){ pvBusy--; });
 }
 function bindRows(root){
   root.querySelectorAll('[data-peer]').forEach(function(el){ el.onclick=function(){ openChat(el.getAttribute('data-peer')); }; });
@@ -1046,7 +1092,7 @@ function openSettings(){
   var bg=sheet('<div class="sh-t">Settings &amp; privacy</div>'
     +'<div class="setrow" style="border-top:0"><div class="rb"><div class="rn">Show when I\u2019m online</div><div class="rs">If off, you also won\u2019t see when others are online or their last seen.</div></div><label class="sw"><input type="checkbox" id="stOnl"'+(presHidden?'':' checked')+'><i></i></label></div>'
     +(native?'<div class="setrow"><div class="rb"><div class="rn">Message notifications</div><div class="rs">Get notified when a friend messages you.</div></div><button class="btn gray" id="stNot">Enable</button></div>':'')
-    +'<div class="setrow"><div class="rb"><div class="rn">Chat backup</div><div class="rs" id="stBkS">'+(backupState==='on'?'On \u2013 you can restore your messages on a new phone with your backup password.':'Off \u2013 if you uninstall the app or lose this phone, older messages cannot be read again.')+'</div></div><button class="btn gray" id="stBk">'+(backupState==='on'?'Change':'Turn on')+'</button></div>'
+    +'<div class="setrow"><div class="rb"><div class="rn">Chat backup</div><div class="rs" id="stBkS">'+(backupState==='on'?'On \u2013 same backup as Gupzy. Restore your messages on a new phone with your backup password.':'Off \u2013 if you uninstall the app or lose this phone, older messages cannot be read again. One backup covers Gupzy and Gupchats.')+'</div></div><button class="btn gray" id="stBk">'+(backupState==='on'?'Change':'Turn on')+'</button></div>'
     +'<p class="sh-p" style="margin-top:12px">Messages, photos and voice messages are end-to-end encrypted. Only you and your friend can read them.</p>'
     +'<button class="btn gray" style="width:100%;padding:13px" id="stClose">Close</button>');
   bg.onclick=function(e){ if(e.target===bg) bg.remove(); };
@@ -1079,14 +1125,14 @@ async function openChat(peerUid){
   $('chat').classList.remove('hidden');
   if(unsubMsgs) unsubMsgs();
   var tok=++msgTok;
-  unsubMsgs=db.collection('gcChats').doc(cur.id).collection('messages').orderBy('createdAt','asc').limitToLast(150).onSnapshot(function(snap){
+  unsubMsgs=db.collection('chats').doc(cur.id).collection('messages').orderBy('createdAt','asc').limitToLast(150).onSnapshot(function(snap){
     renderMsgs(snap, tok);
   }, function(e){ if(tok===msgTok) toast('Messages error: '+e.message); });
   markRead();
   try{
     var pub=await peerPub(peerUid);
     if(tok!==msgTok) return;
-    if(!pub){ $('note').textContent=c.name+' has not opened Gupchats yet. You can message them once they join.'; $('note').classList.remove('hidden'); cur.canSend=false; }
+    if(!pub){ $('note').textContent=c.name+' has not updated Gupzy yet, so encrypted messages cannot be sent to them.'; $('note').classList.remove('hidden'); cur.canSend=false; }
     else cur.canSend=true;
   }catch(e){ cur.canSend=true; }
   updateSend();
@@ -1101,73 +1147,94 @@ function updateSend(){
 $('mIn').addEventListener('input',function(){ this.style.height='auto'; this.style.height=Math.min(this.scrollHeight,110)+'px'; updateSend(); });
 async function markRead(){
   if(!cur) return; var c=chats[cur.id];
-  if(c && ((c.unread||{})[me.uid]||0)>0){ try{ await db.collection('gcChats').doc(cur.id).set({unread:{[me.uid]:0}},{merge:true}); }catch(e){} }
+  if(c && ((c.unread||{})[me.uid]||0)>0){ try{ await db.collection('chats').doc(cur.id).set({lastRead:{[me.uid]:FV.serverTimestamp()},unread:{[me.uid]:0}},{merge:true}); }catch(e){} }
 }
-function mediaInner(media){
-  var bu=mediaUrls.get(media.u);
-  if(media.ty==='img'){
-    var st='width:'+Math.min(240,media.w||240)+'px;max-width:100%;aspect-ratio:'+(media.w||4)+'/'+(media.h||3);
-    return bu ? '<img class="mi" src="'+bu+'" data-big="'+bu+'" style="'+st+'" alt="">' : '<div class="mph" data-mu="'+esc(media.u)+'" style="'+st+'">Loading photo…</div>';
+function mediaInner(x){
+  var src = x.enc ? mediaUrls.get(x.u) : x.u;
+  if(x.kind==='img'){
+    return src ? '<img class="mi" src="'+esc(src)+'" data-big="'+esc(src)+'" alt="">' : '<div class="mph" data-mu="'+esc(x.u)+'" style="width:200px;height:150px">Loading photo…</div>';
   }
-  return bu ? '<audio controls preload="metadata" src="'+bu+'"></audio><div class="dur">'+esc(fmtDur(media.d))+'</div>' : '<div class="mph" data-mu="'+esc(media.u)+'">\uD83C\uDFA4 Loading voice message…</div>';
+  if(x.kind==='vid'){
+    return src ? '<video class="mv" controls playsinline preload="metadata" src="'+esc(src)+'"></video>' : '<div class="mph" data-mu="'+esc(x.u)+'" style="width:200px;height:150px">Loading video…</div>';
+  }
+  return src ? '<audio controls preload="metadata" src="'+esc(src)+'"></audio>'+(x.d?'<div class="dur">'+esc(fmtDur(x.d))+'</div>':'') : '<div class="mph" data-mu="'+esc(x.u)+'">🎤 Loading voice message…</div>';
 }
-function playingAudio(){ var a=$('msgs').querySelectorAll('audio'); for(var i=0;i<a.length;i++){ if(!a[i].paused&&!a[i].ended) return true; } return false; }
+function playingAudio(){ var a=$('msgs').querySelectorAll('audio,video'); for(var i=0;i<a.length;i++){ if(!a[i].paused&&!a[i].ended) return true; } return false; }
 function bindBig(box){
   box.querySelectorAll('img[data-big]').forEach(function(im){ im.onclick=function(){ var v=$('iv'); v.innerHTML='<img src="'+im.getAttribute('data-big')+'" alt="">'; v.classList.remove('hidden'); v.onclick=function(){ v.classList.add('hidden'); v.innerHTML=''; }; }; });
 }
+/* disappearing-message timer that Gupzy can set on a chat */
+function goneMsg(chatId, m){
+  var c=chats[chatId]; if(!c) return false;
+  var ttl=Number(c.ttl)||0, since=Number(c.ttlSince)||0; if(!ttl||m.type==='sys') return false;
+  var t=ms(m.createdAt); return !!t && t>=since && t+ttl<=Date.now();
+}
+/* one Gupzy message document -> something to draw */
+async function parseMsg(m, peerUid, chatId){
+  var base={ mine:m.from===me.uid, at:ms(m.createdAt) };
+  if(m.type==='sys') return null;
+  var o=null;
+  if(m.enc){ o=await openMsg(chatId, peerUid, m); if(!o) return Object.assign(base,{kind:'lock'}); }
+  var ty=m.type||'text';
+  if(ty==='text'){ return Object.assign(base,{ kind:'text', text:m.enc?o.t:String(m.text||''), q:(o&&o.q)||'' }); }
+  if(ty==='image'||ty==='audio'||ty==='video'){
+    var k=ty==='image'?'img':ty==='audio'?'aud':'vid';
+    if(m.enc){ if(!o.m||!o.m.k||!safeUrl(m.url)) return Object.assign(base,{kind:'lock'}); return Object.assign(base,{ kind:k, media:{ kind:k, u:m.url, k:o.m.k, mt:o.m.mt||'', d:o.m.dur||0, enc:true } }); }
+    if(safeUrl(m.url)) return Object.assign(base,{ kind:k, media:{ kind:k, u:m.url, mt:'', d:m.dur||0, enc:false } });
+  }
+  return Object.assign(base,{ kind:'other', text:(!m.enc&&m.text)?String(m.text):'🔗 Shared on Gupzy – open Gupzy to view it' });
+}
 async function renderMsgs(snap, tok){
   if(playingAudio()){ setTimeout(function(){ if(tok===msgTok) renderMsgs(snap,tok); }, 1500); return; }
-  var docs=snap.docs.map(function(d){ return {id:d.id,d:d.data({serverTimestamps:'estimate'})}; });
-  var peer=cur && cur.peer; if(!peer) return;
-  var out=await Promise.all(docs.map(async function(x){
-    var d=x.d, mine=d.from===me.uid, o=null;
-    try{ o=await decPayload(peer.uid,d.iv,d.ct); }catch(e){ o=null; }
-    return {mine:mine,o:o,at:ms(d.createdAt)};
-  }));
+  var peer=cur && cur.peer; if(!peer) return; var chatId=cur.id;
+  var docs=snap.docs.map(function(d){ var x=d.data({serverTimestamps:'estimate'}); x.id=d.id; return x; }).filter(function(x){ return !goneMsg(chatId,x); });
+  var out=(await Promise.all(docs.map(function(x){ return parseMsg(x, peer.uid, chatId).catch(function(){ return { mine:x.from===me.uid, at:ms(x.createdAt), kind:'lock' }; }); }))).filter(Boolean);
   if(tok!==msgTok || !cur) return;
   var html='', lastDay='', box=$('msgs'), toLoad=[];
   var atBottom = box.scrollHeight-box.scrollTop-box.clientHeight < 120;
   out.forEach(function(m){
-    var day=new Date(m.at).toDateString();
+    var day=new Date(m.at||Date.now()).toDateString();
     if(day!==lastDay){ lastDay=day; html+='<div class="tm">'+esc(fmtTime(m.at))+'</div>'; }
     var side=m.mine?'me':'th';
-    if(!m.o){ html+='<div class="b '+side+' lock">\uD83D\uDD12 Can\u2019t read this message</div>'; return; }
-    if(m.o.m && (m.o.m.ty==='img'||m.o.m.ty==='aud')){
-      html+='<div class="b '+side+' media">'+mediaInner(m.o.m)+'</div>';
-      if(!mediaUrls.has(m.o.m.u)) toLoad.push(m.o.m);
-    }else{
-      html+='<div class="b '+side+'">'+esc(m.o.t)+'</div>';
-    }
+    if(m.kind==='lock'){ html+='<div class="b '+side+' lock">🔒 Can’t read this message</div>'; return; }
+    if(m.media){ mediaSpec.set(m.media.u,m.media); html+='<div class="b '+side+' media">'+mediaInner(m.media)+'</div>'; if(m.media.enc && !mediaUrls.has(m.media.u)) toLoad.push(m.media); return; }
+    html+='<div class="b '+side+'">'+(m.q?'<div class="rq">'+esc(m.q)+'</div>':'')+esc(m.text)+'</div>';
   });
-  box.innerHTML = html || '<div class="empty">Say hi to '+esc(peer.name)+' \uD83D\uDC4B</div>';
+  box.innerHTML = html || '<div class="empty">Say hi to '+esc(peer.name)+' 👋</div>';
   bindBig(box);
   if(atBottom || out.length<=30) box.scrollTop=box.scrollHeight;
-  toLoad.forEach(function(m){
-    loadMedia(m).then(function(){
+  toLoad.forEach(function(x){
+    loadMedia(x).then(function(){
       if(tok!==msgTok) return;
       var b2=$('msgs'); b2.querySelectorAll('[data-mu]').forEach(function(el){
-        if(el.getAttribute('data-mu')===m.u && el.parentNode){ var pr=el.parentNode; pr.innerHTML=mediaInner(m); bindBig(pr); }
+        if(el.getAttribute('data-mu')===x.u && el.parentNode){ var pr=el.parentNode; pr.innerHTML=mediaInner(x); bindBig(pr); }
       });
       if(atBottom) b2.scrollTop=b2.scrollHeight;
     }).catch(function(){
-      $('msgs').querySelectorAll('[data-mu]').forEach(function(el){ if(el.getAttribute('data-mu')===m.u) el.textContent='\u26A0\uFE0F Couldn\u2019t load'; });
+      $('msgs').querySelectorAll('[data-mu]').forEach(function(el){ if(el.getAttribute('data-mu')===x.u) el.textContent='⚠️ Couldn’t load'; });
     });
   });
   markRead();
 }
 
-/* ---------------- sending ---------------- */
-async function sendPayload(obj, peer, id){
-  var e=await encPayload(peer.uid,obj);
-  var ref=db.collection('gcChats').doc(id);
-  await ref.collection('messages').add({ from:me.uid, iv:e.iv, ct:e.ct, v:1, createdAt:FV.serverTimestamp() });
+/* ---------------- sending (writes the SAME documents Gupzy writes: chats/{id}/messages) ---------------- */
+async function blockedPair(peerUid){
+  if(myBlocked.indexOf(peerUid)>=0) return true;
+  try{ var d=await db.collection('channels').doc(peerUid).get(); return !!(d.exists && (d.data().blockedUids||[]).indexOf(me.uid)>=0); }catch(e){ return false; }
+}
+async function sendMsgG(peer, id, base, payload){
+  if(await blockedPair(peer.uid)) throw new Error('blocked');
+  var env=await encPayload(id, peer.uid, payload);
+  var ref=db.collection('chats').doc(id);
+  await ref.collection('messages').add(Object.assign({ from:me.uid, fromName:me.name||'', createdAt:FV.serverTimestamp() }, base, env));
   var info={}; info[me.uid]={name:me.name,logo:me.logo||null}; info[peer.uid]={name:peer.name,logo:peer.logo||null};
   var unread={}; unread[peer.uid]=FV.increment(1);
-  await ref.set({ members:[me.uid,peer.uid], info:info, lastIv:e.iv, lastCt:e.ct, lastFrom:me.uid, lastAt:FV.serverTimestamp(), unread:unread },{merge:true});
+  await ref.set({ members:[me.uid,peer.uid], info:info, lastText:(base.type==='text'?'🔒 Message':''), lastType:base.type, lastFrom:me.uid, lastAt:FV.serverTimestamp(), unread:unread },{merge:true});
   pushNotify(id);
 }
 function sendErr(err,peer){
-  if(err && err.message==='nokey') toast(peer.name+' has not opened Gupchats yet');
+  if(err && err.message==='nokey') toast(peer.name+' has not updated Gupzy yet, so this cannot be sent encrypted');
+  else if(err && err.message==='blocked') toast('You can’t message this user');
   else if(err && /permission/i.test(err.message||'')) toast('You can only message friends (follow each other).');
   else toast('Send failed: '+(err&&err.message||err));
 }
@@ -1176,19 +1243,23 @@ async function sendText(){
   var text=$('mIn').value.trim(); if(!text) return;
   var id=cur.id, peer=cur.peer;
   $('mIn').value=''; $('mIn').style.height='auto'; updateSend();
-  try{ await sendPayload({t:text},peer,id); }
+  try{ await sendMsgG(peer,id,{type:'text'},{t:text,q:'',m:null}); }
   catch(err){ $('mIn').value=text; updateSend(); sendErr(err,peer); }
 }
 $('sendBtn').onclick=sendText;
 function addPending(txt){ var b=$('msgs'), d=document.createElement('div'); d.className='pend'; d.textContent=txt; b.appendChild(d); b.scrollTop=b.scrollHeight; return d; }
 async function sendMedia(ty, blob, extra, peer, id){
-  var pend=($('chat').classList.contains('hidden')||!cur||cur.id!==id)?null:addPending(ty==='img'?'\uD83D\uDCF7 Sending photo…':'\uD83C\uDFA4 Sending voice message…');
+  var gty = ty==='img' ? 'image' : 'audio';
+  var pend=($('chat').classList.contains('hidden')||!cur||cur.id!==id)?null:addPending(ty==='img'?'📷 Sending photo…':'🎤 Sending voice message…');
   try{
-    var enc=await encBlob(blob);
-    var url=await uploadCloud(enc.data,'raw','gc_'+me.uid.slice(0,6)+'_'+Date.now());
-    var m=Object.assign({ty:ty,u:url,k:enc.k,i:enc.i,mt:blob.type||''},extra||{});
-    var bu=URL.createObjectURL(blob); mediaUrls.set(url,bu); mediaCache.set(url,Promise.resolve(bu));   /* show my own copy without downloading it again */
-    await sendPayload({t:'',m:m},peer,id);
+    var ef=await encFileG(blob), url=null, lastErr=null, exts=['bin','txt','json','pdf','zip','jpg','png','webm'];
+    for(var i=0;i<exts.length;i++){
+      try{ url=await uploadCloud(ef.blob,'raw','enc_'+me.uid+'_'+Date.now()+'.'+exts[i]); break; }
+      catch(er){ lastErr=er; if(!/not allowed|format|extension/i.test(er.message||'')) throw er; }
+    }
+    if(!url) throw lastErr||new Error('upload failed');
+    var bu=URL.createObjectURL(blob); mediaUrls.set(url,bu); mediaCache.set(url,Promise.resolve(bu));   /* my own copy, no re-download */
+    await sendMsgG(peer,id,{type:gty,url:url},{ t:'', q:'', m:{ k:ef.k, mt:blob.type||'', dur:(extra&&extra.d)||0 } });
   }catch(err){ sendErr(err,peer); }
   finally{ if(pend&&pend.parentNode) pend.remove(); }
 }
