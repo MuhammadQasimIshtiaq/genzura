@@ -25,6 +25,7 @@ service cloud.firestore {
 
     // like helpers
     function videoLikePath(u, v) { return /databases/$(database)/documents/likes/$(u + '_' + v); }
+    function videoSignalPath(u, v, t) { return /databases/$(database)/documents/videoSignals/$(u + '_' + v + '_' + t); }
     function postLikePath(u, p)  { return /databases/$(database)/documents/postLikes/$(u + '_' + p); }
 
     // owner helpers
@@ -150,7 +151,7 @@ service cloud.firestore {
         isAdmin()
         // owner edits (title, desc, boost, name/logo sync ...) but never counters / identity
         || (resource.data.channelId == me()
-            && !changed().hasAny(['views', 'likesCount', 'commentsCount', 'channelId', 'createdAt']))
+            && !changed().hasAny(['views', 'likesCount', 'commentsCount', 'sharesCount', 'watchCount', 'watchPctSum', 'skipsCount', 'channelId', 'createdAt']))
         // likes counter: +1 only with my like doc, -1 only after my like doc is gone
         || (changed().hasOnly(['likesCount'])
             && ((delta('likesCount') == 1  &&  existsAfter(videoLikePath(me(), vid)))
@@ -159,6 +160,14 @@ service cloud.firestore {
         || (changed().hasOnly(['commentsCount'])
             && (delta('commentsCount') == 1
                 || (delta('commentsCount') < 0 && request.resource.data.commentsCount >= 0)))
+        // feed signals (never on your own video): share +1, or one watch result (completion 0..100, skip 0/1) -- each only together with its own signal doc
+        || (resource.data.channelId != me() && changed().hasOnly(['sharesCount'])
+            && delta('sharesCount') == 1 && existsAfter(videoSignalPath(me(), vid, 'share')))
+        || (resource.data.channelId != me() && changed().hasOnly(['watchCount', 'watchPctSum', 'skipsCount'])
+            && delta('watchCount') == 1
+            && delta('watchPctSum') >= 0 && delta('watchPctSum') <= 100
+            && delta('skipsCount') >= 0 && delta('skipsCount') <= 1
+            && existsAfter(videoSignalPath(me(), vid, 'watch')))
         // NOTE: "views" can NOT be changed from the app. Only the Worker (service account) does it.
       );
 
@@ -181,6 +190,19 @@ service cloud.firestore {
     match /views/{id} {
       allow read: if signedIn();       // Studio analytics query by videoId / date
       allow write: if false;
+    }
+
+    // ================================================================
+    //  VIDEO SIGNALS (share / watch) - one doc per user per video per type, create-only
+    // ================================================================
+    match /videoSignals/{id} {
+      allow read: if false;
+      allow create: if signedIn()
+        && request.resource.data.uid == me()
+        && request.resource.data.type in ['share', 'watch']
+        && request.resource.data.videoId is string
+        && id == me() + '_' + request.resource.data.videoId + '_' + request.resource.data.type;
+      allow update, delete: if false;
     }
 
     // ================================================================
@@ -449,6 +471,43 @@ service cloud.firestore {
     // ================================================================
     //  CHATS  (DM needs mutual follow OR mutual phone contacts, group = members only)
     // ================================================================
+    // ================================================================
+    //  GUPCHATS (separate chat app): own E2E public keys + own DM chats
+    // ================================================================
+    match /gcKeys/{uid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && me() == uid
+        && request.resource.data.uid == me()
+        && request.resource.data.keys().hasOnly(['uid', 'pub', 'updatedAt'])
+        && request.resource.data.pub is string
+        && request.resource.data.pub.size() < 200;
+      allow delete: if false;
+    }
+
+    match /gcChats/{chatId} {
+      allow read: if signedIn() && (
+        (resource == null && inDmId(chatId))
+        || (resource != null && (me() in resource.data.members))
+      );
+      allow create: if signedIn() && inDmId(chatId) && dmFollowOk(chatId)
+        && request.resource.data.members.size() == 2
+        && request.resource.data.members.toSet() == chatId.split('_').toSet();
+      allow update: if signedIn() && inDmId(chatId)
+        && request.resource.data.members.toSet() == chatId.split('_').toSet();
+      allow delete: if false;
+
+      match /messages/{mid} {
+        allow read: if signedIn() && inDmId(chatId);
+        allow create: if signedIn() && inDmId(chatId) && dmFollowOk(chatId)
+          && request.resource.data.from == me()
+          && request.resource.data.keys().hasOnly(['from', 'iv', 'ct', 'v', 'createdAt'])
+          && request.resource.data.ct is string
+          && request.resource.data.ct.size() < 8000;
+        allow update: if false;
+        allow delete: if signedIn() && inDmId(chatId) && resource.data.from == me();
+      }
+    }
+
     match /chats/{chatId} {
       allow read: if signedIn() && (
         inDmId(chatId)

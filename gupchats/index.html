@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>Gupchats</title>
+<style>
+:root{--bg:#fff;--surface:#f0f2f5;--text:#050505;--dim:#65676b;--blue:#0866ff;--blue-soft:#e7f0ff;--border:#e4e6eb;--red:#e41e3f;--green:#31a24c}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+.hidden{display:none!important}
+.screen{position:fixed;inset:0;display:flex;flex-direction:column;background:var(--bg);padding-top:env(safe-area-inset-top,0px)}
+button{font-family:inherit;cursor:pointer}
+.wordmark{font-size:30px;font-weight:800;color:var(--blue);letter-spacing:-1px}
+.h1{font-size:30px;font-weight:800;letter-spacing:-.5px}
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 8px}
+.iconbtn{width:40px;height:40px;border-radius:50%;border:0;background:none;display:flex;align-items:center;justify-content:center;color:var(--text)}
+.iconbtn:active{background:var(--surface)}
+.search{margin:6px 16px 10px;background:var(--surface);border-radius:24px;padding:11px 16px;display:flex;gap:10px;align-items:center;color:var(--dim)}
+.search input{flex:1;border:0;background:none;outline:none;font-size:16px;color:var(--text);min-width:0}
+main{flex:1;min-height:0;position:relative}
+.tab{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;display:none;padding-bottom:12px}
+.tab.on{display:block}
+nav{display:flex;justify-content:space-around;padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--border);background:var(--bg)}
+nav button{position:relative;border:0;background:none;width:84px;height:44px;border-radius:22px;color:#8a8d91;display:flex;align-items:center;justify-content:center}
+nav button.on{background:var(--blue-soft);color:var(--blue)}
+.dot{position:absolute;top:5px;right:22px;width:12px;height:12px;border-radius:50%;background:var(--red);border:2px solid #fff}
+.row{display:flex;align-items:center;gap:12px;padding:9px 16px;cursor:pointer}
+.row:active{background:var(--surface)}
+.av{width:56px;height:56px;border-radius:50%;flex:none;overflow:hidden;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:20px}
+.av img{width:100%;height:100%;object-fit:cover}
+.av.sm{width:44px;height:44px;font-size:16px}
+.rb{flex:1;min-width:0}
+.rn{font-size:16.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rs{font-size:14px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.row.unread .rn,.row.unread .rs{font-weight:700;color:var(--text)}
+.rt{font-size:12.5px;color:var(--dim);align-self:flex-start;margin-top:6px}
+.ub{width:10px;height:10px;border-radius:50%;background:var(--blue);flex:none}
+.strip{display:flex;gap:14px;overflow-x:auto;padding:4px 16px 12px;scrollbar-width:none}
+.strip::-webkit-scrollbar{display:none}
+.st{width:70px;flex:none;text-align:center;cursor:pointer}
+.st .av{width:64px;height:64px;margin:0 auto}
+.st div.n{font-size:12.5px;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chips{display:flex;gap:8px;padding:6px 16px 10px;overflow-x:auto}
+.chip{border:0;background:var(--surface);padding:9px 16px;border-radius:20px;font-size:15px;font-weight:700;color:var(--dim);white-space:nowrap}
+.chip.on{background:var(--blue-soft);color:var(--blue)}
+.btn{border:0;border-radius:8px;padding:9px 16px;font-weight:700;font-size:14.5px;background:var(--blue);color:#fff}
+.btn.gray{background:var(--surface);color:var(--text)}
+.empty{text-align:center;color:var(--dim);padding:48px 28px;font-size:15px;line-height:1.5}
+.sec{padding:12px 16px 4px;font-size:15px;color:var(--dim);font-weight:600}
+.card{display:flex;align-items:center;gap:14px;padding:12px 16px;font-size:17px;cursor:pointer}
+.card .ic{width:36px;height:36px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center}
+hr{border:0;border-top:1px solid var(--border);margin:8px 0}
+/* chat */
+#chat .top{display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border)}
+#msgs{flex:1;overflow-y:auto;padding:12px 12px 6px;display:flex;flex-direction:column;gap:3px;-webkit-overflow-scrolling:touch}
+.b{max-width:78%;padding:9px 13px;border-radius:19px;font-size:16px;line-height:1.35;word-wrap:break-word;white-space:pre-wrap}
+.b.me{align-self:flex-end;background:var(--blue);color:#fff}
+.b.th{align-self:flex-start;background:var(--surface)}
+.b.lock{font-style:italic;opacity:.8}
+.tm{align-self:center;font-size:12px;color:var(--dim);margin:10px 0 4px}
+#composer{display:flex;align-items:flex-end;gap:8px;padding:8px 10px calc(8px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--border)}
+#composer textarea{flex:1;resize:none;max-height:110px;border:0;background:var(--surface);border-radius:20px;padding:10px 15px;font-size:16px;font-family:inherit;outline:none;color:var(--text)}
+#sendBtn{border:0;background:none;color:var(--blue);font-weight:800;font-size:16px;padding:10px 8px}
+#sendBtn:disabled{opacity:.35}
+#note{padding:10px 16px;font-size:13px;color:var(--dim);text-align:center;background:var(--surface)}
+/* login */
+#login{align-items:center;justify-content:center;text-align:center;padding:24px}
+#login .wordmark{font-size:44px;margin-bottom:6px}
+#login p{color:var(--dim);margin:0 0 28px}
+#login .btn{padding:14px 28px;font-size:16px;border-radius:26px;min-width:240px}
+#toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#333;color:#fff;padding:10px 16px;border-radius:20px;font-size:14px;z-index:99;max-width:86%;text-align:center}
+.sheetbg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:flex;align-items:flex-end}
+.sheet{background:#fff;width:100%;border-radius:20px 20px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));max-height:80%;overflow-y:auto}
+</style>
+</head>
+<body>
+
+<div id="login" class="screen hidden">
+  <div class="wordmark">gupchats</div>
+  <p>Chat with your Gupzy friends — private and encrypted.</p>
+  <button class="btn" id="loginBtn">Continue with Google</button>
+  <div id="loginErr" style="color:var(--red);margin-top:16px;font-size:14px"></div>
+</div>
+
+<div id="nochannel" class="screen hidden" style="align-items:center;justify-content:center;text-align:center;padding:28px">
+  <div class="h1" style="font-size:22px;margin-bottom:10px">Create your Gupzy channel first</div>
+  <p style="color:var(--dim);margin:0 0 24px">Gupchats uses your Gupzy profile. Open Gupzy once, create your channel, then come back here.</p>
+  <button class="btn gray" id="ncOut">Sign out</button>
+</div>
+
+<div id="app" class="screen hidden">
+  <main>
+    <section id="tChats" class="tab on">
+      <div class="hdr"><div class="wordmark">gupchats</div>
+        <button class="iconbtn" id="composeBtn" aria-label="New message"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/></svg></button></div>
+      <div class="search"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id="q" placeholder="Search chats or friends" autocomplete="off"></div>
+      <div class="strip" id="strip"></div>
+      <div id="chatList"></div>
+    </section>
+    <section id="tPeople" class="tab">
+      <div class="hdr"><div class="h1">People</div></div>
+      <div class="chips"><button class="chip on" id="chF">Friends</button><button class="chip" id="chR">Friend requests</button></div>
+      <div id="peopleList"></div>
+    </section>
+    <section id="tNotifs" class="tab">
+      <div class="hdr"><div class="h1">Notifications</div></div>
+      <div id="notifList"></div>
+    </section>
+    <section id="tMenu" class="tab">
+      <div class="hdr"><div class="h1">Menu</div></div>
+      <div id="menuBox"></div>
+    </section>
+  </main>
+  <nav>
+    <button id="n0" class="on" aria-label="Chats"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.5 2 2 6.1 2 11.2c0 2.9 1.4 5.4 3.7 7.1V22l3.4-1.9c.9.3 1.9.4 2.9.4 5.5 0 10-4.1 10-9.2S17.5 2 12 2z"/></svg><span class="dot hidden" id="d0"></span></button>
+    <button id="n1" aria-label="People"><svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="8" r="3.4"/><path d="M2.5 19c0-3.3 2.9-5.4 6.5-5.4s6.5 2.1 6.5 5.4z"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 13.8c3 0 5 1.7 5 4.4h-4.2c0-1.7-.5-3.2-1.5-4.2.2-.1.5-.2.7-.2z"/></svg><span class="dot hidden" id="d1"></span></button>
+    <button id="n2" aria-label="Notifications"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22a2.3 2.3 0 0 0 2.3-2.3H9.7A2.3 2.3 0 0 0 12 22zm7-6.3V11a7 7 0 0 0-5.5-6.8V3.5a1.5 1.5 0 0 0-3 0v.7A7 7 0 0 0 5 11v4.7l-2 2v1h18v-1z"/></svg><span class="dot hidden" id="d2"></span></button>
+    <button id="n3" aria-label="Menu"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+  </nav>
+</div>
+
+<div id="chat" class="screen hidden">
+  <div class="top">
+    <button class="iconbtn" id="cBack" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <div id="cAv"></div><div class="rb"><div class="rn" id="cName" style="font-weight:700"></div><div class="rs">🔒 End-to-end encrypted</div></div>
+  </div>
+  <div id="msgs"></div>
+  <div id="note" class="hidden"></div>
+  <div id="composer"><textarea id="mIn" rows="1" placeholder="Message"></textarea><button id="sendBtn" disabled>Send</button></div>
+</div>
+
+<div id="picker" class="screen hidden" style="z-index:40">
+  <div class="top" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border)">
+    <button class="iconbtn" id="pkBack"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <div style="font-size:18px;font-weight:800">New message</div></div>
+  <div class="search"><input id="pkQ" placeholder="Search friends" autocomplete="off" style="width:100%"></div>
+  <div id="pkList" style="flex:1;overflow-y:auto"></div>
+</div>
+
+<div id="toast" class="hidden"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js" crossorigin="anonymous"></script>
+<script>
+(function(){
+'use strict';
+var CFG = {"apiKey": "AIzaSyATkLM81knrj_enQUsg1L9XRXt9_jdvL0w", "authDomain": "arain-tube-672a1.firebaseapp.com", "projectId": "arain-tube-672a1", "storageBucket": "arain-tube-672a1.firebasestorage.app", "messagingSenderId": "649325973427", "appId": "1:649325973427:web:8021eab6a361352f7ec5c6"};
+firebase.initializeApp(CFG);
+var auth = firebase.auth(), db = firebase.firestore(), FV = firebase.firestore.FieldValue;
+var $ = function(id){ return document.getElementById(id); };
+var te = new TextEncoder(), td = new TextDecoder();
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+var toastT=null;
+function toast(m){ var t=$('toast'); t.textContent=m; t.classList.remove('hidden'); clearTimeout(toastT); toastT=setTimeout(function(){ t.classList.add('hidden'); },3200); }
+function color(n){ var h=0; n=String(n||'?'); for(var i=0;i<n.length;i++) h=(h*31+n.charCodeAt(i))|0; return 'hsl('+(Math.abs(h)%360)+',55%,48%)'; }
+function initials(n){ var p=String(n||'?').trim().split(/\s+/); return ((p[0]||'?')[0]+((p[1]||'')[0]||'')).toUpperCase(); }
+function av(logo,name,cls){ var inner = /^https?:\/\//.test(logo||'') ? '<img src="'+esc(logo)+'" alt="">' : esc(initials(name)); var bg = /^https?:\/\//.test(logo||'') ? 'transparent' : color(name); return '<div class="av '+(cls||'')+'" style="background:'+bg+'">'+inner+'</div>'; }
+function ms(t){ return (t && t.toMillis) ? t.toMillis() : (typeof t==='number'?t:0); }
+function dmId(a,b){ return a<b ? a+'_'+b : b+'_'+a; }
+function fmtTime(t){
+  var m=ms(t) || Date.now(), d=new Date(m), n=new Date();
+  if(d.toDateString()===n.toDateString()) return d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'});
+  var days=(n-d)/86400000;
+  if(days<6) return d.toLocaleDateString([], {weekday:'short'});
+  return d.toLocaleDateString([], {month:'short',day:'numeric'});
+}
+function show(id){ ['login','nochannel','app'].forEach(function(x){ $(x).classList.toggle('hidden', x!==id); }); }
+
+/* ---------------- state ---------------- */
+var me=null, chInfo=new Map(), chats={}, unsubChats=null;
+var followingSet=new Set(), friends=[], requests=[], followers=[];
+var cur=null, unsubMsgs=null, msgTok=0, peopleMode='F';
+
+/* ---------------- E2E (own key per device, separate from Gupzy) ---------------- */
+function b64(u8){ var s=''; u8.forEach(function(b){ s+=String.fromCharCode(b); }); return btoa(s); }
+function unb64(t){ return Uint8Array.from(atob(t), function(c){ return c.charCodeAt(0); }); }
+var idbP=null;
+function idb(){ if(idbP) return idbP; idbP=new Promise(function(res,rej){ var r=indexedDB.open('gupchats-e2ee',1); r.onupgradeneeded=function(){ r.result.createObjectStore('k'); }; r.onsuccess=function(){ res(r.result); }; r.onerror=function(){ idbP=null; rej(r.error); }; }); return idbP; }
+function idbGet(k){ return idb().then(function(d){ return new Promise(function(res,rej){ var q=d.transaction('k').objectStore('k').get(k); q.onsuccess=function(){ res(q.result); }; q.onerror=function(){ rej(q.error); }; }); }); }
+function idbSet(k,v){ return idb().then(function(d){ return new Promise(function(res,rej){ var q=d.transaction('k','readwrite').objectStore('k').put(v,k); q.onsuccess=function(){ res(); }; q.onerror=function(){ rej(q.error); }; }); }); }
+var myKP=null, ppCache=new Map(), skCache=new Map();
+async function initKeys(){
+  var rec = await idbGet('k_'+me.uid);
+  if(!rec || !rec.priv){
+    var kp = await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'}, false, ['deriveBits']);
+    rec = { priv: kp.privateKey, pub: b64(new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey))) };
+    await idbSet('k_'+me.uid, rec);
+  }
+  myKP = rec;
+  var ref = db.collection('gcKeys').doc(me.uid), cp=null;
+  try{ var d=await ref.get(); cp = d.exists ? d.data().pub : null; }catch(e){}
+  if(cp !== rec.pub) await ref.set({ uid: me.uid, pub: rec.pub, updatedAt: FV.serverTimestamp() });
+}
+async function peerPub(uid){
+  var c=ppCache.get(uid); if(c && Date.now()-c.t<120000) return c.p;
+  var d=await db.collection('gcKeys').doc(uid).get();
+  var p = d.exists ? d.data().pub : null;
+  ppCache.set(uid,{p:p,t:Date.now()}); return p;
+}
+async function sharedKey(peerUid){
+  var pub=await peerPub(peerUid); if(!pub) throw new Error('nokey');
+  var ck=peerUid+':'+pub; if(skCache.has(ck)) return skCache.get(ck);
+  var pk=await crypto.subtle.importKey('raw', unb64(pub), {name:'ECDH',namedCurve:'P-256'}, false, []);
+  var bits=await crypto.subtle.deriveBits({name:'ECDH',public:pk}, myKP.priv, 256);
+  var hk=await crypto.subtle.importKey('raw', bits, 'HKDF', false, ['deriveKey']);
+  var aes=await crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt:te.encode(dmId(me.uid,peerUid)),info:te.encode('gupchats-v1')}, hk, {name:'AES-GCM',length:256}, false, ['encrypt','decrypt']);
+  skCache.set(ck,aes); return aes;
+}
+async function encText(peerUid, text){
+  var key=await sharedKey(peerUid), iv=crypto.getRandomValues(new Uint8Array(12));
+  var ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:iv}, key, te.encode(JSON.stringify({t:text})));
+  return { iv:b64(iv), ct:b64(new Uint8Array(ct)) };
+}
+async function decText(peerUid, iv, ct){
+  var key=await sharedKey(peerUid);
+  var pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(iv)}, key, unb64(ct));
+  return JSON.parse(td.decode(pt)).t;
+}
+
+/* ---------------- auth ---------------- */
+function loginErr(m){ $('loginErr').textContent = m || ''; $('loginBtn').disabled=false; }
+$('loginBtn').onclick = function(){
+  $('loginBtn').disabled=true; loginErr('');
+  if(window.AndroidAuth && typeof window.AndroidAuth.signIn==='function'){
+    window.__nativeGoogleSignIn = {
+      onToken: function(t){ auth.signInWithCredential(firebase.auth.GoogleAuthProvider.credential(t)).catch(function(e){ loginErr(e.message); }); },
+      onFailed: function(code,msg){ loginErr(code==='cancelled' ? '' : (msg||'Sign-in failed')); }
+    };
+    try{ window.AndroidAuth.signIn(); }catch(e){ loginErr(String(e)); }
+  }else{
+    var p=new firebase.auth.GoogleAuthProvider(); p.setCustomParameters({prompt:'select_account'});
+    auth.signInWithPopup(p).catch(function(e){ loginErr(e.message); });
+  }
+};
+function signOut(){ if(unsubChats){ unsubChats(); unsubChats=null; } closeChat(); auth.signOut(); }
+$('ncOut').onclick = signOut;
+
+auth.onAuthStateChanged(async function(u){
+  if(!u){ me=null; show('login'); $('loginBtn').disabled=false; return; }
+  try{
+    var d=await db.collection('channels').doc(u.uid).get();
+    if(!d.exists){ show('nochannel'); return; }
+    var c=d.data();
+    me={ uid:u.uid, name:c.name||u.displayName||'User', logo:c.logoURL||null, handle:c.channelId||'' };
+    chInfo.set(u.uid,{name:me.name,logo:me.logo});
+    show('app'); setTab(0);
+    try{ await initKeys(); }catch(e){ toast('Encryption setup failed on this device'); console.error(e); }
+    startChats(); loadPeople();
+    renderMenu();
+  }catch(e){ console.error(e); toast('Could not load your profile. Check internet.'); show('login'); }
+});
+
+/* ---------------- tabs ---------------- */
+var curTab=0;
+function setTab(i){
+  curTab=i;
+  ['tChats','tPeople','tNotifs','tMenu'].forEach(function(id,k){ $(id).classList.toggle('on',k===i); $('n'+k).classList.toggle('on',k===i); });
+  if(i===2){ try{ localStorage.setItem('gc_notif_seen_'+me.uid, String(Date.now())); }catch(e){} $('d2').classList.add('hidden'); renderNotifs(); }
+  if(i===1) renderPeople();
+}
+[0,1,2,3].forEach(function(i){ $('n'+i).onclick=function(){ setTab(i); }; });
+
+/* ---------------- chats list ---------------- */
+function peerOf(c){ var o=(c.members||[]).filter(function(x){ return x!==me.uid; })[0]; var i=(c.info&&c.info[o])||chInfo.get(o)||{}; return {uid:o,name:i.name||'User',logo:i.logo||null}; }
+function startChats(){
+  if(unsubChats) unsubChats();
+  unsubChats = db.collection('gcChats').where('members','array-contains',me.uid).limit(200).onSnapshot(function(snap){
+    chats={}; snap.docs.forEach(function(d){ var x=d.data(); x.id=d.id; chats[d.id]=x; });
+    renderChats();
+    var anyUnread=Object.keys(chats).some(function(k){ return ((chats[k].unread||{})[me.uid]||0)>0; });
+    $('d0').classList.toggle('hidden', !anyUnread);
+  }, function(e){ console.error(e); toast('Chats error: '+e.message); });
+}
+var pvCache=new Map();
+function renderChats(){
+  var q=($('q').value||'').trim().toLowerCase();
+  var list=Object.keys(chats).map(function(k){ return chats[k]; }).sort(function(a,b){ return (ms(b.lastAt)||Date.now())-(ms(a.lastAt)||Date.now()); });
+  if(q) list=list.filter(function(c){ return peerOf(c).name.toLowerCase().indexOf(q)>=0; });
+  var html=list.map(function(c){
+    var p=peerOf(c), un=((c.unread||{})[me.uid]||0)>0;
+    return '<div class="row'+(un?' unread':'')+'" data-peer="'+esc(p.uid)+'">'+av(p.logo,p.name)+'<div class="rb"><div class="rn">'+esc(p.name)+'</div><div class="rs" data-pv="'+esc(c.id)+'">…</div></div><div class="rt">'+esc(fmtTime(c.lastAt))+'</div>'+(un?'<div class="ub"></div>':'')+'</div>';
+  }).join('');
+  if(q){
+    var inChat=new Set(list.map(function(c){ return peerOf(c).uid; }));
+    var more=friends.filter(function(f){ return !inChat.has(f.uid) && f.name.toLowerCase().indexOf(q)>=0; });
+    if(more.length) html+='<div class="sec">Friends</div>'+more.map(friendRow).join('');
+  }
+  if(!html) html='<div class="empty">'+(q?'No results.':'No chats yet.<br>Tap the pencil icon to start a conversation with a friend.')+'</div>';
+  $('chatList').innerHTML=html;
+  bindRows($('chatList'));
+  list.forEach(fillPreview);
+  renderStrip();
+}
+function fillPreview(c){
+  var el=$('chatList').querySelector('[data-pv="'+c.id+'"]'); if(!el) return;
+  if(!c.lastCt){ el.textContent=''; return; }
+  var ck=c.id+':'+ms(c.lastAt)+':'+c.lastCt.length;
+  if(pvCache.has(ck)){ el.textContent=pvCache.get(ck); return; }
+  var p=peerOf(c);
+  decText(p.uid,c.lastIv,c.lastCt).then(function(t){
+    var s=(c.lastFrom===me.uid?'You: ':'')+t; pvCache.set(ck,s);
+    var e2=$('chatList').querySelector('[data-pv="'+c.id+'"]'); if(e2) e2.textContent=s;
+  }).catch(function(){ var e2=$('chatList').querySelector('[data-pv="'+c.id+'"]'); if(e2) e2.textContent='🔒 Message'; });
+}
+function renderStrip(){
+  var s=$('strip');
+  if(!friends.length){ s.classList.add('hidden'); return; }
+  s.classList.remove('hidden');
+  s.innerHTML=friends.slice(0,14).map(function(f){ return '<div class="st" data-peer="'+esc(f.uid)+'">'+av(f.logo,f.name)+'<div class="n">'+esc(f.name.split(' ')[0])+'</div></div>'; }).join('');
+  bindRows(s);
+}
+function bindRows(root){
+  root.querySelectorAll('[data-peer]').forEach(function(el){ el.onclick=function(){ openChat(el.getAttribute('data-peer')); }; });
+}
+$('q').addEventListener('input', renderChats);
+
+/* ---------------- people / follow graph ---------------- */
+function friendRow(f){ return '<div class="row" data-peer="'+esc(f.uid)+'">'+av(f.logo,f.name)+'<div class="rb"><div class="rn">'+esc(f.name)+'</div><div class="rs">'+(f.handle?'@'+esc(f.handle)+' · ':'')+'Friends</div></div></div>'; }
+async function getCh(uid){
+  if(chInfo.has(uid) && chInfo.get(uid).name) return chInfo.get(uid);
+  try{ var d=await db.collection('channels').doc(uid).get(); var c=d.exists?d.data():{}; var v={name:c.name||'User',logo:c.logoURL||null,handle:c.channelId||''}; chInfo.set(uid,v); return v; }
+  catch(e){ return {name:'User',logo:null,handle:''}; }
+}
+async function loadPeople(){
+  try{
+    var r=await Promise.all([
+      db.collection('subscriptions').where('subscriberId','==',me.uid).limit(500).get(),
+      db.collection('subscriptions').where('channelId','==',me.uid).limit(500).get()
+    ]);
+    followingSet=new Set(); var followingDocs={};
+    r[0].docs.forEach(function(d){ var x=d.data(); followingSet.add(x.channelId); followingDocs[x.channelId]=x; });
+    followers=r[1].docs.map(function(d){ var x=d.data(); return {uid:x.subscriberId, at:ms(x.joinedAt)}; }).sort(function(a,b){ return b.at-a.at; });
+    var fs=new Set(followers.map(function(f){ return f.uid; }));
+    var mutualIds=[...followingSet].filter(function(u){ return fs.has(u); });
+    var reqIds=followers.filter(function(f){ return !followingSet.has(f.uid); }).map(function(f){ return f.uid; });
+    mutualIds.forEach(function(u){ var x=followingDocs[u]; if(x && !chInfo.has(u)) chInfo.set(u,{name:x.channelName||'User',logo:x.channelLogo||null,handle:''}); });
+    friends=await Promise.all(mutualIds.slice(0,300).map(async function(u){ var c=await getCh(u); return {uid:u,name:c.name,logo:c.logo,handle:c.handle}; }));
+    friends.sort(function(a,b){ return a.name.localeCompare(b.name); });
+    requests=await Promise.all(reqIds.slice(0,60).map(async function(u){ var c=await getCh(u); var f=followers.filter(function(z){ return z.uid===u; })[0]; return {uid:u,name:c.name,logo:c.logo,handle:c.handle,at:f?f.at:0}; }));
+    $('d1').classList.toggle('hidden', !requests.length);
+    var seen=0; try{ seen=+localStorage.getItem('gc_notif_seen_'+me.uid)||0; }catch(e){}
+    $('d2').classList.toggle('hidden', !followers.some(function(f){ return f.at>seen; }) || curTab===2);
+    renderStrip(); renderPeople(); renderChats();
+  }catch(e){ console.error(e); }
+}
+function renderPeople(){
+  $('chF').classList.toggle('on',peopleMode==='F'); $('chR').classList.toggle('on',peopleMode==='R');
+  $('chF').textContent='Friends ('+friends.length+')'; $('chR').textContent='Friend requests'+(requests.length?' ('+requests.length+')':'');
+  var box=$('peopleList');
+  if(peopleMode==='F'){
+    box.innerHTML = friends.length ? friends.map(friendRow).join('') : '<div class="empty">No friends yet.<br>Friends are people who follow you and you follow back. Follow each other in Gupzy to chat here.</div>';
+    bindRows(box);
+  }else{
+    box.innerHTML = requests.length ? requests.map(function(f){ return '<div class="row" style="cursor:default">'+av(f.logo,f.name)+'<div class="rb"><div class="rn">'+esc(f.name)+'</div><div class="rs">Follows you</div></div><button class="btn" data-fb="'+esc(f.uid)+'">Follow back</button></div>'; }).join('') : '<div class="empty">No new requests.</div>';
+    bindFollowBack(box);
+  }
+}
+$('chF').onclick=function(){ peopleMode='F'; renderPeople(); };
+$('chR').onclick=function(){ peopleMode='R'; renderPeople(); };
+function bindFollowBack(root){ root.querySelectorAll('[data-fb]').forEach(function(b){ b.onclick=function(){ followBack(b.getAttribute('data-fb'), b); }; }); }
+async function followBack(uid, btn){
+  btn.disabled=true;
+  try{
+    var c=await getCh(uid);
+    var ref=db.collection('subscriptions').doc(me.uid+'_'+uid), chRef=db.collection('channels').doc(uid);
+    await db.runTransaction(async function(tx){
+      var d=await tx.get(ref); if(d.exists) return;
+      tx.set(ref,{ subscriberId:me.uid, channelId:uid, channelName:c.name, channelLogo:c.logo||null, joinedAt:FV.serverTimestamp() });
+      tx.update(chRef,{ subscriberCount:FV.increment(1) });
+    });
+    toast('You are now friends with '+c.name);
+    loadPeople();
+  }catch(e){ btn.disabled=false; toast('Could not follow: '+e.message); }
+}
+
+/* ---------------- notifications ---------------- */
+async function renderNotifs(){
+  var box=$('notifList');
+  if(!followers.length){ box.innerHTML='<div class="empty">No notifications yet.</div>'; return; }
+  var seen=0; try{ seen=+localStorage.getItem('gc_notif_seen_'+me.uid)||0; }catch(e){}
+  var top=followers.slice(0,40), items=await Promise.all(top.map(async function(f){ var c=await getCh(f.uid); return {uid:f.uid,name:c.name,logo:c.logo,at:f.at}; }));
+  box.innerHTML='<div class="sec">Recent</div>'+items.map(function(f){
+    var back=!followingSet.has(f.uid);
+    return '<div class="row" '+(back?'style="cursor:default"':'data-peer="'+esc(f.uid)+'"')+'>'+av(f.logo,f.name)+'<div class="rb"><div class="rn" style="white-space:normal"><b>'+esc(f.name)+'</b> '+(back?'followed you.':'is now your friend.')+'</div><div class="rs">'+esc(fmtTime(f.at))+'</div></div>'+(back?'<button class="btn" data-fb="'+esc(f.uid)+'">Follow back</button>':'')+'</div>';
+  }).join('');
+  bindRows(box); bindFollowBack(box);
+}
+
+/* ---------------- menu ---------------- */
+function renderMenu(){
+  $('menuBox').innerHTML =
+    '<div class="row" style="cursor:default">'+av(me.logo,me.name)+'<div class="rb"><div class="rn" style="font-weight:700;font-size:18px">'+esc(me.name)+'</div><div class="rs">'+(me.handle?'@'+esc(me.handle):'Gupzy account')+'</div></div></div><hr>'
+    +'<div class="card" id="mSet"><div class="ic">⚙️</div>Settings &amp; privacy</div>'
+    +'<div class="card" id="mOut"><div class="ic">↩️</div>Sign out</div><hr>'
+    +'<div class="sec">Also from Gupzy</div>'
+    +'<div class="card" id="mGz"><div class="ic">▶️</div>Gupzy</div>';
+  $('mOut').onclick=signOut;
+  $('mSet').onclick=function(){
+    var bg=document.createElement('div'); bg.className='sheetbg';
+    bg.innerHTML='<div class="sheet"><div style="font-size:18px;font-weight:800;margin-bottom:10px">Settings &amp; privacy</div><p style="color:var(--dim);line-height:1.5;margin:0 0 14px">Messages on Gupchats are end-to-end encrypted. Your private key stays on this device only, so chats are readable on this phone. If you uninstall the app or clear its data, older messages cannot be read again.</p><button class="btn gray" style="width:100%" id="shClose">Close</button></div>';
+    document.body.appendChild(bg); bg.onclick=function(e){ if(e.target===bg) bg.remove(); }; bg.querySelector('#shClose').onclick=function(){ bg.remove(); };
+  };
+  $('mGz').onclick=function(){ var u='https://gupzy.com/'; try{ if(window.AndroidAuth && window.AndroidAuth.openExternal){ window.AndroidAuth.openExternal(u); return; } }catch(e){} window.open(u,'_blank'); };
+}
+
+/* ---------------- picker (new message) ---------------- */
+function openPicker(){ $('picker').classList.remove('hidden'); $('pkQ').value=''; renderPicker(); }
+function renderPicker(){
+  var q=($('pkQ').value||'').toLowerCase(), l=friends.filter(function(f){ return !q || f.name.toLowerCase().indexOf(q)>=0; });
+  $('pkList').innerHTML = l.length ? l.map(friendRow).join('') : '<div class="empty">'+(friends.length?'No match.':'You have no friends yet. Follow each other in Gupzy first.')+'</div>';
+  $('pkList').querySelectorAll('[data-peer]').forEach(function(el){ el.onclick=function(){ $('picker').classList.add('hidden'); openChat(el.getAttribute('data-peer')); }; });
+}
+$('composeBtn').onclick=openPicker; $('pkBack').onclick=function(){ $('picker').classList.add('hidden'); }; $('pkQ').addEventListener('input',renderPicker);
+
+/* ---------------- chat screen ---------------- */
+async function openChat(peerUid){
+  var c=await getCh(peerUid);
+  cur={ id:dmId(me.uid,peerUid), peer:{uid:peerUid,name:c.name,logo:c.logo}, canSend:false };
+  $('cAv').innerHTML=av(c.logo,c.name,'sm'); $('cName').textContent=c.name;
+  $('msgs').innerHTML=''; $('mIn').value=''; $('sendBtn').disabled=true; $('note').classList.add('hidden');
+  $('chat').classList.remove('hidden');
+  if(unsubMsgs) unsubMsgs();
+  var tok=++msgTok;
+  unsubMsgs=db.collection('gcChats').doc(cur.id).collection('messages').orderBy('createdAt','asc').limitToLast(150).onSnapshot(function(snap){
+    renderMsgs(snap, tok);
+  }, function(e){ if(tok===msgTok) toast('Messages error: '+e.message); });
+  markRead();
+  try{
+    var pub=await peerPub(peerUid);
+    if(tok!==msgTok) return;
+    if(!pub){ $('note').textContent=c.name+' has not opened Gupchats yet. You can message them once they join.'; $('note').classList.remove('hidden'); cur.canSend=false; }
+    else cur.canSend=true;
+  }catch(e){ cur.canSend=true; }
+  updateSend();
+}
+function closeChat(){ if(unsubMsgs){ unsubMsgs(); unsubMsgs=null; } msgTok++; cur=null; $('chat').classList.add('hidden'); }
+$('cBack').onclick=closeChat;
+function updateSend(){ $('sendBtn').disabled = !(cur && cur.canSend && $('mIn').value.trim()); }
+$('mIn').addEventListener('input',function(){ this.style.height='auto'; this.style.height=Math.min(this.scrollHeight,110)+'px'; updateSend(); });
+async function markRead(){
+  if(!cur) return; var c=chats[cur.id];
+  if(c && ((c.unread||{})[me.uid]||0)>0){ try{ await db.collection('gcChats').doc(cur.id).set({unread:{[me.uid]:0}},{merge:true}); }catch(e){} }
+}
+async function renderMsgs(snap, tok){
+  var docs=snap.docs.map(function(d){ return {id:d.id,d:d.data({serverTimestamps:'estimate'})}; });
+  var peer=cur && cur.peer; if(!peer) return;
+  var out=await Promise.all(docs.map(async function(x){
+    var d=x.d, mine=d.from===me.uid, text;
+    try{ text=await decText(peer.uid,d.iv,d.ct); }catch(e){ text=null; }
+    return {mine:mine,text:text,at:ms(d.createdAt)};
+  }));
+  if(tok!==msgTok || !cur) return;
+  var html='', lastDay='', box=$('msgs');
+  var atBottom = box.scrollHeight-box.scrollTop-box.clientHeight < 120;
+  out.forEach(function(m){
+    var day=new Date(m.at).toDateString();
+    if(day!==lastDay){ lastDay=day; html+='<div class="tm">'+esc(fmtTime(m.at))+'</div>'; }
+    html+= m.text==null ? '<div class="b '+(m.mine?'me':'th')+' lock">🔒 Can’t read this message</div>' : '<div class="b '+(m.mine?'me':'th')+'">'+esc(m.text)+'</div>';
+  });
+  box.innerHTML = html || '<div class="empty">Say hi to '+esc(peer.name)+' 👋</div>';
+  if(atBottom || out.length<=30) box.scrollTop=box.scrollHeight;
+  markRead();
+}
+async function sendText(){
+  if(!cur || !cur.canSend) return;
+  var text=$('mIn').value.trim(); if(!text) return;
+  var id=cur.id, peer=cur.peer;
+  $('mIn').value=''; $('mIn').style.height='auto'; updateSend();
+  try{
+    var e=await encText(peer.uid,text);
+    var ref=db.collection('gcChats').doc(id);
+    await ref.collection('messages').add({ from:me.uid, iv:e.iv, ct:e.ct, v:1, createdAt:FV.serverTimestamp() });
+    var info={}; info[me.uid]={name:me.name,logo:me.logo||null}; info[peer.uid]={name:peer.name,logo:peer.logo||null};
+    var unread={}; unread[peer.uid]=FV.increment(1);
+    await ref.set({ members:[me.uid,peer.uid], info:info, lastIv:e.iv, lastCt:e.ct, lastFrom:me.uid, lastAt:FV.serverTimestamp(), unread:unread },{merge:true});
+  }catch(err){
+    $('mIn').value=text; updateSend();
+    if(err && err.message==='nokey') toast(peer.name+' has not opened Gupchats yet');
+    else if(err && /permission/i.test(err.message||'')) toast('You can only message friends (follow each other).');
+    else toast('Send failed: '+(err&&err.message||err));
+  }
+}
+$('sendBtn').onclick=sendText;
+
+/* Android back button */
+window.__gcBack=function(){
+  if(!$('picker').classList.contains('hidden')){ $('picker').classList.add('hidden'); return true; }
+  if(cur){ closeChat(); return true; }
+  if(curTab!==0 && me){ setTab(0); return true; }
+  return false;
+};
+})();
+</script>
+</body>
+</html>

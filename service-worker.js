@@ -6,7 +6,7 @@
    - Page (index.html): network-first, lekin agar net slow ho (4 sec) to cached copy turant dikha deta hai.
    - Icons/manifest jaisi static files: cache-first + background mein refresh (instant load). */
 
-const CACHE_NAME = 'gupzy-shell-v108';
+const CACHE_NAME = 'gupzy-shell-v109';
 const APP_SHELL = [
   './',
   './icon-192.png',
@@ -40,7 +40,7 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;   /* videos, Firebase, ads, CDN: browser handles directly */
   if (url.pathname.endsWith('.apk')) return;          /* big APK download: never cache */
   if (url.pathname.startsWith('/__/')) return;         /* Firebase login handler: never cache */
-  if (url.pathname.startsWith('/studio')) return;     /* Gupzy Studio is a separate app: never serve the main app's cached page for it */
+  if (url.pathname.startsWith('/studio') || url.pathname.startsWith('/gupchats')) return;     /* Gupzy Studio is a separate app: never serve the main app's cached page for it */
   if (req.headers.has('range')) return;              /* video streaming/seeking */
 
   const isPage = req.mode === 'navigate' || req.destination === 'document';

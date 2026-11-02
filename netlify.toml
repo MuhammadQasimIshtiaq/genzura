@@ -16,3 +16,8 @@
   [headers.values]
     Content-Type = "application/json"
     Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/gupchats/*"
+  [headers.values]
+    Cache-Control = "no-cache, must-revalidate"

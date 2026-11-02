@@ -5,3 +5,7 @@
 /well-known/assetlinks.json
   Content-Type: application/json
   Cache-Control: no-cache
+/gupchats/
+  Cache-Control: no-cache, must-revalidate
+/gupchats/index.html
+  Cache-Control: no-cache, must-revalidate

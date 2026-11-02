@@ -2126,7 +2126,7 @@ document.getElementById('pfEditPill').addEventListener('click', ()=> openEditCha
 document.getElementById('pfShareBtn').addEventListener('click', ()=> document.getElementById('shareChannelBtn').click());
 document.getElementById('pfPlusBtn').addEventListener('click', ()=> document.getElementById('plusBtn').click());
 document.getElementById('pfAdminPill').addEventListener('click', ()=> document.getElementById('adminPanelBtn').click());
-document.getElementById('pfEarnPill').addEventListener('click', ()=>{ openATStudioApp('earn'); });
+document.getElementById('pfEarnPill').addEventListener('click', ()=>{ openEarnLite(); });
 profileMenuSheet.addEventListener('click', e=>{ if(e.target===profileMenuSheet) profileMenuSheet.classList.remove('show'); });
 /* Swipe the side drawer to the right to close it; vertical scrolling stays free */
 (function(){
@@ -2674,13 +2674,8 @@ function startPublicFeedListener(){
         let fresh = snap.docs.map(d=>({id:d.id,...d.data()})).filter(v=> !isBlockedUid(v.channelId));
         fresh.sort((a,b)=> cms(b)-cms(a));
         if(usedFallback) fresh = fresh.slice(0,120);
-        const DAY3 = Date.now() - 3*86400000;
-        const brandNew = fresh.filter(v => cms(v) > DAY3);
+        /* feed order comes from applyFeedWeighting: 50% personalized / 20% trending / 30% new */
         let list = applyFeedWeighting(fresh);
-        /* uploads from the last 3 days always come first (newest first), then the rest in the usual mixed order */
-        const nid = new Set(brandNew.map(v=>v.id));
-        const pinned = (list[0] && list[0].id === SHARED_VID_ID) ? [list[0]] : [];
-        list = [...pinned, ...brandNew.filter(v=>pinned.indexOf(v)<0), ...list.filter(v=>!nid.has(v.id) && pinned.indexOf(v)<0)];
         /* every reel exactly once per round (boosts/promos could repeat one) - the feed only restarts after all have been shown */
         const seen = new Set(); list = list.filter(v=>{ if(seen.has(v.id)) return false; seen.add(v.id); return true; });
         shortsData = list;
@@ -2937,28 +2932,58 @@ function startPromotionsListener(){
 }
 
 function applyFeedWeightingBase(items){
-  const shuffled = items.slice();
-  for(let i=shuffled.length-1; i>0; i--){
-    const j = Math.floor(Math.random()*(i+1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  const boosted = shuffled.filter(v=>{
+  /* FEED MIX: 50% personalized + 20% trending + 30% new (so new creators get a chance).
+     Repeating pattern per 10 slots: P N P T P N P T P N  (P=personalized, T=trending, N=new).
+     If one bucket runs out, the others fill its place. Every video appears once. */
+  const NEW_DAYS = 3;
+  const now = Date.now();
+  const ms = v => (v && v.createdAt && v.createdAt.toMillis) ? v.createdAt.toMillis() : 0;
+  const shuf = a => { a = a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+  const boosted = items.filter(v=>{
     if(!v.boostedAt) return false;
-    return (Date.now() - v.boostedAt.toMillis()) < 24*60*60*1000; /* boost lasts 24h */
+    return (now - v.boostedAt.toMillis()) < 24*60*60*1000; /* boost lasts 24h */
   });
+
+  /* NEW bucket: uploaded in last NEW_DAYS days; one video per creator per round so nobody hogs the slots */
+  const fresh = items.filter(v => now - ms(v) < NEW_DAYS*86400000).sort((a,b)=> ms(b)-ms(a));
+  const byCh = {}; fresh.forEach(v=>{ (byCh[v.channelId] = byCh[v.channelId] || []).push(v); });
+  const chQueues = shuf(Object.values(byCh));
+  const newBucket = [];
+  for(let r=0; chQueues.some(q=>q.length>r); r++) chQueues.forEach(q=>{ if(q[r]) newBucket.push(q[r]); });
+  const used = new Set(newBucket.map(v=>v.id));
+
+  /* TRENDING bucket: engagement score with time decay (likes, comments, views) */
+  const rest = items.filter(v=>!used.has(v.id));
+  const score = v => {
+    const hrs = Math.max(1, (now - ms(v)) / 3600000);
+    /* shares count the most, then comments, likes, views */
+    const eng = (v.sharesCount||0)*6 + (v.commentsCount||0)*4 + (v.likesCount||0)*3 + (v.views||0);
+    /* watch quality: average completion (0..1) and skip rate; neutral until a reel has >= 5 tracked watches */
+    const n = v.watchCount || 0;
+    const avg = n >= 5 ? Math.min(1, (v.watchPctSum||0) / n / 100) : 0.5;
+    const skipRate = n >= 5 ? Math.min(1, (v.skipsCount||0) / n) : 0;
+    const quality = (0.5 + avg) * (1 - 0.7*skipRate);
+    return (eng / Math.pow(hrs + 2, 0.8)) * quality;
+  };
+  const trendingAll = rest.slice().sort((a,b)=> score(b)-score(a));
+  const trendingBucket = trendingAll.slice(0, Math.max(1, Math.ceil(rest.length*0.2)));
+  trendingBucket.forEach(v=>used.add(v.id));
+
+  /* PERSONALIZED bucket: user's top category first, then everything else (shuffled) */
   const topCat = getTopCategory();
-  if(!topCat) return interleaveBoosted(shuffled, boosted);
+  const left = shuf(items.filter(v=>!used.has(v.id)));
+  const personal = topCat ? [...left.filter(v=>v.category===topCat), ...left.filter(v=>v.category!==topCat)] : left;
 
-  const preferred = shuffled.filter(v => v.category === topCat);
-  const other = shuffled.filter(v => v.category !== topCat);
-  if(preferred.length===0 || other.length===0) return interleaveBoosted(shuffled, boosted);
-
+  const PATTERN = ['P','N','P','T','P','N','P','T','P','N'];
+  const q = { P: personal, N: newBucket, T: trendingBucket };
+  const order = { P:['P','T','N'], N:['N','P','T'], T:['T','P','N'] };
   const result = [];
-  let pi=0, oi=0;
-  const GROUP = 9; /* ~8-10 preferred, then 1 experimental */
-  while(pi < preferred.length || oi < other.length){
-    for(let k=0; k<GROUP && pi<preferred.length; k++) result.push(preferred[pi++]);
-    if(oi < other.length) result.push(other[oi++]);
+  const total = personal.length + newBucket.length + trendingBucket.length;
+  for(let i=0; result.length<total; i++){
+    const want = PATTERN[i % PATTERN.length];
+    const k = order[want].find(x => q[x].length);
+    if(!k) break;
+    result.push(q[k].shift());
   }
   return interleaveBoosted(result, boosted);
 }
@@ -3232,6 +3257,14 @@ function appendShortsBatch(scroll){
 
     /* 3-second watch threshold before counting a view + lazy-load source on demand */
     let viewTimer = null;
+    /* watch tracking for the feed score: how much of this reel was watched, replays, and quick skips */
+    let wEnter = 0, wMax = 0, wLast = 0, wLoops = 0;
+    vidEl.addEventListener('timeupdate', ()=>{
+      if(!wEnter) return;
+      const t = vidEl.currentTime || 0;
+      if(wLast > 1 && t < wLast - 1) wLoops++; /* jumped back to the start = it looped (replay) */
+      wLast = t; if(t > wMax) wMax = t;
+    });
     new IntersectionObserver(entries=>{
       entries.forEach(en=>{
         if(en.isIntersecting){
@@ -3246,9 +3279,18 @@ function appendShortsBatch(scroll){
           if(!viewedThisSession.has(s.id)){
             viewTimer = setTimeout(()=> registerView(s.id), 3000);
           }
+          wEnter = Date.now(); wMax = 0; wLast = 0; wLoops = 0;
         }else{
           vidEl.pause();
           if(viewTimer){ clearTimeout(viewTimer); viewTimer = null; }
+          if(wEnter){
+            const dwell = Date.now() - wEnter, dur = vidEl.duration;
+            wEnter = 0;
+            if(dur && isFinite(dur) && dwell > 300){
+              const pct = wLoops > 0 ? 100 : (wMax / dur) * 100;
+              recordWatchSignal(s, pct, dwell < 2000);
+            }
+          }
         }
       });
     }, {threshold:0.45}).observe(slide);
@@ -3446,6 +3488,33 @@ function releaseFarVideos(activeSlide){
   }
 }
 
+
+/* ---- FEED SIGNALS (shares, watch completion, skips) — used by the trending score ----
+   One signal doc per user per video per type (videoSignals/{uid}_{videoId}_{type}); the counters on the video
+   change in the same batch, and firestore.rules only allow the counter change if that signal doc is created with it. */
+const signalSent = new Set();
+function sendVideoSignal(videoId, type, ownerUid, counters){
+  try{
+    if(!currentUser || !videoId || ownerUid === currentUser.uid) return;
+    const key = type + '_' + videoId;
+    if(signalSent.has(key)) return;
+    signalSent.add(key);
+    const FVv = firebase.firestore.FieldValue;
+    const b = db.batch();
+    b.set(db.collection('videoSignals').doc(currentUser.uid + '_' + videoId + '_' + type),
+      { uid: currentUser.uid, videoId, type, createdAt: FVv.serverTimestamp() });
+    const upd = {}; Object.keys(counters).forEach(k=>{ if(counters[k]) upd[k] = FVv.increment(counters[k]); });
+    b.update(db.collection('videos').doc(videoId), upd);
+    b.commit().catch(()=>{ /* already counted for this account (or offline) — not critical */ });
+  }catch(e){}
+}
+function recordShareSignal(item){ if(item) sendVideoSignal(item.id, 'share', item.channelId, { sharesCount: 1 }); }
+/* pct = 0..100 (how much of the reel was watched, replays count as 100); skip = swiped away within ~2 seconds */
+function recordWatchSignal(item, pct, skip){
+  if(!item) return;
+  pct = Math.max(0, Math.min(100, Math.round(pct || 0)));
+  sendVideoSignal(item.id, 'watch', item.channelId, { watchCount: 1, watchPctSum: pct, skipsCount: skip ? 1 : 0 });
+}
 
 async function registerView(videoId){
   if(!currentUser) return; // guests don't count views
@@ -3831,6 +3900,7 @@ async function toggleReelLike(likeIcon, mode){
 async function shareVideo(item){
   const shareData = { title: item.title, text: `Watch "${item.title}" on Gupzy`, url: buildVideoShareLink(item) };
   await atShare(shareData);
+  recordShareSignal(item);
   /* boost: sharing your own video within 5 minutes of publishing gives it a temporary promotion */
   if(item.channelId === currentUser.uid && item.createdAt){
     const ageMs = Date.now() - item.createdAt.toMillis();
@@ -5266,6 +5336,7 @@ document.getElementById('plShareBtn').addEventListener('click', async ()=>{
   if(!currentPlayerItem) return;
   const shareData = { title: currentPlayerItem.title, text: `Watch "${currentPlayerItem.title}" on Gupzy`, url: buildVideoShareLink(currentPlayerItem) };
   await atShare(shareData);
+  recordShareSignal(currentPlayerItem);
 });
 
 /* ---- COMMENTS ---- */
@@ -8040,7 +8111,36 @@ function renderInbox(){
   $('dmList').innerHTML=h||'<div class="ig-empty">'+(dmTab==='follow'?'No chats with people you follow yet.':'No chats yet.<br>Tap the pencil above to start a new message.')+'</div>';
 }
 $('dmTabs').onclick=e=>{const b=e.target.closest('[data-t]');if(!b)return;dmTab=b.dataset.t;$('dmTabs').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));renderInbox();};
-$('dmBtn').onclick=()=>{if(!requireAuth())return;igPauseHome&&igPauseHome();$('igDm').classList.add('show');renderInbox();loadContactPeople().then(renderInbox);};
+function openGupzyChats(){igPauseHome&&igPauseHome();$('igDm').classList.add('show');renderInbox();loadContactPeople().then(renderInbox);}
+/* Messages button: choose between the chats inside Gupzy and the separate Gupchats app */
+const AT_CHATS_APK_URL = '';   /* Gupchats APK download link (put the Drive / website link here when the app is ready) */
+function openGupchatsApp(){
+  if(window.AndroidAuth){
+    let opened = false;
+    try{ if(typeof window.AndroidAuth.openChatsApp === 'function') opened = !!window.AndroidAuth.openChatsApp(); }catch(e){}
+    if(opened) return;
+  }
+  if(!AT_CHATS_APK_URL){ toast('Gupchats app is coming soon'); return; }
+  try{ if(window.AndroidAuth && window.AndroidAuth.openExternal){ window.AndroidAuth.openExternal(AT_CHATS_APK_URL); return; } }catch(e){}
+  window.open(AT_CHATS_APK_URL, '_blank');
+}
+function showChatChooser(){
+  let o = document.getElementById('chatChooserOv'); if(o) o.remove();
+  o = document.createElement('div'); o.id = 'chatChooserOv';
+  o.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;';
+  const row = (id,emoji,title,sub)=>`<button id="${id}" style="display:flex;align-items:center;gap:14px;width:100%;padding:14px;border:1px solid var(--border,#e3e3ec);border-radius:16px;background:var(--surface,#f7f7fb);color:var(--text,#14121f);text-align:left;cursor:pointer;margin-bottom:10px;"><span style="font-size:28px;">${emoji}</span><span><div style="font-weight:800;font-size:16px;">${title}</div><div style="font-size:12.5px;color:var(--text-dim,#5a586b);margin-top:2px;">${sub}</div></span></button>`;
+  o.innerHTML = `<div style="width:100%;max-width:520px;background:var(--bg,#fff);border-radius:22px 22px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom,0px));">
+    <div style="width:40px;height:4px;border-radius:2px;background:var(--border,#ccc);margin:0 auto 14px;"></div>
+    <div style="font-size:18px;font-weight:800;margin-bottom:12px;color:var(--text,#14121f);">Open messages</div>
+    ${row('ccGupzy','💬','Chats on Gupzy','Messages inside Gupzy')}
+    ${row('ccGupchats','🟣','Chats on Gupchats','Open the Gupchats app')}
+  </div>`;
+  document.body.appendChild(o);
+  o.addEventListener('click', e=>{ if(e.target === o) o.remove(); });
+  o.querySelector('#ccGupzy').onclick = ()=>{ o.remove(); openGupzyChats(); };
+  o.querySelector('#ccGupchats').onclick = ()=>{ o.remove(); openGupchatsApp(); };
+}
+$('dmBtn').onclick=()=>{if(!requireAuth())return;showChatChooser();};
 $('dmBack').onclick=()=>$('igDm').classList.remove('show');
 $('dmList').onclick=e=>{const q=e.target.closest('[data-p]');if(q){openChat({id:q.dataset.p,name:q.dataset.n,logo:q.dataset.l||null});return;}const r=e.target.closest('[data-c]');if(!r)return;const c=chats[r.dataset.c];if(c)openChat(peerOf(c));};
 
@@ -9570,6 +9670,72 @@ function showStudioDownload(){
     try{ if(window.AndroidAuth && window.AndroidAuth.openExternal){ window.AndroidAuth.openExternal(AT_STUDIO_APK_URL); o.remove(); return; } }catch(e){}
     window.open(AT_STUDIO_APK_URL, '_blank'); o.remove();
   };
+}
+/* ===== Earn (light) — a limited overview INSIDE the app, like YouTube's app; the full analytics stay in Gupzy Studio ===== */
+function openEarnLite(){
+  if(typeof requireAuth === 'function' && !requireAuth()) return;
+  let o = document.getElementById('earnLiteOv'); if(o) o.remove();
+  o = document.createElement('div'); o.id = 'earnLiteOv';
+  o.style.cssText = 'position:fixed;inset:0;z-index:99990;background:var(--bg,#fff);color:var(--text,#14121f);display:flex;flex-direction:column;';
+  const num = n => (n||0).toLocaleString();
+  const eh = t => String(t==null?'':t).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const vids = (yourVideosList||[]).slice();
+  const totalViews = vids.reduce((a,v)=>a+(v.views||0),0);
+  const totalLikes = vids.reduce((a,v)=>a+(v.likesCount||0),0);
+  const wk = Date.now() - 7*86400000;
+  const wkViews = vids.filter(v=>v.createdAt && v.createdAt.toMillis && v.createdAt.toMillis()>=wk).reduce((a,v)=>a+(v.views||0),0);
+  const wkFollowers = (myFollowers||[]).filter(f=>f.joinedAt && f.joinedAt.toMillis && f.joinedAt.toMillis()>=wk).length;
+  const wkRefs = (myReferrals||[]).filter(r=>r.createdAt && r.createdAt.toMillis && r.createdAt.toMillis()>=wk).length;
+  const monetized = !!(currentChannel && currentChannel.monetized);
+  const card = 'background:var(--surface,#f7f7fb);border-radius:14px;padding:14px;margin:12px 16px 0;';
+  const stat = (label,val)=>`<div style="flex:1;text-align:center;"><div style="font-size:20px;font-weight:800;">${val}</div><div style="font-size:11.5px;color:var(--text-dim,#5a586b);margin-top:2px;">${label}</div></div>`;
+
+  let body = `<div style="${card}display:flex;gap:6px;">${stat('Followers',num((myFollowers||[]).length))}${stat('Total views',num(totalViews))}${stat('Likes',num(totalLikes))}</div>`
+    + `<div style="${card}display:flex;gap:6px;">${stat('Videos',num(vids.length))}${stat('Views (new uploads, 7d)',num(wkViews))}${stat('New followers (7d)',num(wkFollowers))}</div>`;
+
+  if(monetized){
+    body += `<div style="${card}"><div style="font-weight:700;margin-bottom:4px;">💰 Monetization is ON</div>
+      <div style="font-size:13px;color:var(--text-dim,#5a586b);margin-bottom:10px;">Your approximate earnings for this month are below. Full revenue details and payouts are in Gupzy Studio.</div>
+      <div id="earnLiteEst"><button id="earnLiteEstBtn" style="width:100%;padding:11px;border:0;border-radius:22px;background:var(--green,#2fbf71);color:#fff;font-weight:700;font-size:14px;cursor:pointer;">Show estimated earnings this month</button></div></div>`;
+  }else{
+    const crit = [
+      ['Get 7 followers (last 7 days)', wkFollowers, 7],
+      ['Get 70 views (last 7 days)', wkViews, 70],
+      ['Refer 3 new channels (last 7 days)', wkRefs, 3]
+    ];
+    const allDone = crit.every(c=>c[1]>=c[2]);
+    body += `<div style="${card}"><div style="font-weight:700;margin-bottom:10px;">${allDone ? '🎉 You are eligible for monetization!' : 'Monetization — not yet eligible, keep going!'}</div>`
+      + crit.map(c=>{ const pct=Math.min(100,(c[1]/c[2])*100), d=c[1]>=c[2];
+          return `<div style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;font-size:13px;"><span>${d?'✓ ':''}${c[0]}</span><b>${Math.min(c[1],9999)} / ${c[2]}</b></div>
+          <div style="height:6px;border-radius:4px;background:var(--surface3,#e6e6ef);margin-top:5px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${d?'var(--green,#2fbf71)':'var(--accent,#ec2b8e)'};"></div></div></div>`; }).join('')
+      + `<button id="earnLiteShare" style="width:100%;padding:11px;border:0;border-radius:22px;background:var(--accent,#ec2b8e);color:#fff;font-weight:700;font-size:14px;cursor:pointer;">Share your referral link</button>`
+      + (allDone ? `<button id="earnLiteApply" style="width:100%;padding:11px;border:0;border-radius:22px;background:var(--green,#2fbf71);color:#fff;font-weight:700;font-size:14px;cursor:pointer;margin-top:8px;">Apply for Monetization (opens Studio)</button>` : '')
+      + `</div>`;
+  }
+
+  const top = vids.slice().sort((a,b)=>(b.views||0)-(a.views||0)).slice(0,3);
+  if(top.length){
+    body += `<div style="${card}"><div style="font-weight:700;margin-bottom:8px;">Your top videos</div>`
+      + top.map((v,i)=>`<div style="display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:7px 0;${i?'border-top:1px solid var(--border,#e3e3ec);':''}"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${eh(v.title||'Untitled')}</span><b style="white-space:nowrap;">${num(v.views)} views</b></div>`).join('')
+      + `</div>`;
+  }
+
+  body += `<div style="${card}"><div style="font-weight:700;margin-bottom:4px;">More analytics</div>
+    <div style="font-size:13px;color:var(--text-dim,#5a586b);margin-bottom:10px;">Detailed analytics — countries, daily graphs, revenue and payouts — are in Gupzy Studio.</div>
+    <button id="earnLiteStudio" style="width:100%;padding:11px;border:1px solid var(--border,#e3e3ec);border-radius:22px;background:none;color:var(--text,#14121f);font-weight:700;font-size:14px;cursor:pointer;">🎬 Open Gupzy Studio</button></div><div style="height:24px;"></div>`;
+
+  o.innerHTML = `<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border,#e3e3ec);padding-top:calc(12px + env(safe-area-inset-top,0px));">
+      <button id="earnLiteBack" aria-label="Back" style="border:0;background:none;color:inherit;font-size:22px;cursor:pointer;padding:2px 8px;">←</button>
+      <div style="font-size:18px;font-weight:800;">Earn</div></div>
+    <div style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">${body}</div>`;
+  document.body.appendChild(o);
+
+  const q = id => o.querySelector('#'+id);
+  q('earnLiteBack').onclick = ()=> o.remove();
+  q('earnLiteStudio').onclick = ()=> openATStudioApp('earn');
+  const sh = q('earnLiteShare'); if(sh) sh.onclick = ()=>{ try{ shareArainTube(); }catch(e){} };
+  const ap = q('earnLiteApply'); if(ap) ap.onclick = ()=> openATStudioApp('earn');
+  const eb = q('earnLiteEstBtn'); if(eb) eb.onclick = ()=>{ loadCreatorEarningsEstimate(q('earnLiteEst')); };
 }
 function openATStudioApp(tab){
   if(window.AndroidAuth){                     /* inside the Android app: open the installed Gupzy Studio, or ask to download it */
