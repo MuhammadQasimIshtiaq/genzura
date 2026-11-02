@@ -2720,7 +2720,7 @@ async function handleSharedVideoLink(){
       const doc = sharedVideoItem ? {exists:true, id:sharedVideoItem.id, data:()=>sharedVideoItem} : await db.collection('videos').doc(vid).get();
       if(doc.exists) openPlayer({id:doc.id, ...doc.data()});
       else toast("This video isn't available anymore");
-    }catch(err){ console.error(err); toast('Video load nahi ho saki — internet check karke link dobara kholein'); }
+    }catch(err){ console.error(err); toast('Could not load the video — check your internet and open the link again'); }
   }
 }
 
@@ -3129,9 +3129,9 @@ window.__rewardedResult = function(status){
   window.__rewardPurpose = null;
   if(status === 'earned'){
     pending.boost = true;
-    toast('Boost unlocked \u2705 \u2014 5 min ke liye reel top par aayegi');
+    toast('Boost unlocked \u2705 \u2014 your reel will stay on top for 5 min');
   } else if(status === 'closed'){
-    toast('Ad poora dekhna paRta hai, tab boost milta hai');
+    toast('Watch the full ad to get the boost');
   } else {
     toast('Ad not ready yet, please try again in a moment');
   }
@@ -3139,7 +3139,7 @@ window.__rewardedResult = function(status){
 };
 function onAdFreeBtn(){
   const B = window.AndroidAdBridge; if(!B || !B.showRewarded) return;
-  if(isAdFree()){ toast('Ads off hain: ' + Math.ceil(adFreeLeft()/60000) + ' min baqi'); return; }
+  if(isAdFree()){ toast('Ads are off: ' + Math.ceil(adFreeLeft()/60000) + ' min left'); return; }
   try{ B.showRewarded(); }catch(e){ toast('Ad not ready yet, please try again in a moment'); }
 }
 setInterval(updateAdFreeBtn, 30000);
@@ -8806,7 +8806,7 @@ function askPass(title,sub,confirm){return new Promise(res=>{
   k.onclick=()=>{if(confirm){if(i1.value.length<10){em.textContent='Use at least 10 characters';return;}if(i1.value!==i2.value){em.textContent='Passwords do not match';return;}}if(!i1.value){em.textContent='Enter your password';return;}done(i1.value);};
 });}
 window.e2eeBackupUI=async function(){
-  if(window.__e2eStale&&!(await gzConfirm('Is account ka purana backup abhi restore nahi hua. Naya backup purane ko replace kar dega aur purane messages hamesha ke liye nahi khulenge. Pehle "Restore chat backup" try karein. Phir bhi naya backup banana hai?','Continue')))return;
+  if(window.__e2eStale&&!(await gzConfirm('The old backup of this account has not been restored yet. A new backup will replace the old one, and the old messages will never open again. Try "Restore chat backup" first. Still want to create a new backup?','Continue')))return;
   const p=await askPass('Chat backup','Create a password. If you forget it, your chats cannot be restored. There is no reset.',true);if(!p)return;
   try{toast('Creating backup…');const r=await E2E.backup(p);toast('✅ Chat backup saved'+(r.skipped?' ('+r.skipped+' old key could not be backed up)':''));}catch(e){toast('Backup failed: '+e.message);}
 };
@@ -13386,7 +13386,7 @@ window.gzConfirm=function(msg,okLabel){
 })();
 </script>
 
-<!-- ===================== DAKU LEDGER (group chats): ETA + "Busted" + Jhoota Certificate + chai udhaar =====================
+<!-- ===================== DAKU LEDGER (group chats): ETA + "Busted" + Liar Certificate + chai udhaar =====================
      Group chat header -> 🕵️.  Firestore: chats/{gid}/ledger/{id}
        kind:'eta'  {uid,name,text,etaAt(ms),mins,status:'open'|'ok'|'busted',loc?{lat,lng} (OPT-IN, ~100 m), bustedBy?,by,createdAt}
        kind:'debt' {lender,lenderName,borrower,borrowerName,amount,note,paid,by,createdAt}
@@ -13444,7 +13444,7 @@ window.gzConfirm=function(msg,okLabel){
   function addBtn(){
     var h=document.querySelector('#igChat .dm-head'); if(!h) return false;
     var b=$('chatLedger');
-    if(!b){ b=document.createElement('button'); b.className='ic'; b.id='chatLedger'; b.setAttribute('aria-label','Daku Ledger'); b.style.cssText='font-size:20px;line-height:1;display:none'; b.textContent='🕵️'; h.appendChild(b); b.addEventListener('click',open); }
+    if(!b){ b=document.createElement('button'); b.className='ic'; b.id='chatLedger'; b.setAttribute('aria-label','Bandit Ledger'); b.style.cssText='font-size:20px;line-height:1;display:none'; b.textContent='🕵️'; h.appendChild(b); b.addEventListener('click',open); }
     return b;
   }
   function sync(){ var b=addBtn(); if(!b) return; var c=cur(); b.style.display=(c&&c.peer&&c.peer.group)?'':'none'; }
@@ -13460,8 +13460,8 @@ window.gzConfirm=function(msg,okLabel){
   function mount(){
     if(ov) return;
     ov=document.createElement('div'); ov.id='ldOv'; ov.className='hidden';
-    ov.innerHTML='<div class="ld-top"><button class="ld-x" id="ldBack">←</button><b id="ldTitle">🕵️ Daku Ledger</b></div>'
-      +'<div class="ld-tabs"><div class="ld-tab on" data-t="eta">⏱ Busted</div><div class="ld-tab" data-t="debt">💸 Udhaar</div><div class="ld-tab" data-t="board">🏆 Board</div></div><div class="ld-body" id="ldBody"></div>';
+    ov.innerHTML='<div class="ld-top"><button class="ld-x" id="ldBack">←</button><b id="ldTitle">🕵️ Bandit Ledger</b></div>'
+      +'<div class="ld-tabs"><div class="ld-tab on" data-t="eta">⏱ Busted</div><div class="ld-tab" data-t="debt">💸 Debts</div><div class="ld-tab" data-t="board">🏆 Board</div></div><div class="ld-body" id="ldBody"></div>';
     document.body.appendChild(ov);
     ov.addEventListener('click',onClick);
   }
@@ -13493,18 +13493,18 @@ window.gzConfirm=function(msg,okLabel){
   function renderEta(){
     var h='';
     if(showForm){
-      h+='<div class="ld-form"><b>⏱ I\'m coming…</b><label>Kitne minute mein?</label><select id="ldMin"><option value="5">5 min</option><option value="10">10 min</option><option value="15" selected>15 min</option><option value="30">30 min</option><option value="45">45 min</option><option value="60">1 hour</option></select>'
-        +'<label>Kya bola? (optional)</label><input type="text" id="ldTxt" maxlength="90" placeholder="Main 5 mint mein pohanch raha hoon 😇">'
+      h+='<div class="ld-form"><b>⏱ I\'m coming…</b><label>How many minutes away?</label><select id="ldMin"><option value="5">5 min</option><option value="10">10 min</option><option value="15" selected>15 min</option><option value="30">30 min</option><option value="45">45 min</option><option value="60">1 hour</option></select>'
+        +'<label>What did you say? (optional)</label><input type="text" id="ldTxt" maxlength="90" placeholder="I will be there in 5 minutes 😇">'
         +'<label class="chk"><input type="checkbox" id="ldLoc"> 📍 Share my approx. location with the group (optional)</label>'
         +'<div class="ld-m">Location is only attached if you tick this. Nobody can see it otherwise.</div>'
         +'<div class="ld-row"><button class="ld-btn" id="ldPost">Post ETA</button><button class="ld-btn alt" id="ldCancel">Cancel</button></div></div>';
-    } else h+='<button class="ld-btn wide" id="ldNewEta">＋ Main aa raha hoon… (post ETA)</button>';
+    } else h+='<button class="ld-btn wide" id="ldNewEta">＋ I am coming… (post ETA)</button>';
     var list=items.filter(function(x){return x.kind==='eta';});
-    if(!list.length) return h+'<div class="ld-empty">Koi ETA nahi.<br>Dost ne kaha "5 min mein aa raha hoon"? Yahan likho — late aaya to group "Busted" dabayega 🚨</div>';
+    if(!list.length) return h+'<div class="ld-empty">No ETAs yet.<br>A friend said "I'll be there in 5 min"? Write it here — if they're late, the group will hit "Busted" 🚨</div>';
     return h+list.map(function(x){
       var mine=x.uid===me(), due=x.etaAt||0, now=Date.now(), over=now>due, canBust=now>due+GRACE;
       var cls=x.status==='busted'?'bust':(x.status==='ok'?'ok':''), badge='';
-      if(x.status==='busted') badge='<span class="ld-badge b">🤥 BUSTED · Jhoota Certificate +1</span>';
+      if(x.status==='busted') badge='<span class="ld-badge b">🤥 BUSTED · Liar Certificate +1</span>';
       else if(x.status==='ok') badge='<span class="ld-badge g">✅ Arrived</span>';
       else badge='<span class="ld-badge">'+(over?'⏰ late by '+Math.max(1,Math.round((now-due)/60000))+' min':'⏳ '+left(due)+' left')+'</span>';
       var act='';
@@ -13513,24 +13513,24 @@ window.gzConfirm=function(msg,okLabel){
         else act=canBust?'<button class="ld-btn red" data-bust="'+x.id+'">🚨 Busted!</button>':'<button class="ld-btn alt" disabled>🚨 Busted unlocks '+left(due+GRACE)+' after ETA</button>';
       }
       var loc=x.loc?'<a class="ld-btn alt" style="text-decoration:none;display:inline-block" target="_blank" rel="noopener" href="https://www.google.com/maps?q='+encodeURIComponent(x.loc.lat+','+x.loc.lng)+'">📍 Map (shared by '+esc(mine?'you':x.name)+')</a>':'';
-      return '<div class="ld-card '+cls+'"><div class="ld-who">'+esc(mine?'You':x.name)+'</div><div class="ld-t">“'+esc(x.text||('Aa raha hoon '+(x.mins||'')+' min mein'))+'”</div><div class="ld-m">said '+fmtT(ms(x.createdAt)||Date.now())+' · ETA '+fmtT(due)+'</div><div class="ld-row">'+badge+act+loc+(mine?'<button class="ld-btn alt" data-del="'+x.id+'">🗑</button>':'')+'</div></div>';
+      return '<div class="ld-card '+cls+'"><div class="ld-who">'+esc(mine?'You':x.name)+'</div><div class="ld-t">“'+esc(x.text||('Coming in '+(x.mins||'')+' min'))+'”</div><div class="ld-m">said '+fmtT(ms(x.createdAt)||Date.now())+' · ETA '+fmtT(due)+'</div><div class="ld-row">'+badge+act+loc+(mine?'<button class="ld-btn alt" data-del="'+x.id+'">🗑</button>':'')+'</div></div>';
     }).join('');
   }
   function renderDebt(){
     var h='';
     if(showForm){
-      h+='<div class="ld-form"><b>💸 Add udhaar</b><label>Kya hua?</label><select id="ldDir"><option value="lent">Maine udhaar diya (wo mujhe dega)</option><option value="borrowed">Maine udhaar liya (main dunga)</option></select>'
-        +'<label>Kis ke saath?</label><select id="ldWho">'+memberOpts(true)+'</select>'
+      h+='<div class="ld-form"><b>💸 Add a debt</b><label>What happened?</label><select id="ldDir"><option value="lent">I lent money (they owe me)</option><option value="borrowed">I borrowed money (I owe them)</option></select>'
+        +'<label>With whom?</label><select id="ldWho">'+memberOpts(true)+'</select>'
         +'<label>Amount (Rs.)</label><input type="number" id="ldAmt" min="1" max="1000000" inputmode="numeric" placeholder="200">'
-        +'<label>Kis cheez ka? (optional)</label><input type="text" id="ldNote" maxlength="60" placeholder="Chai ☕">'
+        +'<label>What for? (optional)</label><input type="text" id="ldNote" maxlength="60" placeholder="Chai ☕">'
         +'<div class="ld-row"><button class="ld-btn" id="ldPostD">Save to ledger</button><button class="ld-btn alt" id="ldCancel">Cancel</button></div></div>';
-    } else h+='<button class="ld-btn wide" id="ldNewDebt">＋ Add chai / udhaar</button>';
+    } else h+='<button class="ld-btn wide" id="ldNewDebt">＋ Add a chai / debt</button>';
     var list=items.filter(function(x){return x.kind==='debt';});
-    if(!list.length) return h+'<div class="ld-empty">Koi udhaar darj nahi.<br>Chai ka udhaar yahan likho — poora group dekhega 👀</div>';
+    if(!list.length) return h+'<div class="ld-empty">No debts recorded.<br>Write down the chai you owe here — the whole group will see 👀</div>';
     return h+list.map(function(x){
       var paid=!!x.paid, canPay=!paid&&x.lender===me();
       return '<div class="ld-card'+(paid?' ok':'')+'"><div class="ld-who">'+esc(x.borrower===me()?'You':x.borrowerName)+' → '+esc(x.lender===me()?'You':x.lenderName)+'</div><div class="ld-t"><b>'+rs(x.amount)+'</b>'+(x.note?' · '+esc(x.note):'')+'</div><div class="ld-m">'+fmtT(ms(x.createdAt)||Date.now())+' · '+new Date(ms(x.createdAt)||Date.now()).toLocaleDateString()+'</div><div class="ld-row">'
-        +(paid?'<span class="ld-badge g">✅ Paid</span>':'<span class="ld-badge b">⏳ Baaki hai</span>')
+        +(paid?'<span class="ld-badge g">✅ Paid</span>':'<span class="ld-badge b">⏳ Unpaid</span>')
         +(canPay?'<button class="ld-btn grn" data-paid="'+x.id+'">✅ Mark paid</button>':'')
         +(x.by===me()?'<button class="ld-btn alt" data-del="'+x.id+'">🗑</button>':'')+'</div></div>';
     }).join('');
@@ -13544,9 +13544,9 @@ window.gzConfirm=function(msg,okLabel){
     });
     var liars=mem.slice().sort(function(a,b){return pts[b]-pts[a];}), debtors=mem.slice().sort(function(a,b){return owe[b]-owe[a];});
     var topL=liars[0]&&pts[liars[0]]>0?liars[0]:null, topD=debtors[0]&&owe[debtors[0]]>0?debtors[0]:null;
-    var h='<div class="ld-hero"><div>🤥 Sab se bada jhoota<b>'+(topL?esc(realName(topL))+' · '+pts[topL]:'—')+'</b></div><div>💸 Sab se bada udhaari<b>'+(topD?esc(realName(topD))+' · '+rs(owe[topD]):'—')+'</b></div></div>';
-    h+='<div class="ld-sec">JHOOTA CERTIFICATES</div>'+liars.map(function(u,i){ return '<div class="ld-lb"><span>'+(i===0&&pts[u]>0?'🥇':(i+1)+'.')+'</span><span class="n">'+esc(realName(u))+(u===me()?' (you)':'')+'</span><span class="v">'+pts[u]+' 📜</span></div>'; }).join('');
-    h+='<div class="ld-sec">UDHAAR BAAKI</div>'+debtors.map(function(u){ return '<div class="ld-lb"><span class="n">'+esc(realName(u))+(u===me()?' (you)':'')+'</span><span class="v">'+(owe[u]?rs(owe[u]):'clear ✅')+'</span></div>'; }).join('');
+    var h='<div class="ld-hero"><div>🤥 Biggest liar<b>'+(topL?esc(realName(topL))+' · '+pts[topL]:'—')+'</b></div><div>💸 Biggest debtor<b>'+(topD?esc(realName(topD))+' · '+rs(owe[topD]):'—')+'</b></div></div>';
+    h+='<div class="ld-sec">LIAR CERTIFICATES</div>'+liars.map(function(u,i){ return '<div class="ld-lb"><span>'+(i===0&&pts[u]>0?'🥇':(i+1)+'.')+'</span><span class="n">'+esc(realName(u))+(u===me()?' (you)':'')+'</span><span class="v">'+pts[u]+' 📜</span></div>'; }).join('');
+    h+='<div class="ld-sec">DEBTS OUTSTANDING</div>'+debtors.map(function(u){ return '<div class="ld-lb"><span class="n">'+esc(realName(u))+(u===me()?' (you)':'')+'</span><span class="v">'+(owe[u]?rs(owe[u]):'clear ✅')+'</span></div>'; }).join('');
     return h;
   }
 
@@ -13583,7 +13583,7 @@ window.gzConfirm=function(msg,okLabel){
     if(t.closest('#ldPostD')){ postDebt(); return; }
     if((x=t.closest('[data-arr]'))){ col().doc(x.dataset.arr).update({status:'ok',arrivedAt:Date.now()}).catch(function(er){ say('Failed: '+er.message); }); return; }
     if((x=t.closest('[data-bust]'))){
-      gzConfirmL('Bust '+'this ETA? They get a Jhoota Certificate 📜').then(function(ok){ if(ok) col().doc(x.dataset.bust).update({status:'busted',bustedBy:me(),bustedAt:Date.now()}).catch(function(er){ say(er.code==='permission-denied'?'Too early — wait 5 min after the ETA':'Failed: '+er.message); }); }); return;
+      gzConfirmL('Bust '+'this ETA? They get a Liar Certificate 📜').then(function(ok){ if(ok) col().doc(x.dataset.bust).update({status:'busted',bustedBy:me(),bustedAt:Date.now()}).catch(function(er){ say(er.code==='permission-denied'?'Too early — wait 5 min after the ETA':'Failed: '+er.message); }); }); return;
     }
     if((x=t.closest('[data-paid]'))){ col().doc(x.dataset.paid).update({paid:true,paidAt:Date.now()}).catch(function(er){ say('Failed: '+er.message); }); return; }
     if((x=t.closest('[data-del]'))){ var id=x.dataset.del; gzConfirmL('Delete this entry?').then(function(ok){ if(ok) col().doc(id).delete().catch(function(er){ say('Failed: '+er.message); }); }); return; }
@@ -13727,7 +13727,7 @@ window.gzConfirm=function(msg,okLabel){
   function paintList(){
     paintSparkCard();
     var el=$('cvList'); if(!el) return;
-    if(!people.length){ el.innerHTML='<div class="cv-empty">Abhi koi friend ne Crush Vote on nahi kiya. Unko bolo ye page khol kar on karein 😄</div>'; return; }
+    if(!people.length){ el.innerHTML='<div class="cv-empty">None of your friends have turned on Crush Vote yet. Ask them to open this page and switch it on 😄</div>'; return; }
     el.innerHTML=people.map(function(x){
       return '<div class="cv-row"><span class="n">'+esc(x.p.name||'Friend')+'</span>'+(sparkSet&&sparkSet[x.p.id]?'<span class="cv-ok" style="color:#ec2b8e">✨ Spark</span>':'')+(x.voted?'<span class="cv-ok">Voted '+(x.voted==='crush'?'💘':'😎')+' ✓</span>':'<button class="cv-btn" data-v="crush" data-id="'+esc(x.p.id)+'">💘 Crush</button><button class="cv-btn alt" data-v="legend" data-id="'+esc(x.p.id)+'">😎 Legend</button>')+'</div>';
     }).join('');
@@ -14622,7 +14622,7 @@ window.gzConfirm=function(msg,okLabel){
   }
   async function doShareFile(){
     try{await ensureMix();}catch(e){say(e.message);return;}
-    var f;try{f=new File([S.blob],'genzura-soundbite.wav',{type:'audio/wav'});}catch(e){f=null;}
+    var f;try{f=new File([S.blob],'gupzy-soundbite.wav',{type:'audio/wav'});}catch(e){f=null;}
     if(f&&navigator.canShare&&navigator.canShare({files:[f]})){
       try{await navigator.share({files:[f],title:'Gupzy Soundbite',text:'🎵 Made on Gupzy'});return;}catch(e){if(e&&e.name==='AbortError')return;}
     }
@@ -14630,7 +14630,7 @@ window.gzConfirm=function(msg,okLabel){
   }
   function doDownload(){
     if(window.AndroidAdBridge||window.AndroidShare){say('Sharing as a link — opens in Gupzy for anyone');doShareLink();return;} /* Android WebView can't save blob files */
-    var a=document.createElement('a');a.href=URL.createObjectURL(S.blob);a.download='genzura-soundbite.wav';document.body.appendChild(a);a.click();
+    var a=document.createElement('a');a.href=URL.createObjectURL(S.blob);a.download='gupzy-soundbite.wav';document.body.appendChild(a);a.click();
     setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},1500);say('Saved — add it to your Insta / TikTok video');
   }
   async function doSendChat(){
