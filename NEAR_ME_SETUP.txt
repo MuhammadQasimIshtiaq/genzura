@@ -27,7 +27,7 @@ STEP 2 - PURANE POSTS AUTO-DELETE (TTL)  [2 minute, recommended]
 - Is se expire hue posts/events Firebase khud delete kar deta hai (app unhe pehle hi chhupa deta hai, ye sirf safai hai).
 
 STEP 3 - WEBSITE DEPLOY
-- Is Web zip ko GitHub par push karo (jaise pehle). service-worker cache v77 ho gaya hai, isliye naya version turant load hoga.
+- Is Web zip ko Netlify par drop karo (jaise pehle). service-worker cache v77 ho gaya hai, isliye naya version turant load hoga.
 
 STEP 4 - ANDROID APP
 - Naya Android project zip use karo: AndroidManifest mein ACCESS_COARSE_LOCATION / ACCESS_FINE_LOCATION add hui hain

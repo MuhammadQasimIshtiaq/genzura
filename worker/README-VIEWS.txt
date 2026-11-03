@@ -49,7 +49,7 @@ D) Firestore Rules (ZAROORI, warna koi phone se khud "US" likh kar view save kar
 
    Dhyan: C ke baad hi D karein. Pehle D kar diya to Worker ke bina views save nahi honge.
 
-E) Site GitHub par push karein (Cloudflare khud deploy karega). Android app ko dobara build karein (MainActivity.kt mein isVpnActive() add hua hai).
+E) Site deploy karein (Netlify). Android app ko dobara build karein (MainActivity.kt mein isVpnActive() add hua hai).
    Gupzy Studio ke Android app mein kuch badalna nahi hai.
 
 Mahine ka kaam

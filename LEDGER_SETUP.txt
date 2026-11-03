@@ -1,5 +1,5 @@
 DAKU LEDGER (group chats) - setup
-1) Push the folder to GitHub. Android app: no change.
+1) Deploy this folder to Netlify. Android app: no change.
 2) Publish the new firestore.rules (adds chats/{id}/ledger).
 Use: open a GROUP chat -> tap the detective icon in the header.
 - "Busted" tab: post "I'm coming in N min"; friends can press Busted only 5 min after the ETA; each Busted = +1 Jhoota Certificate.

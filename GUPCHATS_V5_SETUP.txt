@@ -1,0 +1,27 @@
+GUPCHATS v5 - GROUP CHATS (same groups as Gupzy)
+
+What changed
+- Gupchats now shows GROUP chats in the inbox, together with the 1-to-1 chats. Groups are the SAME Firestore documents Gupzy uses
+  (collection "chats", isGroup:true), so a group made in Gupzy appears in Gupchats and the other way round. Messages are the same
+  too: text, photos, voice messages, videos (end-to-end encrypted, "enc:2" = one key per message wrapped for every member).
+  Verified with a test that runs the ORIGINAL Gupzy encryption code against the new Gupchats code in both directions.
+- New group: pencil icon -> "New group" -> pick friends (mutual follows), group name, optional photo -> Create. Max 50 members.
+- Inside a group: sender name above every incoming message, system lines ("X renamed the group", "X left", ...), header shows
+  "N members". Tap the header for Group info: members, Admin tag, rename / change photo / add / remove members (admin only), Leave group.
+- Voice and video call buttons are hidden in groups (group calls are not part of this version).
+- Temporary vibe groups (Gupzy "Vibe") also show up; once they expire they disappear from the list.
+- If a group member has never opened Gupzy since the encryption update (no public key), sending is blocked with a note, same rule as 1-to-1 chats.
+- Gupzy (website + app): when Gupchats is installed, tapping a GROUP in Gupzy now opens it in Gupchats too (before: only 1-to-1 chats).
+- Notifications: a group message shows the GROUP NAME as title and "<Name> sent a message" as text; tapping it opens that group.
+  (Gupchats Android 1.3 does the "open that group" part. Older Gupchats builds still work, a tap just opens the app.)
+
+WHAT TO PUBLISH (in this order)
+1) worker/genzura-worker-all.js -> redeploy the Cloudflare worker (arain-api...workers.dev).
+   Only change: group chats get the group name as title + the group id in the push. netlify/functions/push.js kept in sync.
+2) the web zip (index.html, service-worker.js, gupchats/index.html) -> publish on Netlify as usual
+3) Firestore rules: NO change needed (groups, group messages and member changes were already allowed for Gupzy).
+4) Gupchats Android: build the new project (versionCode 4 / 1.3) -> only needed for "tap notification = open the group".
+   The groups themselves are in the website, so they work for everybody as soon as step 2 is published (no rebuild needed).
+   Gupzy Android: NO change needed.
+
+NOT in Gupchats yet (open Gupzy for these): shared posts/reels sending, story replies, reactions, replies/quotes in groups, group calls, mute, games.

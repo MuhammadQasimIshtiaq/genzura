@@ -21,4 +21,4 @@ What to publish
 - Firestore rules: no change needed. Old Gupchats-only chats (collection gcChats) are no longer used.
 - Android: no change needed.
 
-Not shown in Gupchats (open Gupzy for these): group chats, shared posts/reels, story replies, video sending.
+Not shown in Gupchats (open Gupzy for these): shared posts/reels, story replies. (Group chats were added in v5 - see GUPCHATS_V5_SETUP.txt)

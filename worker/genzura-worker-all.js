@@ -36,7 +36,7 @@ function cors(env) {
 const out = (env, code, o) =>
   new Response(JSON.stringify(o), { status: code, headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ...cors(env) } });
 
-/* --- Firebase ID token check (Firebase ID token verification) --- */
+/* --- Firebase ID token check (same as the Netlify version) --- */
 async function verifyUser(request, env) {
   const idToken = (request.headers.get("Authorization") || "").replace(/^Bearer /i, "").trim();
   if (!idToken) return { err: "no token" };
@@ -87,6 +87,7 @@ const TEXT = {
   follow: "started following you", reelLike: "liked your reel", reelComment: "commented on your reel",
   mention: "mentioned you", reply: "replied to your comment", commentLike: "liked your comment", tag: "tagged you in a post",
   game: "invited you to play Truth · Dare · Roast 🎲",
+  groupcall: "started a group call \uD83D\uDCDE",
   gcmessage: "sent you a message",   // Gupchats app (separate app, separate FCM tokens: app == "gc")
 };
 
@@ -108,20 +109,24 @@ async function push(request, env) {
   const DOCS = `https://firestore.googleapis.com/v1/projects/${pid}/databases/(default)/documents`;
 
   let targets = [];
+  let groupName = "";   /* set when the chat is a group: the notification then shows the group name and opens the group */
   if (kind === "message") {
     const cid = String(body.chatId || "").replace(/[^A-Za-z0-9_\-]/g, "");
     const cd = await (await fetch(`${DOCS}/chats/${cid}`, { headers: A })).json();
     const members = ((cd.fields && cd.fields.members && cd.fields.members.arrayValue.values) || []).map((v) => v.stringValue);
     if (!members.includes(from)) return out(env, 403, { error: "not a member" });
+    if (cd.fields && cd.fields.isGroup && cd.fields.isGroup.booleanValue === true) groupName = (cd.fields.name && cd.fields.name.stringValue) || "Group";
     const mf = (cd.fields && cd.fields.mute && cd.fields.mute.mapValue && cd.fields.mute.mapValue.fields) || {};
     targets = members.filter((x) => x !== from && !(mf[x] && mf[x].booleanValue === true));
-  } else if (kind === "gcmessage") {
+  } else if (kind === "gcmessage" || kind === "groupcall") {
     /* Gupchats now shares the Gupzy inbox (collection "chats"), so this reads the same chat doc as kind "message" */
     const cid = String(body.chatId || "").replace(/[^A-Za-z0-9_\-]/g, "");
     const cd = await (await fetch(`${DOCS}/chats/${cid}`, { headers: A })).json();
     const members = ((cd.fields && cd.fields.members && cd.fields.members.arrayValue && cd.fields.members.arrayValue.values) || []).map((v) => v.stringValue);
     if (!members.includes(from)) return out(env, 403, { error: "not a member" });
-    targets = members.filter((x) => x !== from);
+    if (cd.fields && cd.fields.isGroup && cd.fields.isGroup.booleanValue === true) groupName = (cd.fields.name && cd.fields.name.stringValue) || "Group";
+    const mf2 = (cd.fields && cd.fields.mute && cd.fields.mute.mapValue && cd.fields.mute.mapValue.fields) || {};
+    targets = members.filter((x) => x !== from && !(mf2[x] && mf2[x].booleanValue === true));
   } else {
     const to = String(body.toUid || "");
     if (!to || to === from) return out(env, 200, { sent: 0 });
@@ -135,32 +140,59 @@ async function push(request, env) {
     if (nd.fields && nd.fields.name) name = nd.fields.name.stringValue;
   } catch (e) {}
 
-  let sent = 0;
-  for (const uid of targets.slice(0, 50)) {
-    const rows = await (await fetch(`${DOCS}:runQuery`, { method: "POST", headers: A, body: JSON.stringify({ structuredQuery: {
+  /* one query per 30 people (not one per person): a 30-member group used to need 60+ sub-requests and failed on the free plan */
+  const tl = targets.slice(0, 50);
+  const byUid = {};
+  let used = 5;                                   /* token check + chat doc + name + token exchange + spare */
+  const CAP = Number(env.SUBREQ_CAP) || 48;       /* free plan 50; set SUBREQ_CAP higher on a paid plan */
+  for (let i = 0; i < tl.length; i += 30) {
+    used++;
+    const rr = await (await fetch(`${DOCS}:runQuery`, { method: "POST", headers: A, body: JSON.stringify({ structuredQuery: {
       from: [{ collectionId: "fcmTokens" }],
-      where: { fieldFilter: { field: { fieldPath: "uid" }, op: "EQUAL", value: { stringValue: uid } } }, limit: 10 } }) })).json();
+      where: { fieldFilter: { field: { fieldPath: "uid" }, op: "IN", value: { arrayValue: { values: tl.slice(i, i + 30).map((x) => ({ stringValue: x })) } } } },
+      limit: 300 } }) })).json();
+    for (const r of (Array.isArray(rr) ? rr : [])) {
+      if (!r.document) continue;
+      const tu = r.document.fields && r.document.fields.uid && r.document.fields.uid.stringValue;
+      if (tu) (byUid[tu] = byUid[tu] || []).push(r);
+    }
+  }
+  let sent = 0;
+  for (const uid of tl) {
+    const rows = (byUid[uid] || []).slice(0, 10);
     /* chat messages (from Gupzy OR Gupchats) go to every phone of the person (Gupzy + Gupchats); all other pushes stay on Gupzy phones only */
-    const isGc = kind === "gcmessage";
+    const isGc = kind === "gcmessage" || kind === "groupcall";
     /* CALLS now also reach Gupchats phones (tokens with app == "gc"); each token carries its own app flag so Gupchats rings only in Gupchats and Gupzy only in Gupzy */
     const tokenRows = (Array.isArray(rows) ? rows : []).filter((r) => r.document)
-      .filter((r) => { const f = r.document.fields || {}; const a = f.app && f.app.stringValue; return (kind === "message" || kind === "gcmessage" || kind === "call") ? true : a !== "gc"; })
+      .filter((r) => { const f = r.document.fields || {}; const a = f.app && f.app.stringValue; return (kind === "message" || kind === "gcmessage" || kind === "groupcall" || kind === "call") ? true : a !== "gc"; })
       .map((r) => { const f = r.document.fields || {}; return { token: r.document.name.split("/").pop(), app: (f.app && f.app.stringValue) || "" }; });
-    for (const tr of tokenRows) {
+    /* chats + calls: a person who has Gupchats installed (token app == "gc") gets them ONLY in Gupchats, never in Gupzy.
+       Gupzy phones are used only as a fallback when every Gupchats token turned out dead (uninstalled). Likes / follows etc. stay on Gupzy. */
+    const chatKind = (kind === "message" || kind === "gcmessage" || kind === "groupcall" || kind === "call");
+    const gcRows = tokenRows.filter((t) => t.app === "gc"), restRows = tokenRows.filter((t) => t.app !== "gc");
+    const stages = (chatKind && gcRows.length) ? [gcRows, restRows] : [tokenRows];
+    for (let si = 0; si < stages.length; si++) {
+    let okCount = 0;
+    for (const tr of stages[si]) {
+      if (used >= CAP) break;                     /* never cross the sub-request limit: a clean partial send beats a crash */
+      used++;
       const token = tr.token;
       /* a CALL push must expire after 45 s: a phone that comes online later must NOT ring for an old call */
       const isCall = kind === "call";
       const mr = await fetch(`https://fcm.googleapis.com/v1/projects/${pid}/messages:send`, { method: "POST", headers: A,
-        body: JSON.stringify({ message: { token, data: { title: name, fromUid: String(from || ""),
-          body: TEXT[kind] + (kind === "call" ? (body.type === "video" ? " (video)" : " (voice)") : ""),
-          tag: (kind === "message" || kind === "gcmessage") ? "c_" + (body.chatId || "") : "n_" + kind,
-          app: (kind === "call") ? (tr.app === "gc" ? "gc" : "gupzy") : (isGc ? "gc" : "gupzy"),
+        body: JSON.stringify({ message: { token, data: { title: groupName || name, fromUid: String(from || ""),
+          body: kind === "groupcall" ? (name + " started a group call \uD83D\uDCDE") : groupName ? (name + " sent a message") : (TEXT[kind] + (kind === "call" ? (body.type === "video" ? " (video)" : " (voice)") : "")),
+          gid: groupName ? String(body.chatId || "").replace(/[^A-Za-z0-9_\-]/g, "") : "",
+          tag: (kind === "message" || kind === "gcmessage") ? "c_" + (body.chatId || "") : kind === "groupcall" ? "c_gcall_" + (body.chatId || "") : "n_" + kind,
+          app: chatKind ? (tr.app === "gc" ? "gc" : "gupzy") : "gupzy",
           callId: kind === "call" ? String(body.callId || "").replace(/[^A-Za-z0-9]/g, "") : "" },
           webpush: { headers: { Urgency: "high", TTL: isCall ? "45" : "86400" } }, android: { priority: "HIGH", ttl: isCall ? "45s" : "86400s" } } }) });
-      if (mr.ok) sent++;
+      if (mr.ok) { sent++; okCount++; }
       else if (mr.status === 404 || mr.status === 400) {
-        await fetch(`${DOCS}/fcmTokens/${encodeURIComponent(token)}`, { method: "DELETE", headers: A }).catch(() => {});
+        if (used < CAP) { used++; await fetch(`${DOCS}/fcmTokens/${encodeURIComponent(token)}`, { method: "DELETE", headers: A }).catch(() => {}); }
       }
+    }
+    if (okCount) break;
     }
   }
   return out(env, 200, { sent });
@@ -570,7 +602,7 @@ async function rkHandle(request, env) {
    Optional variable: ANON_SALT (lamba random text; na dein to client email use hota hai)
 ================================================================ */
 const anEnc = new TextEncoder();
-const AN_ORIGINS = ["https://gupzy.com", "https://www.gupzy.com", "https://genzura.muhammadqasimishtiaq0604.workers.dev"]; /* new domain + old links, so nothing breaks while moving */
+const AN_ORIGINS = ["https://gupzy.com", "https://www.gupzy.com", "https://genzura.netlify.app", "https://genzura.muhammadqasimishtiaq0604.workers.dev"]; /* new domain + old links, so nothing breaks while moving */
 const AN_MAX = 300, AN_COOLDOWN_MS = 30000, AN_IP_PER_HOUR = 20, AN_TO_PER_HOUR = 100, AN_HOUR = 3600000;
 
 function anB64u(bytes) {
@@ -757,11 +789,11 @@ async function mmRun(env) {
 }
 
 /* ================================================================
-   CONTACTS + TRANSLATE  (contacts + translate endpoints)
+   CONTACTS + TRANSLATE  (ported from netlify/functions/contacts.js and translate.js)
      POST /contacts   {action: register | sync | clear | savedCount}
      POST /translate  {text, to: "ur" | "roman" | "en"}
    Both need  Authorization: Bearer <Firebase ID token>.
-   Uses the SAME secrets as the rest of this worker (FIREBASE_*). Optional: CONTACTS_PEPPER (set it only if it was set on the old host).
+   Uses the SAME secrets as the rest of this worker (FIREBASE_*). Optional: CONTACTS_PEPPER (copy it from Netlify ONLY if it was set there).
    ================================================================ */
 const CT_KEY_DEFAULT = "AIzaSyATkLM81knrj_enQUsg1L9XRXt9_jdvL0w"; /* public web key, same as the other routes */
 const CT_H = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -771,7 +803,7 @@ const ctHex = (buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16)
 const ctSha = async (s) => ctHex(await crypto.subtle.digest("SHA-256", anEnc.encode(s)));
 const CT_MAX_HASHES = 5000;
 
-/* same normalised PEM text used as the legacy fallback pepper (keeps old hashes valid) */
+/* same normalised PEM text the Netlify version used as fallback pepper (keeps old hashes valid) */
 function ctPem(rawIn) {
   let raw = String(rawIn || "").trim();
   if (raw.startsWith('"') && raw.endsWith('"')) raw = raw.slice(1, -1);

@@ -64,7 +64,7 @@ NOTE: Watch Party aur Anonymous Inbox ke blocks pehle se hain to unhe mat chhedn
 
 STEP 2 - DEPLOY + CLOUDFLARE (roz ka notification)  [5 minute]
 --------------------------------------------------------------
-A) GitHub: zip ka poora folder pehle ki tarah deploy karo (index.html, service-worker.js badle hain).
+A) Netlify: zip ka poora folder pehle ki tarah deploy karo (index.html, service-worker.js badle hain).
 
 B) Cloudflare: NAYA worker banane ki zaroorat NAHI. Aap ka jo ek worker (push/turn/view/anon-send) hai, usi mein kaam hota hai.
    1. dash.cloudflare.com -> Workers & Pages -> apna worker -> "Edit code".
@@ -83,7 +83,7 @@ Notification na bhi chale to app khulte hi Genzura Time ka popup aa jata hai.
 STEP 3 - TEST (apne admin account se, 1 minute)
 -----------------------------------------------
 1. Site ko ye link lagakar kholo (apne admin account se login ho):
-       https://gupzy.com/?momentTest=1
+       https://genzura.netlify.app/?momentTest=1
    (Ye sirf ADMIN_UIDS wale account par kaam karta hai; aap ka UID already list mein hai.)
 2. "Genzura Time!" ka popup aayega -> "Open camera" -> pehle back camera ki photo (shutter),
    phir 3-2-1 ke baad front camera apne aap click -> caption likho -> Post.

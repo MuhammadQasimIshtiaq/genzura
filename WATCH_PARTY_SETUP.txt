@@ -1,6 +1,6 @@
 WATCH PARTY (Co-Reels) - setup (1 minute)
 
-1) Push this folder to GitHub (Cloudflare deploys it) (index.html changed).
+1) Deploy this folder to Netlify as usual (index.html changed).
 
 2) Firebase Console -> Firestore Database -> Rules: add this block INSIDE "match /databases/{database}/documents { ... }"
 
@@ -27,7 +27,7 @@ WATCH PARTY (Co-Reels) - setup (1 minute)
    Then press Publish.
 
 How it works
-- Profile menu (≡) -> "Watch Party" -> Invite a friend (WhatsApp etc). Link: https://gupzy.com/?party=<code>
+- Profile menu (≡) -> "Watch Party" -> Invite a friend (WhatsApp etc). Link: https://genzura.netlify.app/?party=<code>
 - Friend opens the link, signs in if needed, taps "Join Watch Party".
 - Both phones now stay on the SAME reel. Whoever swipes, the other follows. A pill at the top shows the status + Leave.
 - Max 2 people per party. Host leaving ends it. Parties older than 6 hours can't be joined.

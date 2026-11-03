@@ -1,6 +1,6 @@
 ANONYMOUS INBOX - setup (1 minute)
 
-1) Push this folder to GitHub (Cloudflare deploys it) (index.html changed).
+1) Deploy this folder to Netlify as usual (index.html changed).
 
 2) Firebase Console -> Firestore Database -> Rules: add this block INSIDE "match /databases/{database}/documents { ... }"
 
@@ -23,7 +23,7 @@ ANONYMOUS INBOX - setup (1 minute)
    Then press Publish.
 
 How it works
-- Profile menu (≡) -> "Anonymous Inbox" -> Share my link.   Link format:  https://gupzy.com/?ask=<uid>
+- Profile menu (≡) -> "Anonymous Inbox" -> Share my link.   Link format:  https://genzura.netlify.app/?ask=<uid>
 - Anyone who opens the link sees a send screen (no login). Sender identity is NOT stored at all.
 - New messages show a pink dot on the ≡ button and a count badge in the menu.
 - Android app: no change needed (it is all inside the website).

@@ -18,7 +18,7 @@ service cloud.firestore {
     // follow helpers
     function subPath(a, b) { return /databases/$(database)/documents/subscriptions/$(a + '_' + b); }
     function followsBoth(a, b) { return exists(subPath(a, b)) && exists(subPath(b, a)); }
-    // mutual phone-contacts link (written ONLY by the API worker 'contacts'; doc id = sorted "uidA_uidB")
+    // mutual phone-contacts link (written ONLY by the Netlify function 'contacts'; doc id = sorted "uidA_uidB")
     function contactPath(a, b) { return /databases/$(database)/documents/contactLinks/$(a < b ? a + '_' + b : b + '_' + a); }
     // chat / call allowed when both follow each other OR are in each other's phone contacts
     function canTalk(a, b) { return followsBoth(a, b) || exists(contactPath(a, b)); }
@@ -107,7 +107,9 @@ service cloud.firestore {
         isAdmin()
         // owner: edit own profile, but never the protected counters / badges
         || (me() == uid
-            && !changed().hasAny(['subscriberCount', 'likesTotal', 'referralCount', 'monetized', 'referredByAdmin', 'createdAt'])
+            && !changed().hasAny(['subscriberCount', 'likesTotal', 'referralCount', 'referredByAdmin', 'createdAt'])
+            // auto-monetization: owner may only switch monetized from off to ON (never off)
+            && (!changed().hasAny(['monetized']) || (request.resource.data.monetized == true && resource.data.get('monetized', false) == false))
             && (request.resource.data.get('channelId', null) == resource.data.get('channelId', null)
                 || getAfter(/databases/$(database)/documents/channelIds/$(request.resource.data.channelId)).data.ownerUid == me()))
         // anyone else: ONLY subscriberCount +1 / -1 and ONLY together with a real follow / unfollow
@@ -564,6 +566,11 @@ service cloud.firestore {
             && request.resource.data.members.size() <= 50)
           // any member: unread / typing / last message only
           || changed().hasOnly(['unread', 'lastRead', 'typing', 'lastText', 'lastType', 'lastFrom', 'lastAt'])
+          // any member: start / end a live group call flag
+          || changed().hasOnly(['liveCall'])
+          // any member: mute / unmute this group for himself (only his own key inside "mute")
+          || (changed().hasOnly(['mute'])
+              && request.resource.data.get('mute', {}).diff(resource.data.get('mute', {})).affectedKeys().hasOnly([me()]))
           // any member: leave the group (owner may pass ownership to a remaining member)
           || (!(me() in request.resource.data.members)
               && resource.data.members.toSet().difference(request.resource.data.members.toSet()) == [me()].toSet()
@@ -633,6 +640,33 @@ service cloud.firestore {
     }
 
     // ================================================================
+    //  GROUP CALLS (mesh voice / video, doc id = group chat id, members only)
+    //  participants[] = who is inside (join order), sig/* = WebRTC offer / answer / ICE between two members
+    // ================================================================
+    match /groupCalls/{gid} {
+      allow get: if signedIn() && isGroupId(gid) && chatMember(gid);
+      allow list: if false;
+      allow create: if signedIn() && isGroupId(gid) && chatMember(gid)
+        && request.resource.data.participants == [me()]
+        && request.resource.data.startedBy == me()
+        && request.resource.data.type in ['voice', 'video'];
+      allow update: if signedIn() && isGroupId(gid) && chatMember(gid)
+        && changed().hasOnly(['type', 'startedBy', 'startedAt', 'participants', 'updatedAt'])
+        && request.resource.data.participants.size() <= 6
+        && request.resource.data.participants.toSet().difference(resource.data.participants.toSet()).hasOnly([me()])
+        && resource.data.participants.toSet().difference(request.resource.data.participants.toSet()).hasOnly([me()]);
+      allow delete: if false;
+
+      match /sig/{sid} {
+        allow create: if signedIn() && request.resource.data.from == me()
+          && request.resource.data.to is string
+          && (me() in get(/databases/$(database)/documents/groupCalls/$(gid)).data.participants);
+        allow read, delete: if signedIn() && resource.data.to == me();
+        allow update: if false;
+      }
+    }
+
+    // ================================================================
     //  CALLS  (new call needs mutual follow)
     // ================================================================
     match /calls/{callId} {
@@ -670,7 +704,9 @@ service cloud.firestore {
       allow get: if signedIn() && (me() == uid || isAdmin());
       allow list: if isAdmin();
       // user can only apply as "pending" (never self-approve)
-      allow create: if signedIn() && me() == uid && request.resource.data.status == 'pending';
+      // one-time payout form: auto-approved for a monetized channel (old 'pending' path kept for compatibility)
+      allow create: if signedIn() && me() == uid && (request.resource.data.status == 'pending'
+        || (request.resource.data.status == 'approved' && get(/databases/$(database)/documents/channels/$(uid)).data.get('monetized', false) == true));
       allow update: if signedIn() && (
         isAdmin()
         || (me() == uid
@@ -678,6 +714,16 @@ service cloud.firestore {
             && request.resource.data.status == 'pending')
       );
       allow delete: if isAdmin();
+    }
+
+    // withdrawals (min $2): same payment method as the saved form -> 'approved' automatically, a different one -> 'pending' for the team
+    match /withdrawals/{id} {
+      allow read: if signedIn() && (resource.data.uid == me() || isAdmin());
+      allow create: if signedIn() && request.resource.data.uid == me()
+        && request.resource.data.status in ['approved', 'pending']
+        && request.resource.data.amount is number && request.resource.data.amount >= 2
+        && get(/databases/$(database)/documents/channels/$(me())).data.get('monetized', false) == true;
+      allow update, delete: if isAdmin();
     }
 
     match /promotions/{id} {

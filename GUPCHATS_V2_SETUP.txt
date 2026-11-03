@@ -5,8 +5,8 @@ WHAT TO PUBLISH (in this order)
                                  (new: gcPresence = online status, gcKeyBackups = private key backup)
 2) worker/genzura-worker-all.js -> redeploy your Cloudflare worker (arain-api...workers.dev).
                                  New push kind "gcmessage" (Gupchats). Gupzy pushes are unchanged.
-                                 (same change is in the worker only).
-3) the web zip (gupchats/index.html) -> push to GitHub as usual
+                                 netlify/functions/push.js has the same change (kept in sync, only used if you switch back to Netlify).
+3) the web zip (gupchats/index.html) -> publish on Netlify as usual
 4) Gupchats Android: put google-services.json (package com.gupzy.chats) into app/ and rebuild (see its README)
 
 HOW IT WORKS

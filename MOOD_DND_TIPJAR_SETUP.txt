@@ -1,6 +1,6 @@
 MOOD STATUS + DO-NOT-DISTURB + CREATOR TIP JAR  (3 steps)
 
-1) Push this folder to GitHub (index.html, service-worker.js changed; re-paste the worker for push).
+1) Deploy this folder to Netlify (index.html, service-worker.js, netlify/functions/push.js changed).
 2) Firebase Console -> Firestore -> Rules: replace EVERYTHING with the file firestore.rules from this folder (one complete file) -> Publish.
    (new blocks: presence/{uid}, tipJars/{uid})
 3) Android: rebuild the app (small change: MainActivity.openPayApp + <queries> in the manifest).
@@ -16,8 +16,8 @@ What users get (Top bar: the 🌙 icon (next to the albums icon)):
   the wallet app (Android). Money goes wallet-to-wallet; Genzura does not process it.
 
 === ROUND 2: chat timer + public Q&A + translate ===
-- Push again (index.html, service-worker.js; translate runs in the worker) and re-publish firestore.rules (new block: qa/{id}).
+- Deploy again (index.html, service-worker.js, NEW netlify/functions/translate.js) and re-publish firestore.rules (new block: qa/{id}).
 - Disappearing messages: the ⏱ button in the chat header (next to the call buttons). Off / 1 hour / 24 hours / 7 days for the whole conversation.
 - Public Q&A: Anonymous Inbox -> "Answer publicly" on a question; "My public Q&A page" shares  ?qa=<uid>.  A "Q&A" button also shows on a profile that has answers.
 - Translate: "🌐 Translate" under every post caption and comment; one tap -> Urdu / Roman Urdu / English (remembers your last choice).
-  Uses the free Google web translate endpoint from the worker (falls back to MyMemory). No API key needed.
+  Uses the free Google web translate endpoint from the Netlify function (falls back to MyMemory). No API key needed.
