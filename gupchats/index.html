@@ -153,7 +153,38 @@ hr{border:0;border-top:1px solid var(--border);margin:8px 0}
 #sc .scbar{padding:10px 14px calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px}
 #sc textarea{border:0;border-radius:14px;padding:11px 14px;font-size:16px;font-family:inherit;resize:none;outline:none}
 #iv img{max-width:100%;max-height:100%;margin:auto;object-fit:contain}
-.rq{font-size:13px;opacity:.8;border-left:3px solid currentColor;padding-left:8px;margin-bottom:4px}
+.rq{font-size:13px;opacity:.8;border-left:3px solid currentColor;padding-left:8px;margin-bottom:4px;white-space:normal;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.b[data-mid]{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.rx{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;white-space:normal}
+.rx span{background:rgba(127,127,127,.22);border-radius:12px;padding:1px 7px;font-size:13px;line-height:1.5;cursor:pointer}
+.rx span.mine{outline:1.5px solid var(--blue)}
+.b.media .rx{padding:0 6px 4px}
+#actBg{position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center}
+#actBg .actsh{width:100%;max-width:520px;background:var(--surface);border-radius:20px 20px 0 0;padding:14px 14px calc(14px + env(safe-area-inset-bottom,0px))}
+#actBg .rxrow{display:flex;justify-content:space-around;margin-bottom:10px}
+#actBg .rxrow button{font-size:28px;background:none;border:0;padding:6px;border-radius:50%;cursor:pointer}
+#actBg .rxrow button.sel{background:rgba(127,127,127,.25)}
+#actBg .actb{display:block;width:100%;text-align:left;background:none;border:0;padding:13px 8px;font-size:16px;color:inherit;font-family:inherit;cursor:pointer}
+#rpBar{display:flex;align-items:center;gap:8px;padding:6px 12px;border-top:1px solid rgba(127,127,127,.25);background:var(--surface)}
+#rpBar .rpt{flex:1;min-width:0;border-left:3px solid var(--blue);padding-left:8px;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#rpBar .rpt b{display:block;font-size:12.5px}
+.mutei{font-size:13px;margin-left:4px;opacity:.7}
+#ggBanner{padding:9px 14px;background:#12a150;color:#fff;font-weight:700;font-size:14.5px;text-align:center;cursor:pointer}
+#ggCall{position:fixed;inset:0;z-index:97;display:flex;flex-direction:column;background:linear-gradient(160deg,#0b1220,#16254a 60%,#0866ff);color:#fff;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+#ggCall .ggtop{padding:14px 16px 6px;text-align:center}#ggTitle{font-size:18px;font-weight:800}#ggSub{font-size:13px;opacity:.8}
+#ggGrid{flex:1;min-height:0;display:grid;gap:8px;padding:8px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));grid-auto-rows:1fr}
+.ggt{position:relative;border-radius:16px;overflow:hidden;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;min-height:120px}
+.ggt video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+.ggt .ggav{width:64px;height:64px;border-radius:50%;overflow:hidden;font-size:24px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.2)}
+.ggt .ggav img{width:100%;height:100%;object-fit:cover}
+.ggt .ggn{position:absolute;left:8px;bottom:6px;font-size:13px;font-weight:700;text-shadow:0 1px 3px #000;z-index:2}
+.ggt .ggst{position:absolute;right:8px;top:6px;font-size:12px;z-index:2;opacity:.9}
+#ggCall .ggbar{display:flex;justify-content:center;gap:16px;padding:12px}
+#ggCall .ggbar button{width:56px;height:56px;border-radius:50%;border:0;font-size:24px;background:rgba(255,255,255,.2);color:#fff;cursor:pointer}
+#ggCall .ggbar button.on{background:#fff;color:#000}#ggCall .ggbar button.end{background:#e5362b}
+#ggRing{position:fixed;inset:0;z-index:99;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center}
+#ggRing .rbx{background:var(--surface);border-radius:20px;padding:22px;width:min(88%,360px);text-align:center}
+#ggRing .rbx .rb2{display:flex;gap:10px;margin-top:16px}#ggRing .rbx button{flex:1;padding:12px;border:0;border-radius:14px;font-size:16px;font-weight:700;cursor:pointer}
 .mv{display:block;max-width:240px;width:100%;border-radius:14px;background:#000}
 /* ---- calls ---- */
 #gcIn,#gcCall{position:fixed;inset:0;z-index:95;color:#fff;display:flex;flex-direction:column;align-items:center;background:linear-gradient(160deg,#0b1220,#16254a 60%,#0866ff)}
@@ -180,6 +211,26 @@ hr{border:0;border-top:1px solid var(--border);margin:8px 0}
 #gcCall .gcc-s{font-size:16px;opacity:.9;margin-top:6px;text-shadow:0 1px 6px rgba(0,0,0,.5)}
 #gcCall .gcc-bar{position:relative;z-index:1;display:flex;gap:16px;align-items:center;justify-content:center;flex-wrap:wrap}
 #gcSound{position:relative;z-index:1;border:0;border-radius:20px;padding:10px 18px;font-weight:700;background:#fff;color:#111;margin-bottom:12px}
+/* ---- v5: groups ---- */
+.b .sn{font-size:12px;font-weight:700;color:var(--blue);margin-bottom:2px;white-space:normal}
+.b.media .sn{padding:3px 8px 2px}
+.tmp{font-size:11.5px;color:var(--dim);font-weight:600;margin-left:6px}
+.row.sel{background:var(--blue-soft)}
+.ck{width:24px;height:24px;border-radius:50%;border:2px solid #c9ccd1;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:800}
+.row.sel .ck{background:var(--blue);border-color:var(--blue)}
+.gform{display:flex;gap:10px;align-items:center;padding:10px 16px}
+#gnPic{width:52px;height:52px;flex:none;border-radius:50%;border:1.5px dashed #b8bcc4;background:#fff center/cover no-repeat;font-size:22px}
+.gi-av{display:flex;align-items:center;gap:14px;padding:4px 0 10px}
+.gi-av .av{width:68px;height:68px;font-size:24px}
+.gi-btns{display:flex;flex-direction:column;gap:6px}
+.gi-btns .btn{padding:7px 12px;font-size:13px}
+.gi-name{display:flex;gap:8px;align-items:center;margin:4px 0 6px}
+.gi-name .inp{margin-top:0;flex:1}
+.gi-mem{display:flex;align-items:center;gap:12px;padding:8px 0}
+.gi-mem .rb .rn{font-size:16px}
+.gi-tag{font-size:12px;color:var(--blue);font-weight:700}
+.gi-link{display:block;width:100%;text-align:left;border:0;background:none;padding:13px 0;font-size:16px;font-weight:700;color:var(--blue);border-top:1px solid var(--border)}
+.gi-link.red{color:var(--red)}
 </style>
 </head>
 <body>
@@ -234,10 +285,12 @@ hr{border:0;border-top:1px solid var(--border);margin:8px 0}
   <div class="top">
     <button class="iconbtn" id="cBack" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
     <div id="cAv"></div><div class="rb"><div class="rn" id="cName" style="font-weight:700"></div><div class="rs" id="cSub">🔒 End-to-end encrypted</div></div>
-    <button class="iconbtn" id="cCallV" aria-label="Voice call"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="color:var(--blue)"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z"/></svg></button><button class="iconbtn" id="cCallVid" aria-label="Video call"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" style="color:var(--blue)"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h8A2.5 2.5 0 0 1 16 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-8A2.5 2.5 0 0 1 3 16.5v-9zM17 10.2l4.2-2.6c.5-.3 1.1 0 1.1.6v7.6c0 .6-.6.9-1.1.6L17 13.8v-3.6z"/></svg></button>
+    <button class="iconbtn" id="cMute" aria-label="Mute notifications" style="font-size:20px">🔔</button><button class="iconbtn" id="cCallV" aria-label="Voice call"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="color:var(--blue)"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z"/></svg></button><button class="iconbtn" id="cCallVid" aria-label="Video call"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" style="color:var(--blue)"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h8A2.5 2.5 0 0 1 16 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-8A2.5 2.5 0 0 1 3 16.5v-9zM17 10.2l4.2-2.6c.5-.3 1.1 0 1.1.6v7.6c0 .6-.6.9-1.1.6L17 13.8v-3.6z"/></svg></button>
   </div>
+  <div id="ggBanner" class="hidden"></div>
   <div id="msgs"></div>
   <div id="note" class="hidden"></div>
+  <div id="rpBar" class="hidden"><div class="rpt" id="rpT"></div><button class="iconbtn" id="rpX" aria-label="Cancel reply">✕</button></div>
   <div id="composer">
     <button class="iconbtn" id="attBtn" aria-label="Send photo" disabled><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 9"/></svg></button>
     <textarea id="mIn" rows="1" placeholder="Message"></textarea>
@@ -278,6 +331,17 @@ hr{border:0;border-top:1px solid var(--border);margin:8px 0}
   <div id="pkList" style="flex:1;overflow-y:auto"></div>
 </div>
 
+<div id="grpNew" class="screen hidden" style="z-index:41">
+  <div class="top" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border)">
+    <button class="iconbtn" id="gnBack" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <div id="gnTitle" style="font-size:18px;font-weight:800;flex:1">New group</div>
+    <button class="btn" id="gnGo" disabled>Create</button>
+  </div>
+  <div class="gform" id="gnForm"><button class="iconbtn" id="gnPic" type="button" aria-label="Group photo">📷</button><input id="gnName" class="inp" placeholder="Group name" maxlength="40" autocomplete="off" style="margin-top:0"></div>
+  <div class="search"><input id="gnQ" placeholder="Search friends" autocomplete="off" style="width:100%"></div>
+  <div id="gnList" style="flex:1;overflow-y:auto"></div>
+</div>
+
 <div id="gcIn" class="hidden">
   <div class="gci-av" id="gciAv"></div>
   <div class="gci-n" id="gciName"></div>
@@ -287,6 +351,8 @@ hr{border:0;border-top:1px solid var(--border);margin:8px 0}
     <button class="gcb green" id="gciAcc" aria-label="Answer"><svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z"/></svg></button>
   </div>
 </div>
+<div id="ggCall" class="hidden"><div class="ggtop"><div id="ggTitle"></div><div id="ggSub"></div></div><div id="ggGrid"></div><div class="ggbar"><button id="ggMic" aria-label="Mute microphone">🎙️</button><button id="ggCam" class="hidden" aria-label="Camera">📷</button><button id="ggSpk" class="on" aria-label="Speaker">🔊</button><button id="ggEnd" class="end" aria-label="Leave call">📞</button></div></div>
+<div id="ggRing" class="hidden"></div>
 <div id="gcCall" class="hidden">
   <video id="gcRemote" autoplay playsinline></video>
   <video id="gcLocal" autoplay playsinline muted></video>
@@ -366,8 +432,25 @@ function b64(u8){ var s='', a=new Uint8Array(u8); for(var i=0;i<a.length;i++) s+
 function unb64(t){ return Uint8Array.from(atob(t), function(c){ return c.charCodeAt(0); }); }
 var idbP=null;
 function idb(){ if(idbP) return idbP; idbP=new Promise(function(res,rej){ var r=indexedDB.open('at-e2ee',1); r.onupgradeneeded=function(){ r.result.createObjectStore('k'); }; r.onsuccess=function(){ r.result.onclose=function(){ idbP=null; }; res(r.result); }; r.onerror=function(){ idbP=null; rej(r.error); }; }); return idbP; }
-function idbGet(k){ return idb().then(function(d){ return new Promise(function(res,rej){ var q=d.transaction('k').objectStore('k').get(k); q.onsuccess=function(){ res(q.result); }; q.onerror=function(){ rej(q.error); }; }); }); }
-function idbSet(k,v){ return idb().then(function(d){ return new Promise(function(res,rej){ var q=d.transaction('k','readwrite').objectStore('k').put(v,k); q.onsuccess=function(){ res(); }; q.onerror=function(){ rej(q.error); }; }); }); }
+var ECP={name:'ECDH',namedCurve:'P-256'};
+async function kpSer(r){ if(!r||!r.priv) return null; try{ return {pub:r.pub, jwk:await crypto.subtle.exportKey('jwk', r.priv)}; }catch(e){ return null; } }
+async function kpDe(o){ try{ return {pub:o.pub, priv:await crypto.subtle.importKey('jwk', o.jwk, ECP, true, ['deriveBits'])}; }catch(e){ return null; } }
+/* the key is ALSO mirrored in localStorage: if the phone/WebView drops IndexedDB, the key (and so the old messages) survives and no new key is created */
+async function mirrorSet(k,v){ try{
+  if(Array.isArray(v)){ var arr=[]; for(var i=0;i<v.length;i++){ var o=await kpSer(v[i]); if(o) arr.push(o); } localStorage.setItem('gcm_'+k, JSON.stringify(arr)); }
+  else { var o2=await kpSer(v); if(o2) localStorage.setItem('gcm_'+k, JSON.stringify(o2)); }
+}catch(e){} }
+async function mirrorGet(k){ try{
+  var t=localStorage.getItem('gcm_'+k); if(!t) return undefined; var j=JSON.parse(t);
+  if(Array.isArray(j)){ var out=[]; for(var i=0;i<j.length;i++){ var r=await kpDe(j[i]); if(r) out.push(r); } return out; }
+  return (await kpDe(j))||undefined;
+}catch(e){ return undefined; } }
+function idbGet(k){ return idb().then(function(d){ return new Promise(function(res,rej){ var q=d.transaction('k').objectStore('k').get(k); q.onsuccess=function(){ res(q.result); }; q.onerror=function(){ rej(q.error); }; }); }).catch(function(){ return undefined; }).then(async function(v){
+  if(v!==undefined && v!==null) return v;
+  var m=await mirrorGet(k);
+  if(m!==undefined){ idbSet(k,m).catch(function(){}); }   /* put it back into IndexedDB */
+  return m; }); }
+function idbSet(k,v){ mirrorSet(k,v); return idb().then(function(d){ return new Promise(function(res,rej){ var q=d.transaction('k','readwrite').objectStore('k').put(v,k); q.onsuccess=function(){ res(); }; q.onerror=function(){ rej(q.error); }; }); }).catch(function(){}); }
 var myKP=null, ppCache=new Map(), shared={}, backupState='unknown', myBlocked=[];
 
 function sheet(html){ var bg=document.createElement('div'); bg.className='sheetbg'; bg.innerHTML='<div class="sheet">'+html+'</div>'; document.body.appendChild(bg); return bg; }
@@ -457,16 +540,21 @@ async function backupSheet(first){
   };
 }
 async function initKeys(){
+  try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}   /* keep the key storage from being evicted */
   var rec=await idbGet('k_'+me.uid), old=(await idbGet('o_'+me.uid))||[], bk=null, pubDoc=null;
   try{ var d=await db.collection('keyBackups').doc(me.uid).get(); bk=d.exists?d.data():null; }catch(e){}
   try{ var d2=await db.collection('userKeys').doc(me.uid).get(); pubDoc=d2.exists?d2.data().pub:null; }catch(e){}
+  var DBG=function(t){ try{ toast('KEY v3: '+t); }catch(e){} };
+  DBG('start, local key '+(rec&&rec.priv?'YES':'NO')+', backup '+(bk?'YES':'NO')+', server key '+(pubDoc?'YES':'NO')+(rec&&pubDoc?(rec.pub===pubDoc?', SAME':', DIFFERENT'):''));
   if(rec && rec.priv){
     myKP={ priv:rec.priv, pub:rec.pub, old:old };
     backupState = bk ? 'on' : 'off';
     if(!pubDoc){ await publishPub(myKP); }
     else if(pubDoc!==rec.pub){
       /* the key published for this account is a different one (it was changed in Gupzy): never overwrite it, restore it instead */
-      if(bk){ var r0=await restoreFlow(bk); if(r0){ myKP=r0; backupState='on'; } }
+      var rsKey='gc_rs_'+me.uid, rsDone=false; try{ rsDone=(localStorage.getItem(rsKey)===pubDoc); }catch(e){}
+      if(rsDone){ backupState = bk ? 'on' : 'off'; }   /* password was already entered once for this key: never ask again on every open */
+      else if(bk){ var r0=await restoreFlow(bk); if(r0){ myKP=r0; backupState='on'; } try{ localStorage.setItem(rsKey,pubDoc); }catch(e){} }
       else toast('Your chat key differs from Gupzy. Make a Chat backup in Gupzy, then reopen Gupchats.');
     }
     return;
@@ -576,7 +664,7 @@ async function pushNotify(chatId){
 }
 /* tapping a notification opens that chat */
 window.__gcOpen = function(uid){ pendingOpen=uid; tryOpenPending(); };
-function tryOpenPending(){ if(pendingOpen && me){ var u=pendingOpen; pendingOpen=null; openChat(u); } }
+function tryOpenPending(){ if(pendingOpen && me){ var u=pendingOpen; pendingOpen=null; if(String(u).indexOf('g:')===0) openGroup(String(u).slice(2)); else openChat(u); } }
 
 /* ---------------- online status (heartbeat) ---------------- */
 var presMap=new Map(), presUnsubs=[], presKey='', presTimer=null, uiTimer=null, appVis=true, presHidden=false, presThrottle=null;
@@ -616,7 +704,7 @@ function refreshPresenceUI(){
 function syncPresenceWatch(){
   if(!me) return;
   var ids=new Set(friends.map(function(f){ return f.uid; }));
-  Object.keys(chats).forEach(function(k){ var p=peerOf(chats[k]); if(p.uid) ids.add(p.uid); });
+  Object.keys(chats).forEach(function(k){ var p=peerOf(chats[k]); if(p.uid && !p.group) ids.add(p.uid); });
   ids.delete(me.uid);
   var list=Array.from(ids).slice(0,300).sort(), key=list.join(',');
   if(key===presKey) return; presKey=key;
@@ -632,6 +720,7 @@ function syncPresenceWatch(){
 }
 function updateHeaderSub(){
   var el=$('cSub'); if(!el||!cur) return;
+  if(cur.group){ var gc=chats[cur.id]||{}; el.textContent=((gc.members||cur.peer.members||[]).length)+' members · \uD83D\uDD12 Encrypted'; var ga=$('cAv'); if(ga){ ga.innerHTML='<div class="avw">'+av(cur.peer.logo,cur.peer.name,'sm')+'</div>'; ga.onclick=openGroupInfo; } return; }
   var p=presMap.get(cur.peer.uid);
   if(isOnline(cur.peer.uid)) el.textContent='\uD83D\uDFE2 Active now';
   else if(!presHidden && p && !p.hidden && p.at) el.textContent='Last seen '+fmtTime(p.at);
@@ -664,7 +753,7 @@ async function signOut(){
 $('ncOut').onclick = signOut;
 
 auth.onAuthStateChanged(async function(u){
-  if(!u){ callEnded(); me=null; stopPresence(); friends=[]; requests=[]; followers=[]; chats={}; storyBy={}; myKP=null; show('login'); $('loginBtn').disabled=false; return; }
+  if(!u){ callEnded(); me=null; stopPresence(); friends=[]; requests=[]; followers=[]; chats={}; storyBy={}; myKP=null; gCache=new Map(); show('login'); $('loginBtn').disabled=false; return; }
   try{
     var d=await db.collection('channels').doc(u.uid).get();
     if(!d.exists){ show('nochannel'); return; }
@@ -1024,11 +1113,12 @@ $('scShare').onclick=async function(){
 };
 
 /* ---------------- chats list ---------------- */
-function peerOf(c){ var o=(c.members||[]).filter(function(x){ return x!==me.uid; })[0]; var i=(c.info&&c.info[o])||chInfo.get(o)||{}; return {uid:o,name:i.name||'User',logo:i.logo||null}; }
+function peerOf(c){ if(c.isGroup) return {uid:c.id,name:c.name||'Group',logo:c.logo||null,group:true,members:c.members||[]}; var o=(c.members||[]).filter(function(x){ return x!==me.uid; })[0]; var i=(c.info&&c.info[o])||chInfo.get(o)||{}; return {uid:o,name:i.name||'User',logo:i.logo||null}; }
 function startChats(){
   if(unsubChats) unsubChats();
   unsubChats = db.collection('chats').where('members','array-contains',me.uid).limit(200).onSnapshot(function(snap){
-    chats={}; snap.docs.forEach(function(d){ var x=d.data(); x.id=d.id; if(x.isGroup || !/^[^_]+_[^_]+$/.test(d.id) || (x.members||[]).length!==2) return; chats[d.id]=x; });   /* Gupzy inbox: 1-to-1 chats only */
+    chats={}; snap.docs.forEach(function(d){ var x=d.data(); x.id=d.id; if(x.isGroup){ if((x.members||[]).indexOf(me.uid)>=0) chats[d.id]=x; return; } if(!/^[^_]+_[^_]+$/.test(d.id) || (x.members||[]).length!==2) return; chats[d.id]=x; });   /* same inbox as Gupzy: 1-to-1 chats + groups */
+    if(cur && cur.group){ if(!chats[cur.id]){ if(!cur.leaving){ closeChat(); toast('You are no longer in this group'); } } else groupLive(); }
     renderChats(); syncPresenceWatch();
     var anyUnread=Object.keys(chats).some(function(k){ return ((chats[k].unread||{})[me.uid]||0)>0; });
     $('d0').classList.toggle('hidden', !anyUnread);
@@ -1037,14 +1127,15 @@ function startChats(){
 var pvCache=new Map();
 function renderChats(){
   var q=($('q').value||'').trim().toLowerCase();
-  var list=Object.keys(chats).map(function(k){ return chats[k]; }).sort(function(a,b){ return (ms(b.lastAt)||Date.now())-(ms(a.lastAt)||Date.now()); });
+  var list=Object.keys(chats).map(function(k){ return chats[k]; }).filter(function(c){ return !(c.isGroup && c.isTemp && c.expiresAt && c.expiresAt<Date.now()); }).sort(function(a,b){ return (ms(b.lastAt)||Date.now())-(ms(a.lastAt)||Date.now()); });
   if(q) list=list.filter(function(c){ return peerOf(c).name.toLowerCase().indexOf(q)>=0; });
   var html=list.map(function(c){
     var p=peerOf(c), un=((c.unread||{})[me.uid]||0)>0;
+    if(p.group) return '<div class="row'+(un?' unread':'')+'" data-grp="'+esc(c.id)+'"><div class="avw">'+av(p.logo,p.name)+'</div><div class="rb"><div class="rn">'+esc(p.name)+tmpTag(c)+'</div><div class="rs" data-pv="'+esc(c.id)+'">…</div></div><div class="rt">'+esc(fmtTime(c.lastAt))+'</div>'+(un?'<div class="ub"></div>':'')+'</div>';
     return '<div class="row'+(un?' unread':'')+'" data-peer="'+esc(p.uid)+'">'+avw(p.uid,p.logo,p.name)+'<div class="rb"><div class="rn">'+esc(p.name)+'</div><div class="rs" data-pv="'+esc(c.id)+'">…</div></div><div class="rt">'+esc(fmtTime(c.lastAt))+'</div>'+(un?'<div class="ub"></div>':'')+'</div>';
   }).join('');
   if(q){
-    var inChat=new Set(list.map(function(c){ return peerOf(c).uid; }));
+    var inChat=new Set(list.filter(function(c){ return !c.isGroup; }).map(function(c){ return peerOf(c).uid; }));
     var more=friends.filter(function(f){ return !inChat.has(f.uid) && f.name.toLowerCase().indexOf(q)>=0; });
     if(more.length) html+='<div class="sec">Friends</div>'+more.map(friendRow).join('');
   }
@@ -1056,9 +1147,12 @@ function renderChats(){
 }
 var pvBusy=0;
 function pvSet(id,txt){ var e2=$('chatList').querySelector('[data-pv="'+id+'"]'); if(e2) e2.textContent=txt; }
+function tmpTag(c){ if(!(c.isTemp && c.expiresAt)) return ''; var m=Math.max(1,Math.ceil((c.expiresAt-Date.now())/60000)); return '<span class="tmp">⏳ '+(m>=60?Math.floor(m/60)+'h '+(m%60)+'m':m+'m')+'</span>'; }
+function grpSender(c,uid){ if(uid===me.uid) return 'You'; var i=(c.info&&c.info[uid])||chInfo.get(uid)||{}; return String(i.name||'Someone').split(/\s+/)[0]; }
 function fillPreview(c){
   var el=$('chatList').querySelector('[data-pv="'+c.id+'"]'); if(!el) return;
   var t=c.lastType||'text', pre=(c.lastFrom===me.uid?'You: ':'');
+  if(c.isGroup){ pre = c.lastFrom ? (grpSender(c,c.lastFrom)+': ') : ''; }
   if(t==='image'){ el.textContent=pre+'\uD83D\uDCF7 Photo'; return; }
   if(t==='audio'){ el.textContent=pre+'\uD83C\uDFA4 Voice message'; return; }
   if(t==='video'){ el.textContent=pre+'\uD83C\uDFA5 Video'; return; }
@@ -1071,12 +1165,14 @@ function fillPreview(c){
   pvBusy++;
   var p=peerOf(c);
   db.collection('chats').doc(c.id).collection('messages').orderBy('createdAt','desc').limit(1).get().then(function(q){
-    if(q.empty) return; var m=q.docs[0].data();
+    if(q.empty) return; var m=q.docs[0].data(); m.id=q.docs[0].id;
+    if(c.isGroup){ return openGroupMsg(c.id,m).then(function(o){ if(o && m.type==='text'){ var s3=grpSender(c,m.from)+': '+o.t; pvCache.set(ck,s3); pvSet(c.id,s3); } }); }
     return openMsg(c.id,p.uid,m).then(function(o){ if(o && m.type==='text'){ var s2=(m.from===me.uid?'You: ':'')+o.t; pvCache.set(ck,s2); pvSet(c.id,s2); } });
   }).catch(function(){}).then(function(){ pvBusy--; });
 }
 function bindRows(root){
   root.querySelectorAll('[data-peer]').forEach(function(el){ el.onclick=function(){ openChat(el.getAttribute('data-peer')); }; });
+  root.querySelectorAll('[data-grp]').forEach(function(el){ el.onclick=function(){ openGroup(el.getAttribute('data-grp')); }; });
 }
 $('q').addEventListener('input', renderChats);
 
@@ -1186,7 +1282,8 @@ function openSettings(){
 function openPicker(){ $('picker').classList.remove('hidden'); $('pkQ').value=''; renderPicker(); }
 function renderPicker(){
   var q=($('pkQ').value||'').toLowerCase(), l=friends.filter(function(f){ return !q || f.name.toLowerCase().indexOf(q)>=0; });
-  $('pkList').innerHTML = l.length ? l.map(friendRow).join('') : '<div class="empty">'+(friends.length?'No match.':'You have no friends yet. Follow each other in Gupzy first.')+'</div>';
+  $('pkList').innerHTML = (q?'':'<div class="row" id="pkGrp"><div class="av" style="background:var(--blue)">👥</div><div class="rb"><div class="rn" style="font-weight:700">New group</div><div class="rs">Chat with several friends at once</div></div></div>')+(l.length ? l.map(friendRow).join('') : '<div class="empty">'+(friends.length?'No match.':'You have no friends yet. Follow each other in Gupzy first.')+'</div>');
+  var pg=$('pkGrp'); if(pg) pg.onclick=function(){ $('picker').classList.add('hidden'); openGroupNew(); };
   $('pkList').querySelectorAll('[data-peer]').forEach(function(el){ el.onclick=function(){ $('picker').classList.add('hidden'); openChat(el.getAttribute('data-peer')); }; });
 }
 $('composeBtn').onclick=openPicker; $('pkBack').onclick=function(){ $('picker').classList.add('hidden'); }; $('pkQ').addEventListener('input',renderPicker);
@@ -1195,8 +1292,9 @@ $('composeBtn').onclick=openPicker; $('pkBack').onclick=function(){ $('picker').
 async function openChat(peerUid){
   var c=await getCh(peerUid);
   cur={ id:dmId(me.uid,peerUid), peer:{uid:peerUid,name:c.name,logo:c.logo}, canSend:false };
+  $('cCallV').classList.remove('hidden'); $('cCallVid').classList.remove('hidden'); $('cName').parentNode.onclick=null; $('cName').parentNode.style.cursor='';
   $('cName').textContent=c.name; updateHeaderSub();
-  $('msgs').innerHTML=''; $('mIn').value=''; $('mIn').style.height='auto'; $('note').classList.add('hidden');
+  $('msgs').innerHTML=''; $('mIn').value=''; $('mIn').style.height='auto'; $('note').classList.add('hidden'); if(typeof clearReply==='function') clearReply();
   recCancel(true); updateSend();
   $('chat').classList.remove('hidden');
   if(unsubMsgs) unsubMsgs();
@@ -1247,10 +1345,13 @@ function goneMsg(chatId, m){
 }
 /* one Gupzy message document -> something to draw */
 async function parseMsg(m, peerUid, chatId){
-  var base={ mine:m.from===me.uid, at:ms(m.createdAt) };
-  if(m.type==='sys') return null;
+  var base={ mine:m.from===me.uid, at:ms(m.createdAt), id:m.id, rx:m.reactions||null };
+  var isG = !!(cur && cur.group && cur.id===chatId);
+  if(m.type==='sys') return isG ? Object.assign(base,{kind:'sys', text:String(m.text||'')}) : null;
+  if(isG && !base.mine){ var gi=(chats[chatId]&&chats[chatId].info&&chats[chatId].info[m.from])||{}; base.sn=String(gi.name||m.fromName||'User'); }
   var o=null;
-  if(m.enc){ o=await openMsg(chatId, peerUid, m); if(!o) return Object.assign(base,{kind:'lock'}); }
+  if(m.enc===2){ o=await openGroupMsg(chatId, m); if(!o) return Object.assign(base,{kind:'lock'}); }
+  else if(m.enc){ o=await openMsg(chatId, peerUid, m); if(!o) return Object.assign(base,{kind:'lock'}); }
   var ty=m.type||'text';
   if(ty==='text' && !m.enc && m.postId){ return Object.assign(base,{ kind:'post', postId:String(m.postId), text:String(m.text||'\uD83D\uDCCE Post') }); }   /* a post shared from Gupzy */
   if(ty==='text'){ return Object.assign(base,{ kind:'text', text:m.enc?o.t:String(m.text||''), q:(o&&o.q)||'' }); }
@@ -1273,12 +1374,14 @@ async function renderMsgs(snap, tok){
     var day=new Date(m.at||Date.now()).toDateString();
     if(day!==lastDay){ lastDay=day; html+='<div class="tm">'+esc(fmtTime(m.at))+'</div>'; }
     var side=m.mine?'me':'th';
-    if(m.kind==='lock'){ html+='<div class="b '+side+' lock">🔒 Can’t read this message</div>'; return; }
-    if(m.kind==='post'){ html+='<div class="b '+side+' post" data-post="'+esc(m.postId)+'"><div class="pth" data-pid="'+esc(m.postId)+'"><div class="ph">\uD83D\uDCCE</div></div><div class="pt">'+esc(m.text)+'</div><div class="ps">Tap to view post</div></div>'; return; }
-    if(m.media){ mediaSpec.set(m.media.u,m.media); html+='<div class="b '+side+' media">'+mediaInner(m.media)+'</div>'; if(m.media.enc && !mediaUrls.has(m.media.u)) toLoad.push(m.media); return; }
-    html+='<div class="b '+side+'">'+(m.q?'<div class="rq">'+esc(m.q)+'</div>':'')+esc(m.text)+'</div>';
+    if(m.kind==='sys'){ html+='<div class="tm">'+esc(m.text)+'</div>'; return; }
+    var sn=m.sn?'<div class="sn">'+esc(m.sn)+'</div>':'';
+    if(m.kind==='lock'){ html+='<div class="b '+side+' lock">'+sn+'🔒 Can’t read this message</div>'; return; }
+    if(m.kind==='post'){ html+='<div class="b '+side+' post" data-post="'+esc(m.postId)+'">'+sn+'<div class="pth" data-pid="'+esc(m.postId)+'"><div class="ph">\uD83D\uDCCE</div></div><div class="pt">'+esc(m.text)+'</div><div class="ps">Tap to view post</div></div>'; return; }
+    if(m.media){ mediaSpec.set(m.media.u,m.media); MSGTXT[m.id]={t:(m.media.kind==='img'?'📷 Photo':m.media.kind==='vid'?'🎥 Video':'🎤 Voice message'),n:m.mine?'You':(m.sn||peer.name||''),mine:m.mine,rx:m.rx}; html+='<div class="b '+side+' media" data-mid="'+esc(m.id)+'">'+sn+mediaInner(m.media)+rxHtml(m)+'</div>'; if(m.media.enc && !mediaUrls.has(m.media.u)) toLoad.push(m.media); return; }
+    MSGTXT[m.id]={t:m.text,n:m.mine?'You':(m.sn||peer.name||''),mine:m.mine,rx:m.rx}; html+='<div class="b '+side+'" data-mid="'+esc(m.id)+'">'+sn+(m.q?'<div class="rq">'+esc(m.q)+'</div>':'')+esc(m.text)+rxHtml(m)+'</div>';
   });
-  box.innerHTML = html || '<div class="empty">Say hi to '+esc(peer.name)+' 👋</div>';
+  box.innerHTML = html || '<div class="empty">'+(cur.group?'Say hi to the group 👋':'Say hi to '+esc(peer.name)+' 👋')+'</div>';
   bindBig(box); fillPostThumbs();
   if(atBottom || out.length<=30) box.scrollTop=box.scrollHeight;
   toLoad.forEach(function(x){
@@ -1301,6 +1404,7 @@ async function blockedPair(peerUid){
   try{ var d=await db.collection('channels').doc(peerUid).get(); return !!(d.exists && (d.data().blockedUids||[]).indexOf(me.uid)>=0); }catch(e){ return false; }
 }
 async function sendMsgG(peer, id, base, payload){
+  if(peer.group) return sendGroupMsg(peer, id, base, payload);
   if(await blockedPair(peer.uid)) throw new Error('blocked');
   var env=await encPayload(id, peer.uid, payload);
   var ref=db.collection('chats').doc(id);
@@ -1311,6 +1415,13 @@ async function sendMsgG(peer, id, base, payload){
   pushNotify(id);
 }
 function sendErr(err,peer){
+  if(peer && peer.group){
+    if(err && err.message==='nokey') toast('Some group members have not updated Gupzy yet, so this cannot be sent encrypted');
+    else if(err && err.message==='notmember') toast('You are not in this group any more');
+    else if(err && /permission/i.test(err.message||'')) toast('This group is locked or you are no longer a member.');
+    else toast('Send failed: '+(err&&err.message||err));
+    return;
+  }
   if(err && err.message==='nokey') toast(peer.name+' has not updated Gupzy yet, so this cannot be sent encrypted');
   else if(err && err.message==='blocked') toast('You can’t message this user');
   else if(err && /permission/i.test(err.message||'')) toast('You can only message friends (follow each other).');
@@ -1321,8 +1432,9 @@ async function sendText(){
   var text=$('mIn').value.trim(); if(!text) return;
   var id=cur.id, peer=cur.peer;
   $('mIn').value=''; $('mIn').style.height='auto'; updateSend();
-  try{ await sendMsgG(peer,id,{type:'text'},{t:text,q:'',m:null}); }
-  catch(err){ $('mIn').value=text; updateSend(); sendErr(err,peer); }
+  var rq=REPLY?REPLY.q:''; var rsave=REPLY; clearReply();
+  try{ await sendMsgG(peer,id,{type:'text'},{t:text,q:rq,m:null}); }
+  catch(err){ $('mIn').value=text; updateSend(); if(rsave) setReply(rsave); sendErr(err,peer); }
 }
 $('sendBtn').onclick=sendText;
 function addPending(txt){ var b=$('msgs'), d=document.createElement('div'); d.className='pend'; d.textContent=txt; b.appendChild(d); b.scrollTop=b.scrollHeight; return d; }
@@ -1850,10 +1962,249 @@ function startCallListener(){
   setTimeout(function(){ loadIce(); },2500);
 }
 function callEnded(){ dismissIncoming(); if(CL) endCall(null,true); stopCallListener(); }
-$('cCallV').onclick=function(){ if(cur) startCall(cur.peer,'voice'); };
-$('cCallVid').onclick=function(){ if(cur) startCall(cur.peer,'video'); };
+$('cCallV').onclick=function(){ if(!cur) return; if(cur.group) ggStart(cur.id,'voice'); else startCall(cur.peer,'voice'); };
+$('cCallVid').onclick=function(){ if(!cur) return; if(cur.group) ggStart(cur.id,'video'); else startCall(cur.peer,'video'); };
 
 /* Android back button */
+/* ================= GROUPS =================
+   Same "chats" documents as Gupzy (isGroup:true, members, owner, info) and the same group encryption (enc:2: one random key per
+   message, wrapped for every member). A group made in Gupzy shows up here and the other way round. */
+var gCache=new Map();
+async function openGroupMsg(chatId, m){
+  var ck=(m.id||'')+'|'+m.ct; if(m.id && gCache.has(ck)) return gCache.get(ck);
+  try{
+    var w=m.keys && m.keys[me.uid]; if(!w) return null;
+    var th;
+    if(m.from===me.uid) th=w.pk;
+    else{ var kp=await knownPubs(m.from); if(kp.list.indexOf(m.spk)<0) return null; th=m.spk; }   /* sender key must be one the sender published */
+    var wk=await skey(th, kfor(w.pk));
+    var raw=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(w.wi),additionalData:te.encode(chatId+'|'+me.uid)}, wk, unb64(w.w));
+    var cek=await crypto.subtle.importKey('raw', raw, {name:'AES-GCM'}, false, ['decrypt']);
+    var pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(m.iv),additionalData:te.encode(chatId)}, cek, unb64(m.ct));
+    var o=JSON.parse(td.decode(pt)); o.t=(o.t==null)?'':String(o.t);
+    if(m.id) gCache.set(ck,o);
+    return o;
+  }catch(e){ return null; }
+}
+async function encGroup(chatId, members, obj){
+  var l=Array.from(new Set(members.concat([me.uid])));
+  var pubs=await Promise.all(l.map(function(u){ return u===me.uid ? Promise.resolve(myKP.pub) : peerPub(u); }));
+  if(pubs.some(function(x){ return !x; })) throw new Error('nokey');
+  var cek=await crypto.subtle.generateKey({name:'AES-GCM',length:128}, true, ['encrypt']);
+  var iv=crypto.getRandomValues(new Uint8Array(12));
+  var ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:iv,additionalData:te.encode(chatId)}, cek, te.encode(JSON.stringify(obj)));
+  var raw=await crypto.subtle.exportKey('raw', cek), keys={};
+  for(var i=0;i<l.length;i++){
+    var k=await skey(pubs[i]), wi=crypto.getRandomValues(new Uint8Array(12));
+    var w=await crypto.subtle.encrypt({name:'AES-GCM',iv:wi,additionalData:te.encode(chatId+'|'+l[i])}, k, raw);
+    keys[l[i]]={ pk:pubs[i], w:b64(w), wi:b64(wi) };
+  }
+  return { enc:2, ct:b64(ct), iv:b64(iv), spk:myKP.pub, keys:keys };
+}
+async function groupKeysOk(members){
+  var l=Array.from(new Set(members.concat([me.uid])));
+  var r=await Promise.all(l.map(function(u){ return u===me.uid ? Promise.resolve(myKP.pub) : peerPub(u).catch(function(){ return null; }); }));
+  var miss=r.filter(function(x){ return !x; }).length;
+  return { ok:miss===0, missing:miss };
+}
+async function sendGroupMsg(g, id, base, payload){
+  var c=chats[id], members=(c&&c.members)||g.members||[];
+  if(members.indexOf(me.uid)<0) throw new Error('notmember');
+  var env=await encGroup(id, members, payload);
+  var ref=db.collection('chats').doc(id);
+  await ref.collection('messages').add(Object.assign({ from:me.uid, fromName:me.name||'', createdAt:FV.serverTimestamp() }, base, env));
+  var un={}; members.forEach(function(u){ if(u!==me.uid) un[u]=FV.increment(1); });
+  await ref.set({ lastText:(base.type==='text'?'🔒 Message':''), lastType:base.type, lastFrom:me.uid, lastAt:FV.serverTimestamp(), unread:un },{merge:true});
+  pushNotify(id);
+}
+async function sysMsg(gid, text){
+  try{ await db.collection('chats').doc(gid).collection('messages').add({ type:'sys', text:text, from:me.uid, fromName:me.name||'', createdAt:FV.serverTimestamp() }); }catch(e){}
+}
+async function openGroup(gid){
+  var c=chats[gid];
+  if(!c){ try{ var d=await db.collection('chats').doc(gid).get(); if(d.exists){ c=d.data(); c.id=gid; } }catch(e){} }
+  if(!c || !c.isGroup){ toast('Group not found'); return; }
+  if((c.members||[]).indexOf(me.uid)<0){ toast('You are not in this group any more'); return; }
+  if(c.isTemp && c.expiresAt && c.expiresAt<Date.now()){ toast('This vibe group has expired ⏳'); return; }
+  if(!chats[gid]) chats[gid]=c;
+  cur={ id:gid, group:true, peer:{uid:gid,name:c.name||'Group',logo:c.logo||null,group:true,members:c.members||[]}, canSend:false };
+  $('cCallV').classList.remove('hidden'); $('cCallVid').classList.remove('hidden');
+  var hd=$('cName').parentNode; hd.style.cursor='pointer'; hd.onclick=openGroupInfo;
+  $('cName').textContent=c.name||'Group'; updateHeaderSub();
+  $('msgs').innerHTML=''; $('mIn').value=''; $('mIn').style.height='auto'; $('note').classList.add('hidden'); if(typeof clearReply==='function') clearReply();
+  recCancel(true); updateSend();
+  $('chat').classList.remove('hidden');
+  if(unsubMsgs) unsubMsgs();
+  var tok=++msgTok;
+  unsubMsgs=db.collection('chats').doc(gid).collection('messages').orderBy('createdAt','asc').limitToLast(150).onSnapshot(function(snap){
+    renderMsgs(snap, tok);
+  }, function(e){ if(tok===msgTok) toast('Messages error: '+e.message); });
+  markRead();
+  try{
+    var k=await groupKeysOk(c.members||[]);
+    if(tok!==msgTok || !cur) return;
+    if(!k.ok){ $('note').textContent=k.missing+' group member'+(k.missing>1?'s have':' has')+' not updated Gupzy yet, so encrypted messages cannot be sent to this group.'; $('note').classList.remove('hidden'); cur.canSend=false; }
+    else cur.canSend=true;
+  }catch(e){ if(cur) cur.canSend=true; }
+  updateSend();
+}
+/* the open group changed (renamed, member added / removed, new photo) */
+function groupLive(){
+  var c=chats[cur.id]; if(!c) return;
+  cur.peer.name=c.name||'Group'; cur.peer.logo=c.logo||null; cur.peer.members=c.members||[];
+  $('cName').textContent=cur.peer.name; updateHeaderSub();
+  if(giBg && giBg.parentNode && !(document.activeElement && document.activeElement.id==='giName')) renderGroupInfo();
+}
+
+/* ---- group photo (320px square JPEG, like Gupzy) ---- */
+function pickGroupPhoto(){ return new Promise(function(res){ var i=document.createElement('input'); i.type='file'; i.accept='image/*'; i.onchange=function(){ res((i.files&&i.files[0])||null); }; i.click(); }); }
+async function groupPhotoUpload(file){
+  var url=URL.createObjectURL(file);
+  var img=await new Promise(function(ok,no){ var im=new Image(); im.onload=function(){ ok(im); }; im.onerror=no; im.src=url; });
+  var S=320, cv=document.createElement('canvas'); cv.width=cv.height=S;
+  var m=Math.min(img.width,img.height); cv.getContext('2d').drawImage(img,(img.width-m)/2,(img.height-m)/2,m,m,0,0,S,S); URL.revokeObjectURL(url);
+  var blob=await new Promise(function(r){ cv.toBlob(r,'image/jpeg',.85); });
+  return await uploadCloud(blob,'image','group_'+Date.now()+'.jpg');
+}
+
+/* ---- new group / add members (one screen, two modes) ---- */
+var GN={mode:'new',sel:{},file:null,busy:false};
+function openGroupNew(mode){
+  GN={mode:mode||'new',sel:{},file:null,busy:false};
+  $('gnTitle').textContent = GN.mode==='add' ? 'Add members' : 'New group';
+  $('gnForm').classList.toggle('hidden', GN.mode==='add');
+  $('gnName').value=''; $('gnQ').value=''; $('gnPic').style.backgroundImage=''; $('gnPic').textContent='📷';
+  $('grpNew').classList.remove('hidden'); renderGroupNew();
+}
+function renderGroupNew(){
+  var q=($('gnQ').value||'').toLowerCase();
+  var have=new Set(GN.mode==='add' && cur && chats[cur.id] ? (chats[cur.id].members||[]) : []);
+  var l=friends.filter(function(f){ return !have.has(f.uid) && (!q || f.name.toLowerCase().indexOf(q)>=0); });
+  $('gnList').innerHTML = l.length ? l.map(function(f){ var on=!!GN.sel[f.uid]; return '<div class="row'+(on?' sel':'')+'" data-gn="'+esc(f.uid)+'">'+av(f.logo,f.name)+'<div class="rb"><div class="rn">'+esc(f.name)+'</div></div><div class="ck">'+(on?'✓':'')+'</div></div>'; }).join('')
+    : '<div class="empty">'+(friends.length?(q?'No match.':'All your friends are already in this group.'):'You have no friends yet. Follow each other in Gupzy first.')+'</div>';
+  $('gnList').querySelectorAll('[data-gn]').forEach(function(el){ el.onclick=function(){
+    var u=el.getAttribute('data-gn'); if(GN.sel[u]) delete GN.sel[u]; else GN.sel[u]=friends.filter(function(f){ return f.uid===u; })[0];
+    el.classList.toggle('sel', !!GN.sel[u]); el.querySelector('.ck').textContent=GN.sel[u]?'✓':''; gnCount();
+  }; });
+  gnCount();
+}
+function gnCount(){ var n=Object.keys(GN.sel).length; $('gnGo').textContent=(GN.mode==='add'?'Add':'Create')+(n?' ('+n+')':''); $('gnGo').disabled=!n||GN.busy; }
+$('gnQ').addEventListener('input', renderGroupNew);
+$('gnBack').onclick=function(){ $('grpNew').classList.add('hidden'); };
+$('gnPic').onclick=async function(){
+  if(GN.file){ GN.file=null; this.style.backgroundImage=''; this.textContent='📷'; return; }
+  var f=await pickGroupPhoto(); if(!f) return; GN.file=f; this.style.backgroundImage='url('+URL.createObjectURL(f)+')'; this.textContent='';
+};
+$('gnGo').onclick=async function(){
+  if(GN.busy) return;
+  var ids=Object.keys(GN.sel); if(!ids.length){ toast('Pick at least 1 friend'); return; }
+  if(GN.mode==='add'){
+    var c=chats[cur&&cur.id]; if(!c || c.owner!==me.uid) return;
+    if((c.members||[]).length+ids.length>50){ toast('A group can have at most 50 members'); return; }
+    GN.busy=true; gnCount();
+    try{
+      var upd={ members:FV.arrayUnion.apply(FV,ids) }; ids.forEach(function(u){ upd['info.'+u]={ name:GN.sel[u].name, logo:GN.sel[u].logo||null }; });
+      await db.collection('chats').doc(cur.id).update(upd);
+      await sysMsg(cur.id, me.name+' added '+ids.map(function(u){ return GN.sel[u].name; }).join(', '));
+      $('grpNew').classList.add('hidden'); toast('Members added ✓');
+      /* new members need a public key to read messages: re-check */
+      groupKeysOk((chats[cur.id]&&chats[cur.id].members||[]).concat(ids)).then(function(k){ if(cur && cur.group && !k.ok){ $('note').textContent=k.missing+' member'+(k.missing>1?'s have':' has')+' not updated Gupzy yet, so encrypted messages cannot be sent to this group.'; $('note').classList.remove('hidden'); cur.canSend=false; updateSend(); } });
+    }catch(e){ toast('Add failed: '+(e&&e.message||e)); }
+    GN.busy=false; gnCount(); return;
+  }
+  var name=$('gnName').value.trim(); if(!name){ toast('Enter a group name'); return; }
+  if(ids.length+1>50){ toast('A group can have at most 50 members'); return; }
+  GN.busy=true; gnCount();
+  try{
+    var logo=null;
+    if(GN.file){ toast('Uploading group photo…'); try{ logo=await groupPhotoUpload(GN.file); }catch(e){ toast('Photo upload failed – creating the group without a photo'); } }
+    var gid=db.collection('chats').doc().id, members=[me.uid].concat(ids), info={};
+    info[me.uid]={ name:me.name, logo:me.logo||null }; ids.forEach(function(u){ info[u]={ name:GN.sel[u].name, logo:GN.sel[u].logo||null }; });
+    var doc={ isGroup:true, name:name, owner:me.uid, members:members, info:info, lastText:'Group created 🎉', lastType:'text', lastFrom:me.uid, lastAt:FV.serverTimestamp(), unread:{} };
+    if(logo) doc.logo=logo;
+    await db.collection('chats').doc(gid).set(doc);
+    chats[gid]=Object.assign({}, doc, { id:gid, lastAt:Date.now() });
+    $('grpNew').classList.add('hidden'); renderChats();
+    GN.busy=false; openGroup(gid); return;
+  }catch(e){ toast('Could not create the group: '+(e&&e.message||e)); }
+  GN.busy=false; gnCount();
+};
+
+/* ---- group info sheet: members, rename, photo, add / remove (admin), leave ---- */
+var giBg=null;
+function openGroupInfo(){
+  if(!cur || !cur.group || !chats[cur.id]) return;
+  giBg=sheet('<div id="giBody"></div>');
+  giBg.onclick=function(e){ if(e.target===giBg){ giBg.remove(); giBg=null; } };
+  giBg.firstChild.onclick=groupInfoClick;
+  renderGroupInfo();
+}
+function renderGroupInfo(){
+  if(!giBg || !giBg.parentNode || !cur || !cur.group) return;
+  var c=chats[cur.id]; if(!c) return;
+  var own=c.owner===me.uid, mem=c.members||[], inf=c.info||{};
+  var h='<div class="gi-av">'+av(c.logo||null,c.name||'Group')+(own?'<div class="gi-btns"><button class="btn gray" id="giPhoto">'+(c.logo?'Change photo':'Add photo')+'</button>'+(c.logo?'<button class="btn gray" id="giPhotoRm" style="color:var(--red)">Remove photo</button>':'')+'</div>':'')+'</div>';
+  h+= own ? '<div class="gi-name"><input id="giName" class="inp" maxlength="40" value="'+esc(c.name||'')+'"><button class="btn" id="giSave">Save</button></div>'
+          : '<div style="font-size:19px;font-weight:800;margin:2px 0 6px">'+esc(c.name||'Group')+'</div>';
+  h+='<div class="sec" style="padding:8px 0 2px">Members ('+mem.length+')</div>';
+  h+=mem.map(function(u){
+    var i=inf[u]||chInfo.get(u)||{};
+    return '<div class="gi-mem">'+av(i.logo||null,i.name||'User','sm')+'<div class="rb"><div class="rn">'+esc(u===me.uid?'You':(i.name||'User'))+'</div></div>'
+      +(u===c.owner?'<span class="gi-tag">Admin</span>':'')
+      +(own&&u!==me.uid?'<button class="btn gray" data-rm="'+esc(u)+'" style="padding:6px 10px;font-size:13px;color:var(--red)">Remove</button>':'')+'</div>';
+  }).join('');
+  if(own) h+='<button class="gi-link" id="giAdd">➕ Add members</button>';
+  h+='<button class="gi-link red" id="giLeave">🚪 Leave group</button>';
+  if(!own) h+='<p class="sh-p" style="font-size:12.5px;margin:4px 0 0">Only the admin can rename the group or add / remove members.</p>';
+  giBg.firstChild.innerHTML='<div id="giBody">'+h+'</div>';
+}
+async function groupInfoClick(e){
+  if(!cur || !cur.group) return;
+  var c=chats[cur.id]; if(!c) return;
+  var ref=db.collection('chats').doc(cur.id), own=c.owner===me.uid, t=e.target;
+  if(t.closest('#giPhoto')){
+    if(!own) return; var f=await pickGroupPhoto(); if(!f) return; toast('Uploading photo…');
+    try{ var u=await groupPhotoUpload(f); await ref.update({logo:u}); await sysMsg(cur.id, me.name+' changed the group photo'); toast('Group photo updated ✓'); }catch(er){ toast('Photo failed: '+(er&&er.message||er)); }
+    return;
+  }
+  if(t.closest('#giPhotoRm')){
+    if(!own) return;
+    try{ await ref.update({logo:FV.delete()}); toast('Group photo removed'); }catch(er){ toast('Remove failed: '+(er&&er.message||er)); }
+    return;
+  }
+  if(t.closest('#giSave')){
+    if(!own) return; var v=($('giName').value||'').trim();
+    if(!v){ toast('Enter a group name'); return; } if(v===c.name){ toast('That is already the name'); return; }
+    try{ await ref.update({name:v}); await sysMsg(cur.id, me.name+' renamed the group to "'+v+'"'); toast('Group renamed ✓'); }catch(er){ toast('Rename failed: '+(er&&er.message||er)); }
+    return;
+  }
+  var rm=t.closest('[data-rm]');
+  if(rm){
+    if(!own) return; var uid=rm.getAttribute('data-rm'), nm=((c.info||{})[uid]||{}).name||'this person';
+    if(!(await ask('Remove '+nm+'?','They will no longer be able to read or send messages in this group.','Remove',true))) return;
+    try{
+      await sysMsg(cur.id, me.name+' removed '+nm);
+      var up={ members:FV.arrayRemove(uid) }; up['info.'+uid]=FV.delete(); up['unread.'+uid]=FV.delete();
+      await ref.update(up); toast(nm+' removed');
+    }catch(er){ toast('Remove failed: '+(er&&er.message||er)); }
+    return;
+  }
+  if(t.closest('#giAdd')){ if(!own) return; if(giBg){ giBg.remove(); giBg=null; } openGroupNew('add'); return; }
+  if(t.closest('#giLeave')){
+    if(!(await ask('Leave this group?','You will stop receiving its messages.','Leave',true))) return;
+    var gid=cur.id, rest=(c.members||[]).filter(function(u){ return u!==me.uid; });
+    try{
+      cur.leaving=true;
+      await sysMsg(gid, me.name+' left the group');
+      var lu={ members:FV.arrayRemove(me.uid) }; lu['info.'+me.uid]=FV.delete(); lu['unread.'+me.uid]=FV.delete();
+      if(c.owner===me.uid && rest.length) lu.owner=rest[0];
+      await ref.update(lu);
+      if(giBg){ giBg.remove(); giBg=null; }
+      closeChat(); delete chats[gid]; renderChats(); toast('You left the group');
+    }catch(er){ if(cur) cur.leaving=false; toast('Could not leave: '+(er&&er.message||er)); }
+  }
+}
+
 window.__gcBack=function(){
   if(CL && !CL.ended){ toast('Tap the red button to end the call'); return true; }
   if(INC) return true;
@@ -1862,11 +2213,227 @@ window.__gcBack=function(){
   if(!$('sv').classList.contains('hidden')){ svClose(); return true; }
   if(!$('sc').classList.contains('hidden')){ if(!SC.posting) $('sc').classList.add('hidden'); return true; }
   var sh=document.querySelector('.sheetbg'); if(sh){ sh.remove(); return true; }
+  if(!$('grpNew').classList.contains('hidden')){ $('grpNew').classList.add('hidden'); return true; }
   if(!$('picker').classList.contains('hidden')){ $('picker').classList.add('hidden'); return true; }
   if(cur){ closeChat(); return true; }
   if(curTab!==0 && me){ setTab(0); return true; }
   return false;
 };
+
+/* ================= v6: reactions, replies, mute ================= */
+var MSGTXT={}, REPLY=null, REACTS=['\u2764\uFE0F','\uD83D\uDE02','\uD83D\uDC4D','\uD83D\uDE2E','\uD83D\uDE22','\uD83D\uDE4F'];
+function rxHtml(m){
+  var r=m.rx; if(!r) return ''; var cnt={}, mineE='';
+  Object.keys(r).forEach(function(u){ var e=r[u]; if(!e) return; cnt[e]=(cnt[e]||0)+1; if(u===me.uid) mineE=e; });
+  var ks=Object.keys(cnt); if(!ks.length) return '';
+  return '<div class="rx">'+ks.map(function(e){ return '<span data-rx="'+esc(e)+'" class="'+(e===mineE?'mine':'')+'">'+esc(e)+(cnt[e]>1?' '+cnt[e]:'')+'</span>'; }).join('')+'</div>';
+}
+function setReply(o){ REPLY=o; $('rpT').innerHTML='<b>'+esc(o.n||'')+'</b>'+esc(o.t||''); $('rpBar').classList.remove('hidden'); try{ $('mIn').focus(); }catch(e){} }
+function clearReply(){ REPLY=null; var b=$('rpBar'); if(b) b.classList.add('hidden'); }
+$('rpX').onclick=clearReply;
+async function reactTo(mid, emo){
+  if(!cur) return; var cid=cur.id;
+  var t=MSGTXT[mid]; var had=t&&t.rx&&t.rx[me.uid]===emo;
+  var o={}; o['reactions.'+me.uid]= had ? FV.delete() : emo;
+  try{ await db.collection('chats').doc(cid).collection('messages').doc(mid).update(o); }
+  catch(e){ toast('Reaction failed: '+(e&&e.message||e)); }
+}
+function closeAct(){ var a=$('actBg'); if(a) a.remove(); }
+function openActions(mid){
+  var t=MSGTXT[mid]; if(!t) return; closeAct();
+  var mineE=(t.rx&&t.rx[me.uid])||'';
+  var bg=document.createElement('div'); bg.id='actBg';
+  bg.innerHTML='<div class="actsh"><div class="rxrow">'+REACTS.map(function(e){ return '<button data-e="'+e+'" class="'+(e===mineE?'sel':'')+'">'+e+'</button>'; }).join('')+'</div><button class="actb" data-a="reply">\u21A9\uFE0F Reply</button><button class="actb" data-a="copy">\uD83D\uDCCB Copy</button></div>';
+  bg.onclick=function(ev){
+    var b=ev.target.closest('button'); if(!b){ if(ev.target===bg) closeAct(); return; }
+    if(b.dataset.e){ closeAct(); reactTo(mid,b.dataset.e); return; }
+    if(b.dataset.a==='reply'){ closeAct(); if(cur&&cur.canSend){ var q=(t.n?t.n+': ':'')+String(t.t||'').slice(0,100); setReply({q:q,n:t.n,t:String(t.t||'').slice(0,100)}); } return; }
+    if(b.dataset.a==='copy'){ closeAct(); try{ navigator.clipboard.writeText(String(t.t||'')); toast('Copied'); }catch(e){} return; }
+  };
+  document.body.appendChild(bg);
+}
+(function(){
+  var box=$('msgs'), timer=0, sx=0, sy=0, fired=false;
+  function bub(e){ return e.target.closest&&e.target.closest('.b[data-mid]'); }
+  box.addEventListener('touchstart',function(e){ var b=bub(e); if(!b) return; fired=false; var t=e.touches[0]; sx=t.clientX; sy=t.clientY; clearTimeout(timer); timer=setTimeout(function(){ fired=true; try{ navigator.vibrate&&navigator.vibrate(15); }catch(x){} openActions(b.getAttribute('data-mid')); },450); },{passive:true});
+  box.addEventListener('touchmove',function(e){ var t=e.touches[0]; if(Math.abs(t.clientX-sx)>10||Math.abs(t.clientY-sy)>10) clearTimeout(timer); },{passive:true});
+  box.addEventListener('touchend',function(e){ clearTimeout(timer); if(fired){ e.preventDefault(); fired=false; } });
+  box.addEventListener('contextmenu',function(e){ var b=bub(e); if(!b) return; e.preventDefault(); openActions(b.getAttribute('data-mid')); });
+  box.addEventListener('click',function(e){
+    var r=e.target.closest&&e.target.closest('[data-rx]'); if(!r) return;
+    var b=bub(e); if(b){ e.stopPropagation(); reactTo(b.getAttribute('data-mid'), r.getAttribute('data-rx')); }
+  },true);
+})();
+/* ---- mute (same field Gupzy uses: chats/{id}.mute.{uid}=true; the push worker skips muted users) ---- */
+function isMuted(id){ var c=chats[id]; return !!(c && me && c.mute && c.mute[me.uid]===true); }
+function refreshMuteBtn(){ var b=$('cMute'); if(!b||!cur) return; b.textContent=isMuted(cur.id)?'\uD83D\uDD15':'\uD83D\uDD14'; b.setAttribute('aria-label',isMuted(cur.id)?'Unmute notifications':'Mute notifications'); }
+$('cMute').onclick=async function(){
+  if(!cur) return; var id=cur.id;
+  if(!chats[id]){ toast('Send a message first, then you can mute this chat'); return; }
+  var m=isMuted(id);
+  try{
+    var mo={}; mo['mute.'+me.uid]= m ? FV.delete() : true; await db.collection('chats').doc(id).update(mo);
+    toast(m?'Notifications on':'Chat muted \uD83D\uDD15');
+  }catch(e){ toast('Mute failed: '+(e&&e.message||e)); }
+};
+setInterval(refreshMuteBtn,1000);
+document.addEventListener('visibilitychange',function(){});
+
+/* ================= v7: GROUP CALLS (mesh WebRTC, up to 6 voice / 4 video) =================
+   groupCalls/{groupId} = {type, startedBy, startedAt, participants:[uid...], updatedAt}  (join order = array order)
+   groupCalls/{groupId}/sig/* = offer / answer / ice between two members (read + deleted by the receiver)
+   chats/{groupId}.liveCall = {by, type, at} -> every member's chat list sees it live (banner + ring) */
+var GG=null, ggSeen={};
+function ggAt(lc){ var a=lc&&lc.at; return a&&a.toMillis?a.toMillis():(typeof a==='number'?a:Date.now()); }
+function ggLive(c){ return !!(c && c.isGroup && c.liveCall && c.liveCall.by && (Date.now()-ggAt(c.liveCall))<6*3600*1000); }
+function ggName(uid){ var c=GG&&chats[GG.gid]; var i=(c&&c.info&&c.info[uid])||{}; return i.name||'User'; }
+function ggRef(){ return db.collection('groupCalls').doc(GG.gid); }
+function ggSig(to,kind,data){ if(!GG) return; return ggRef().collection('sig').add(Object.assign({from:me.uid,to:to,kind:kind,at:Date.now()},data)).catch(function(){}); }
+function ggTile(uid,mine){
+  var G=GG, id='ggt_'+uid, el=document.getElementById(id); if(el) return el;
+  var c=chats[G.gid]||{}, i=(c.info&&c.info[uid])||{}, nm=mine?'You':(i.name||'User');
+  el=document.createElement('div'); el.className='ggt'; el.id=id;
+  el.innerHTML='<div class="ggav">'+av(i.logo||null,nm)+'</div><video autoplay playsinline'+(mine?' muted':'')+' style="display:none"></video><div class="ggn">'+esc(nm)+'</div><div class="ggst">'+(mine?'':'connecting…')+'</div>';
+  $('ggGrid').appendChild(el); return el;
+}
+function ggShowStream(uid,stream,mine){
+  var el=ggTile(uid,mine), v=el.querySelector('video'); v.srcObject=stream;
+  var hasV=function(){ return stream.getVideoTracks().some(function(t){ return t.readyState==='live' && t.enabled!==false && !t.muted; }); };
+  var upd=function(){ v.style.display=(hasV()&&(mine?GG&&GG.sendVideo:true))?'block':'none'; };
+  stream.getVideoTracks().forEach(function(t){ t.onunmute=upd; t.onmute=upd; t.onended=upd; }); stream.onaddtrack=function(){ upd(); };
+  upd(); var p=v.play(); if(p&&p.catch) p.catch(function(){});
+}
+function ggCount(){ if(!GG) return; var n=Object.keys(GG.pcs).length+1; $('ggSub').textContent=n+' in call'+(GG.t0?' · '+fmtDur((Date.now()-GG.t0)/1000):''); }
+function ggPeer(uid){
+  var G=GG; if(G.pcs[uid]) return G.pcs[uid];
+  var pc=new RTCPeerConnection(callCfg()), P={uid:uid,pc:pc,pend:[]};
+  G.local.getTracks().forEach(function(t){ pc.addTrack(t,G.local); });
+  pc.onicecandidate=function(e){ if(e.candidate) ggSig(uid,'ice',{c:JSON.stringify(e.candidate)}); };
+  pc.ontrack=function(e){ ggShowStream(uid, e.streams[0]||new MediaStream([e.track]), false); var st=document.querySelector('#ggt_'+uid+' .ggst'); if(st) st.textContent=''; };
+  pc.onconnectionstatechange=function(){
+    if(GG!==G||G.pcs[uid]!==P) return; var st=document.querySelector('#ggt_'+uid+' .ggst');
+    if(pc.connectionState==='connected'){ if(st) st.textContent=''; if(!G.t0){ G.t0=Date.now(); } }
+    else if(pc.connectionState==='disconnected'){ if(st) st.textContent='reconnecting…'; }
+    else if(pc.connectionState==='failed'){ ggDrop(uid); setTimeout(function(){ if(GG===G && G.order) ggSync(G.order); },1500); }
+  };
+  G.pcs[uid]=P; ggTile(uid,false); ggCount(); return P;
+}
+function ggDrop(uid){ var G=GG; if(!G) return; var P=G.pcs[uid]; if(P){ try{ P.pc.close(); }catch(e){} delete G.pcs[uid]; } var el=document.getElementById('ggt_'+uid); if(el) el.remove(); ggCount(); }
+async function ggOffer(uid){
+  var G=GG; if(!G) return; var P=ggPeer(uid);
+  try{ var o=await P.pc.createOffer(); await P.pc.setLocalDescription(o); ggSig(uid,'offer',{sdp:o.sdp}); }catch(e){}
+}
+/* participants changed: whoever joined LATER offers to the earlier ones (no glare) */
+function ggSync(parts){
+  var G=GG; if(!G) return; G.order=parts; var mi=parts.indexOf(me.uid); if(mi<0) return;
+  parts.forEach(function(u,i){ if(u===me.uid||G.pcs[u]) return; if(i<mi) ggOffer(u); });
+  Object.keys(G.pcs).forEach(function(u){ if(parts.indexOf(u)<0) ggDrop(u); });
+  ggCount();
+}
+async function ggHandle(d){
+  var G=GG; if(!G) return; var u=d.from; if(!u||u===me.uid) return;
+  var P=G.pcs[u];
+  if(d.kind==='offer'){
+    if(P && (P.pc.remoteDescription || P.pc.signalingState!=='stable')){ ggDrop(u); P=null; }
+    P=ggPeer(u);
+    try{
+      await P.pc.setRemoteDescription({type:'offer',sdp:d.sdp});
+      P.pend.splice(0).forEach(function(c){ P.pc.addIceCandidate(c).catch(function(){}); });
+      var a=await P.pc.createAnswer(); await P.pc.setLocalDescription(a); ggSig(u,'answer',{sdp:a.sdp});
+    }catch(e){}
+  }else if(d.kind==='answer'){
+    if(!P) return; try{ await P.pc.setRemoteDescription({type:'answer',sdp:d.sdp}); P.pend.splice(0).forEach(function(c){ P.pc.addIceCandidate(c).catch(function(){}); }); }catch(e){}
+  }else if(d.kind==='ice'){
+    var cand; try{ cand=JSON.parse(d.c); }catch(e){ return; } P=P||ggPeer(u);
+    if(P.pc.remoteDescription) P.pc.addIceCandidate(cand).catch(function(){}); else P.pend.push(cand);
+  }
+}
+async function ggStart(gid,type){
+  if(GG){ if(GG.gid===gid) $('ggCall').classList.remove('hidden'); else toast('You are already in a group call'); return; }
+  if(CL||INC){ toast('Finish your current call first'); return; }
+  var c=chats[gid]; if(!c||!c.isGroup){ toast('Group not found'); return; }
+  if(!window.RTCPeerConnection||!navigator.mediaDevices){ toast('Calls are not supported here'); return; }
+  var G=GG={gid:gid,type:type,pcs:{},unsubs:[],q:Promise.resolve(),order:[],sendVideo:false,t0:0,ended:false}, me0=me.uid, starting=false;
+  try{
+    var ref=db.collection('groupCalls').doc(gid), sn=await ref.get(), d=sn.exists?sn.data():null, parts=(d&&d.participants)||[];
+    if(parts.length && parts.indexOf(me0)<0 || (parts.length && ggLive(c))){ G.type=type=d.type||type; }
+    else starting=true;
+    var lim=G.type==='video'?4:6;
+    if(!starting && parts.indexOf(me0)<0 && parts.length>=lim){ GG=null; toast('This call is full ('+lim+' people max)'); return; }
+    await loadIce().catch(function(){});
+    var stream; try{ stream=await getMediaRobust(G.type); }catch(e){ GG=null; toast(mediaErr(e)); return; }
+    if(GG!==G){ stream.getTracks().forEach(function(t){ t.stop(); }); return; }
+    G.local=stream; G.sendVideo=stream.getVideoTracks().length>0;
+    /* clear old signalling addressed to me, then register */
+    try{ var old=await ref.collection('sig').where('to','==',me0).get(); await Promise.all(old.docs.map(function(x){ return x.ref.delete(); })); }catch(e){}
+    if(starting){
+      await ref.set({type:G.type,startedBy:me0,startedAt:Date.now(),participants:[me0],updatedAt:Date.now()});
+      await db.collection('chats').doc(gid).update({liveCall:{by:me0,type:G.type,at:FV.serverTimestamp()}}).catch(function(){});
+      sysMsg(gid, me.name+' started a group '+G.type+' call \uD83D\uDCDE');
+      pushGroupCall(gid);
+    }else{
+      await ref.update({participants:FV.arrayUnion(me0),updatedAt:Date.now()});
+    }
+  }catch(e){ if(GG===G){ ggTeardown(); } toast('Could not start the call: '+(e&&e.message||e)); return; }
+  /* UI */
+  var gc=chats[gid]||{};
+  $('ggTitle').textContent=(gc.name||'Group')+' · '+(G.type==='video'?'video':'voice'); $('ggGrid').innerHTML='';
+  $('ggCam').classList.toggle('hidden',!G.sendVideo); $('ggMic').classList.remove('on'); $('ggCam').classList.remove('on'); $('ggSpk').classList.add('on');
+  $('ggCall').classList.remove('hidden'); ggShowStream(me0,G.local,true); ggCount();
+  andCall('callStarted', G.sendVideo, gc.name||'Group call'); [0,500,1500].forEach(function(t){ setTimeout(function(){ if(GG===G) nativeSpeaker(true); },t); });
+  G.timer=setInterval(ggCount,1000);
+  var ref2=db.collection('groupCalls').doc(gid);
+  G.unsubs.push(ref2.onSnapshot(function(sn){ if(GG!==G) return; var d=sn.data(); if(!d) return; ggSync(d.participants||[]); }));
+  G.unsubs.push(ref2.collection('sig').where('to','==',me0).onSnapshot(function(sn){
+    if(GG!==G) return;
+    var ch=sn.docChanges().filter(function(x){ return x.type==='added'; }).map(function(x){ return x.doc; }).sort(function(a,b){ return (a.data().at||0)-(b.data().at||0); });
+    ch.forEach(function(doc){ var dd=doc.data(); doc.ref.delete().catch(function(){}); G.q=G.q.then(function(){ return ggHandle(dd); }); });
+  }));
+}
+function ggTeardown(){
+  var G=GG; if(!G) return; G.ended=true; clearInterval(G.timer);
+  G.unsubs.forEach(function(u){ try{ u(); }catch(e){} });
+  Object.keys(G.pcs).forEach(function(u){ try{ G.pcs[u].pc.close(); }catch(e){} });
+  if(G.local) G.local.getTracks().forEach(function(t){ try{ t.stop(); }catch(e){} });
+  andCall('release'); $('ggCall').classList.add('hidden'); $('ggGrid').innerHTML=''; GG=null;
+}
+async function ggLeave(){
+  var G=GG; if(!G) return; var gid=G.gid, secs=G.t0?(Date.now()-G.t0)/1000:0; ggTeardown();
+  try{
+    var ref=db.collection('groupCalls').doc(gid);
+    await ref.update({participants:FV.arrayRemove(me.uid),updatedAt:Date.now()});
+    var sn=await ref.get();
+    if(sn.exists && !(sn.data().participants||[]).length){
+      await db.collection('chats').doc(gid).update({liveCall:FV.delete()}).catch(function(){});
+      sysMsg(gid,'\uD83D\uDCDE Group call ended'+(secs>5?' \u00B7 '+fmtDur(secs):''));
+    }
+  }catch(e){}
+}
+async function pushGroupCall(gid){
+  try{ var t=await auth.currentUser.getIdToken(); fetch(API_BASE+'/push',{ method:'POST', keepalive:true, headers:{'Content-Type':'application/json',Authorization:'Bearer '+t}, body:JSON.stringify({kind:'groupcall',chatId:gid}) }).catch(function(){}); }catch(e){}
+}
+$('ggEnd').onclick=ggLeave;
+$('ggMic').onclick=function(){ if(!GG||!GG.local) return; var on=false; GG.local.getAudioTracks().forEach(function(t){ t.enabled=!t.enabled; on=!t.enabled; }); this.classList.toggle('on',on); this.textContent=on?'\uD83D\uDD07':'\uD83C\uDF99\uFE0F'; };
+$('ggCam').onclick=function(){ if(!GG||!GG.local) return; var off=false; GG.local.getVideoTracks().forEach(function(t){ t.enabled=!t.enabled; off=!t.enabled; }); this.classList.toggle('on',off); var l=document.querySelector('#ggt_'+me.uid+' video'); if(l) l.style.display=off?'none':'block'; };
+$('ggSpk').onclick=function(){ var on=!this.classList.contains('on'); this.classList.toggle('on',on); nativeSpeaker(on); };
+window.addEventListener('pagehide',function(){ if(GG) ggLeave(); });
+/* banner in the group chat + ring for members who are not in the call */
+function ggRingHide(){ var r=$('ggRing'); r.classList.add('hidden'); r.innerHTML=''; }
+function ggRingShow(gid,lc){
+  var c=chats[gid]||{}, i=(c.info&&c.info[lc.by])||{}, r=$('ggRing');
+  r.innerHTML='<div class="rbx"><div style="font-size:42px">\uD83D\uDCDE</div><div style="font-size:19px;font-weight:800;margin-top:6px">'+esc(c.name||'Group')+'</div><div style="opacity:.8;margin-top:4px">'+esc(i.name||'Someone')+' started a group '+esc(lc.type==='video'?'video':'voice')+' call</div><div class="rb2"><button id="ggRIgn" style="background:rgba(127,127,127,.25);color:inherit">Ignore</button><button id="ggRJoin" style="background:#12a150;color:#fff">Join</button></div></div>';
+  r.classList.remove('hidden'); try{ navigator.vibrate&&navigator.vibrate([300,150,300,150,300]); }catch(e){}
+  $('ggRIgn').onclick=ggRingHide;
+  $('ggRJoin').onclick=function(){ ggRingHide(); openGroup(gid); setTimeout(function(){ ggStart(gid,lc.type||'voice'); },300); };
+  setTimeout(ggRingHide,45000);
+}
+setInterval(function(){
+  if(!me) return; var b=$('ggBanner'), c=cur&&cur.group?chats[cur.id]:null;
+  if(c && ggLive(c) && !GG){ b.textContent='\uD83D\uDCDE Group '+(c.liveCall.type==='video'?'video':'voice')+' call in progress \u00B7 tap to join'; b.classList.remove('hidden'); b.onclick=function(){ ggStart(cur.id,c.liveCall.type||'voice'); }; }
+  else b.classList.add('hidden');
+  if(GG||CL||INC) return; var now=Date.now();
+  Object.keys(chats).forEach(function(k){ var cc=chats[k]; if(!ggLive(cc)||cc.liveCall.by===me.uid||isMuted(k)) return; var at=ggAt(cc.liveCall); if(now-at>45000) return; var key=k+':'+at; if(ggSeen[key]) return; ggSeen[key]=1; ggRingShow(k,cc.liveCall); });
+},1200);
 })();
 </script>
 </body>
