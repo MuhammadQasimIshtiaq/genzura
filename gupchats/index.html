@@ -1362,7 +1362,7 @@ async function parseMsg(m, peerUid, chatId){
   if(isG && !base.mine){ var gi=(chats[chatId]&&chats[chatId].info&&chats[chatId].info[m.from])||{}; base.sn=String(gi.name||m.fromName||'User'); }
   var o=null;
   if(m.enc===2){ o=await openGroupMsg(chatId, m); if(!o) return Object.assign(base,{kind:'lock'}); }
-  else if(m.enc){ o=await openMsg(chatId, peerUid, m); if(!o) return Object.assign(base,{kind:'lock',why:m.__why||''}); }
+  else if(m.enc){ o=await openMsg(chatId, peerUid, m); if(!o) try{ console.warn('Gupchats: message not readable yet —',m.__why); }catch(e){} return Object.assign(base,{kind:'lock',why:m.__why||''}); }
   var ty=m.type||'text';
   if(ty==='text' && !m.enc && m.postId){ return Object.assign(base,{ kind:'post', postId:String(m.postId), text:String(m.text||'\uD83D\uDCCE Post') }); }   /* a post shared from Gupzy */
   if(ty==='text'){ return Object.assign(base,{ kind:'text', text:m.enc?o.t:String(m.text||''), q:(o&&o.q)||'' }); }
@@ -1387,7 +1387,7 @@ async function renderMsgs(snap, tok){
     var side=m.mine?'me':'th';
     if(m.kind==='sys'){ html+='<div class="tm">'+esc(m.text)+'</div>'; return; }
     var sn=m.sn?'<div class="sn">'+esc(m.sn)+'</div>':'';
-    if(m.kind==='lock'){ html+='<div class="b '+side+' lock">'+sn+'🔒 Can’t read this message'+(m.why?'<div style="font-size:10px;opacity:.6;font-style:normal">'+esc(m.why)+'</div>':'')+'</div>'; return; }
+    if(m.kind==='lock'){ html+='<div class="b '+side+' lock">'+sn+'⏳ Waiting for this message…</div>'; return; }
     if(m.kind==='post'){ html+='<div class="b '+side+' post" data-post="'+esc(m.postId)+'">'+sn+'<div class="pth" data-pid="'+esc(m.postId)+'"><div class="ph">\uD83D\uDCCE</div></div><div class="pt">'+esc(m.text)+'</div><div class="ps">Tap to view post</div></div>'; return; }
     if(m.media){ mediaSpec.set(m.media.u,m.media); MSGTXT[m.id]={t:(m.media.kind==='img'?'📷 Photo':m.media.kind==='vid'?'🎥 Video':'🎤 Voice message'),n:m.mine?'You':(m.sn||peer.name||''),mine:m.mine,rx:m.rx}; html+='<div class="b '+side+' media" data-mid="'+esc(m.id)+'">'+sn+mediaInner(m.media)+rxHtml(m)+'</div>'; if(m.media.enc && !mediaUrls.has(m.media.u)) toLoad.push(m.media); return; }
     MSGTXT[m.id]={t:m.text,n:m.mine?'You':(m.sn||peer.name||''),mine:m.mine,rx:m.rx}; html+='<div class="b '+side+'" data-mid="'+esc(m.id)+'">'+sn+(m.q?'<div class="rq">'+esc(m.q)+'</div>':'')+esc(m.text)+rxHtml(m)+'</div>';
