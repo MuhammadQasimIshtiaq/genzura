@@ -1387,7 +1387,7 @@ async function renderMsgs(snap, tok){
     var side=m.mine?'me':'th';
     if(m.kind==='sys'){ html+='<div class="tm">'+esc(m.text)+'</div>'; return; }
     var sn=m.sn?'<div class="sn">'+esc(m.sn)+'</div>':'';
-    if(m.kind==='lock'){ html+='<div class="b '+side+' lock">'+sn+'⏳ Waiting for this message…</div>'; return; }
+    if(m.kind==='lock'){ if(m.mine&&m.id){ MSGTXT[m.id]={t:'',n:'You',mine:true,rx:null}; } html+='<div class="b '+side+' lock"'+(m.mine&&m.id?' data-mid="'+esc(m.id)+'"':'')+'>'+sn+'⏳ Waiting for this message…</div>'; return; }
     if(m.kind==='post'){ html+='<div class="b '+side+' post" data-post="'+esc(m.postId)+'">'+sn+'<div class="pth" data-pid="'+esc(m.postId)+'"><div class="ph">\uD83D\uDCCE</div></div><div class="pt">'+esc(m.text)+'</div><div class="ps">Tap to view post</div></div>'; return; }
     if(m.media){ mediaSpec.set(m.media.u,m.media); MSGTXT[m.id]={t:(m.media.kind==='img'?'📷 Photo':m.media.kind==='vid'?'🎥 Video':'🎤 Voice message'),n:m.mine?'You':(m.sn||peer.name||''),mine:m.mine,rx:m.rx}; html+='<div class="b '+side+' media" data-mid="'+esc(m.id)+'">'+sn+mediaInner(m.media)+rxHtml(m)+'</div>'; if(m.media.enc && !mediaUrls.has(m.media.u)) toLoad.push(m.media); return; }
     MSGTXT[m.id]={t:m.text,n:m.mine?'You':(m.sn||peer.name||''),mine:m.mine,rx:m.rx}; html+='<div class="b '+side+'" data-mid="'+esc(m.id)+'">'+sn+(m.q?'<div class="rq">'+esc(m.q)+'</div>':'')+esc(m.text)+rxHtml(m)+'</div>';
@@ -2253,16 +2253,25 @@ async function reactTo(mid, emo){
   try{ await db.collection('chats').doc(cid).collection('messages').doc(mid).update(o); }
   catch(e){ toast('Reaction failed: '+(e&&e.message||e)); }
 }
+function delMsg(mid){
+  if(!cur) return; var cid=cur.id;
+  ask('Delete message?','This message will be deleted for everyone in this chat.','Delete',true).then(async function(ok){
+    if(!ok) return;
+    try{ await db.collection('chats').doc(cid).collection('messages').doc(mid).delete(); toast('Message deleted'); }
+    catch(e){ toast('Delete failed: '+(e&&e.message||e)); }
+  });
+}
 function closeAct(){ var a=$('actBg'); if(a) a.remove(); }
 function openActions(mid){
   var t=MSGTXT[mid]; if(!t) return; closeAct();
   var mineE=(t.rx&&t.rx[me.uid])||'';
   var bg=document.createElement('div'); bg.id='actBg';
-  bg.innerHTML='<div class="actsh"><div class="rxrow">'+REACTS.map(function(e){ return '<button data-e="'+e+'" class="'+(e===mineE?'sel':'')+'">'+e+'</button>'; }).join('')+'</div><button class="actb" data-a="reply">\u21A9\uFE0F Reply</button><button class="actb" data-a="copy">\uD83D\uDCCB Copy</button></div>';
+  bg.innerHTML='<div class="actsh"><div class="rxrow">'+REACTS.map(function(e){ return '<button data-e="'+e+'" class="'+(e===mineE?'sel':'')+'">'+e+'</button>'; }).join('')+'</div><button class="actb" data-a="reply">\u21A9\uFE0F Reply</button><button class="actb" data-a="copy">\uD83D\uDCCB Copy</button>'+(t.mine?'<button class="actb" data-a="del" style="color:#e53935">\uD83D\uDDD1\uFE0F Delete</button>':'')+'</div>';
   bg.onclick=function(ev){
     var b=ev.target.closest('button'); if(!b){ if(ev.target===bg) closeAct(); return; }
     if(b.dataset.e){ closeAct(); reactTo(mid,b.dataset.e); return; }
     if(b.dataset.a==='reply'){ closeAct(); if(cur&&cur.canSend){ var q=(t.n?t.n+': ':'')+String(t.t||'').slice(0,100); setReply({q:q,n:t.n,t:String(t.t||'').slice(0,100)}); } return; }
+    if(b.dataset.a==='del'){ closeAct(); delMsg(mid); return; }
     if(b.dataset.a==='copy'){ closeAct(); try{ navigator.clipboard.writeText(String(t.t||'')); toast('Copied'); }catch(e){} return; }
   };
   document.body.appendChild(bg);
