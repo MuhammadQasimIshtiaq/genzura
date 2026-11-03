@@ -647,7 +647,7 @@ service cloud.firestore {
 
       allow update: if signedIn()
         && (resource.data.callerId == me() || resource.data.calleeId == me())
-        && changed().hasOnly(['status', 'answer', 'reason']);
+        && changed().hasOnly(['status', 'answer', 'reason', 'calleeRinging', 'calleeBeat']);
 
       allow delete: if signedIn() && (resource.data.callerId == me() || resource.data.calleeId == me());
 

@@ -127,7 +127,7 @@ exports.handler = async (event) => {
       const rows = await qr.json();
       const isGc = kind === "gcmessage";
       const tokens = (Array.isArray(rows) ? rows : []).filter((r) => r.document)
-        .filter((r) => { const f = r.document.fields || {}; const a = f.app && f.app.stringValue; return (kind === "message" || kind === "gcmessage") ? true : a !== "gc"; })
+        .filter((r) => { const f = r.document.fields || {}; const a = f.app && f.app.stringValue; return (kind === "message" || kind === "gcmessage" || kind === "call") ? true : a !== "gc"; })
         .map((r) => r.document.name.split("/").pop());
       for (const token of tokens) {
         const mr = await fetch(`https://fcm.googleapis.com/v1/projects/${pid}/messages:send`, {method: "POST", headers: A,

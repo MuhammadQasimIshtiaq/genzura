@@ -142,17 +142,20 @@ async function push(request, env) {
       where: { fieldFilter: { field: { fieldPath: "uid" }, op: "EQUAL", value: { stringValue: uid } } }, limit: 10 } }) })).json();
     /* chat messages (from Gupzy OR Gupchats) go to every phone of the person (Gupzy + Gupchats); all other pushes stay on Gupzy phones only */
     const isGc = kind === "gcmessage";
-    const tokens = (Array.isArray(rows) ? rows : []).filter((r) => r.document)
-      .filter((r) => { const f = r.document.fields || {}; const a = f.app && f.app.stringValue; return (kind === "message" || kind === "gcmessage") ? true : a !== "gc"; })
-      .map((r) => r.document.name.split("/").pop());
-    for (const token of tokens) {
+    /* CALLS now also reach Gupchats phones (tokens with app == "gc"); each token carries its own app flag so Gupchats rings only in Gupchats and Gupzy only in Gupzy */
+    const tokenRows = (Array.isArray(rows) ? rows : []).filter((r) => r.document)
+      .filter((r) => { const f = r.document.fields || {}; const a = f.app && f.app.stringValue; return (kind === "message" || kind === "gcmessage" || kind === "call") ? true : a !== "gc"; })
+      .map((r) => { const f = r.document.fields || {}; return { token: r.document.name.split("/").pop(), app: (f.app && f.app.stringValue) || "" }; });
+    for (const tr of tokenRows) {
+      const token = tr.token;
       /* a CALL push must expire after 45 s: a phone that comes online later must NOT ring for an old call */
       const isCall = kind === "call";
       const mr = await fetch(`https://fcm.googleapis.com/v1/projects/${pid}/messages:send`, { method: "POST", headers: A,
         body: JSON.stringify({ message: { token, data: { title: name, fromUid: String(from || ""),
           body: TEXT[kind] + (kind === "call" ? (body.type === "video" ? " (video)" : " (voice)") : ""),
           tag: (kind === "message" || kind === "gcmessage") ? "c_" + (body.chatId || "") : "n_" + kind,
-          app: isGc ? "gc" : "gupzy" },
+          app: (kind === "call") ? (tr.app === "gc" ? "gc" : "gupzy") : (isGc ? "gc" : "gupzy"),
+          callId: kind === "call" ? String(body.callId || "").replace(/[^A-Za-z0-9]/g, "") : "" },
           webpush: { headers: { Urgency: "high", TTL: isCall ? "45" : "86400" } }, android: { priority: "HIGH", ttl: isCall ? "45s" : "86400s" } } }) });
       if (mr.ok) sent++;
       else if (mr.status === 404 || mr.status === 400) {

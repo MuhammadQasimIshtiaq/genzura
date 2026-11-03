@@ -155,6 +155,31 @@ hr{border:0;border-top:1px solid var(--border);margin:8px 0}
 #iv img{max-width:100%;max-height:100%;margin:auto;object-fit:contain}
 .rq{font-size:13px;opacity:.8;border-left:3px solid currentColor;padding-left:8px;margin-bottom:4px}
 .mv{display:block;max-width:240px;width:100%;border-radius:14px;background:#000}
+/* ---- calls ---- */
+#gcIn,#gcCall{position:fixed;inset:0;z-index:95;color:#fff;display:flex;flex-direction:column;align-items:center;background:linear-gradient(160deg,#0b1220,#16254a 60%,#0866ff)}
+#gcIn{justify-content:center;padding:env(safe-area-inset-top,0px) 24px env(safe-area-inset-bottom,0px)}
+#gcIn .gci-av .av,#gcCall .gcc-av .av{width:120px;height:120px;font-size:42px;margin:0 auto}
+#gcIn .gci-n{font-size:28px;font-weight:800;margin-top:18px;text-align:center}
+#gcIn .gci-t{font-size:16px;opacity:.8;margin-top:6px}
+#gcIn .gci-b{display:flex;gap:70px;margin-top:64px}
+.gcb{width:68px;height:68px;border-radius:50%;border:0;color:#fff;display:flex;align-items:center;justify-content:center;font-size:0}
+.gcb.red{background:#e41e3f}.gcb.green{background:#31a24c}
+.gcb.sm{width:56px;height:56px;background:rgba(255,255,255,.18)}
+.gcb.sm.on{background:#fff;color:#111}
+#gcIn .gcb.green{animation:gcpulse 1.2s ease-in-out infinite}
+@keyframes gcpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
+#gcCall{justify-content:space-between;padding:calc(env(safe-area-inset-top,0px) + 40px) 20px calc(env(safe-area-inset-bottom,0px) + 28px)}
+#gcRemote{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000;display:none}
+#gcCall.rv #gcRemote{display:block}
+#gcLocal{position:absolute;right:14px;top:calc(env(safe-area-inset-top,0px) + 14px);width:104px;height:148px;object-fit:cover;border-radius:14px;background:#000;border:2px solid rgba(255,255,255,.5);display:none;z-index:2;transform:scaleX(-1)}
+#gcLocal.rear{transform:none}
+#gcCall.lv #gcLocal{display:block}
+#gcCall .gcc-top{position:relative;z-index:1;text-align:center;margin-top:30px}
+#gcCall.rv .gcc-top .gcc-av{display:none}
+#gcCall .gcc-n{font-size:26px;font-weight:800;margin-top:16px;text-shadow:0 1px 6px rgba(0,0,0,.5)}
+#gcCall .gcc-s{font-size:16px;opacity:.9;margin-top:6px;text-shadow:0 1px 6px rgba(0,0,0,.5)}
+#gcCall .gcc-bar{position:relative;z-index:1;display:flex;gap:16px;align-items:center;justify-content:center;flex-wrap:wrap}
+#gcSound{position:relative;z-index:1;border:0;border-radius:20px;padding:10px 18px;font-weight:700;background:#fff;color:#111;margin-bottom:12px}
 </style>
 </head>
 <body>
@@ -209,6 +234,7 @@ hr{border:0;border-top:1px solid var(--border);margin:8px 0}
   <div class="top">
     <button class="iconbtn" id="cBack" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
     <div id="cAv"></div><div class="rb"><div class="rn" id="cName" style="font-weight:700"></div><div class="rs" id="cSub">🔒 End-to-end encrypted</div></div>
+    <button class="iconbtn" id="cCallV" aria-label="Voice call"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="color:var(--blue)"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z"/></svg></button><button class="iconbtn" id="cCallVid" aria-label="Video call"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" style="color:var(--blue)"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h8A2.5 2.5 0 0 1 16 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-8A2.5 2.5 0 0 1 3 16.5v-9zM17 10.2l4.2-2.6c.5-.3 1.1 0 1.1.6v7.6c0 .6-.6.9-1.1.6L17 13.8v-3.6z"/></svg></button>
   </div>
   <div id="msgs"></div>
   <div id="note" class="hidden"></div>
@@ -250,6 +276,31 @@ hr{border:0;border-top:1px solid var(--border);margin:8px 0}
     <div style="font-size:18px;font-weight:800">New message</div></div>
   <div class="search"><input id="pkQ" placeholder="Search friends" autocomplete="off" style="width:100%"></div>
   <div id="pkList" style="flex:1;overflow-y:auto"></div>
+</div>
+
+<div id="gcIn" class="hidden">
+  <div class="gci-av" id="gciAv"></div>
+  <div class="gci-n" id="gciName"></div>
+  <div class="gci-t" id="gciType"></div>
+  <div class="gci-b">
+    <button class="gcb red" id="gciDecl" aria-label="Decline"><svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M12 9c-1.6 0-3.1.3-4.6.7v3.1c0 .4-.2.7-.6.9-.9.5-1.7 1-2.4 1.7-.2.2-.5.3-.7.3-.3 0-.5-.1-.7-.3L.3 13.7c-.2-.2-.3-.4-.3-.7s.1-.5.3-.7C3.3 9.4 7.4 8 12 8s8.7 1.4 11.7 4.3c.2.2.3.4.3.7s-.1.5-.3.7l-2.8 2.4c-.2.2-.4.3-.7.3s-.5-.1-.7-.3c-.7-.7-1.5-1.2-2.4-1.7-.4-.2-.6-.5-.6-.9V9.7C15.1 9.3 13.6 9 12 9z"/></svg></button>
+    <button class="gcb green" id="gciAcc" aria-label="Answer"><svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z"/></svg></button>
+  </div>
+</div>
+<div id="gcCall" class="hidden">
+  <video id="gcRemote" autoplay playsinline></video>
+  <video id="gcLocal" autoplay playsinline muted></video>
+  <div class="gcc-top"><div class="gcc-av" id="gccAv"></div><div class="gcc-n" id="gccName"></div><div class="gcc-s" id="gccSt"></div></div>
+  <div>
+    <div style="text-align:center"><button id="gcSound" class="hidden">Tap to enable sound</button></div>
+    <div class="gcc-bar">
+      <button class="gcb sm" id="gcbMute" aria-label="Mute"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+      <button class="gcb sm" id="gcbSpk" aria-label="Speaker"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg></button>
+      <button class="gcb sm" id="gcbVid" aria-label="Camera"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="13" height="12" rx="3"/><path d="M15 10l7-3v10l-7-3z"/></svg></button>
+      <button class="gcb sm hidden" id="gcbFlip" aria-label="Flip camera"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg></button>
+      <button class="gcb red" id="gcbEnd" aria-label="End call"><svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M12 9c-1.6 0-3.1.3-4.6.7v3.1c0 .4-.2.7-.6.9-.9.5-1.7 1-2.4 1.7-.2.2-.5.3-.7.3-.3 0-.5-.1-.7-.3L.3 13.7c-.2-.2-.3-.4-.3-.7s.1-.5.3-.7C3.3 9.4 7.4 8 12 8s8.7 1.4 11.7 4.3c.2.2.3.4.3.7s-.1.5-.3.7l-2.8 2.4c-.2.2-.4.3-.7.3s-.5-.1-.7-.3c-.7-.7-1.5-1.2-2.4-1.7-.4-.2-.6-.5-.6-.9V9.7C15.1 9.3 13.6 9 12 9z"/></svg></button>
+    </div>
+  </div>
 </div>
 
 <div id="toast" class="hidden"></div>
@@ -613,7 +664,7 @@ async function signOut(){
 $('ncOut').onclick = signOut;
 
 auth.onAuthStateChanged(async function(u){
-  if(!u){ me=null; stopPresence(); friends=[]; requests=[]; followers=[]; chats={}; storyBy={}; myKP=null; show('login'); $('loginBtn').disabled=false; return; }
+  if(!u){ callEnded(); me=null; stopPresence(); friends=[]; requests=[]; followers=[]; chats={}; storyBy={}; myKP=null; show('login'); $('loginBtn').disabled=false; return; }
   try{
     var d=await db.collection('channels').doc(u.uid).get();
     if(!d.exists){ show('nochannel'); return; }
@@ -624,7 +675,7 @@ auth.onAuthStateChanged(async function(u){
     show('app'); setTab(0);
     try{ await initKeys(); }catch(e){ toast('Encryption setup failed on this device'); console.error(e); }
     startChats(); loadPeople();
-    renderMenu(); startPresence(); enablePush(); tryOpenPending();
+    renderMenu(); startPresence(); enablePush(); tryOpenPending(); startCallListener();
   }catch(e){ console.error(e); toast('Could not load your profile. Check internet.'); show('login'); }
 });
 
@@ -1387,8 +1438,425 @@ $('pvBack').onclick=closePost;
 $('pvOpen').onclick=function(){ if(!pvCur) return; var u='https://gupzy.com/?post='+encodeURIComponent(pvCur); try{ if(window.AndroidAuth && window.AndroidAuth.openExternal){ window.AndroidAuth.openExternal(u); return; } }catch(e){} window.open(u,'_blank'); };
 $('msgs').addEventListener('click',function(e){ var b=e.target.closest('.b.post'); if(b) openPost(b.getAttribute('data-post')); });
 
+/* ---------------- calls: voice + video (same Firestore "calls" documents as Gupzy, so Gupzy <-> Gupchats calls work both ways) ---------------- */
+var RING_MS=45000, RTC_CONFIG={ iceServers:[{urls:['stun:stun.l.google.com:19302']}], iceCandidatePoolSize:4 };
+var CL=null, INC=null, seenCalls=new Set(), ringTimer=0, ringOsc=null, audioCtx=null, iceAt=0, incUnsub=null;
+function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+function andCall(fn,a,b){ try{ var x=window.AndroidCall; if(x && x[fn]) return (a===undefined)?x[fn]():((b===undefined)?x[fn](a):x[fn](a,b)); }catch(e){} return undefined; }
+function deviceLocked(){ return !!andCall('isDeviceLocked'); }
+function closeAfterLocked(){ if(deviceLocked()) andCall('callUiClosed'); }
+function flushTaps(){ andCall('consumePendingAnswer'); andCall('consumePendingDecline'); }
+function nativeSpeaker(on){ if(window.AndroidCall && window.AndroidCall.setSpeaker){ try{ return String(window.AndroidCall.setSpeaker(!!on)); }catch(e){ return 'err:'+e; } } return ''; }
+function reapplySpeaker(){ if(!CL) return; [0,400,1200,2500].forEach(function(d){ setTimeout(function(){ if(CL && !CL.ended) nativeSpeaker(!!CL.speaker); },d); }); }
+
+/* ringtone (WebAudio beeps + vibration) */
+document.addEventListener('pointerdown', function(){ try{ if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)(); if(audioCtx.state==='suspended') audioCtx.resume(); }catch(e){} }, {passive:true});
+function ringNeeded(){ if(INC) return true; return !!(CL && CL.role==='caller' && !CL.connected && !CL.remoteSet && !CL.ended); }
+function stopRing(){ clearInterval(ringTimer); ringTimer=0; try{ if(ringOsc){ ringOsc.stop(); ringOsc=null; } }catch(e){} try{ if(navigator.vibrate) navigator.vibrate(0); }catch(e){} }
+function startRing(freq,vib){
+  stopRing();
+  function beep(){
+    if(!ringNeeded()){ stopRing(); return; }
+    try{
+      if(audioCtx && audioCtx.state==='running'){
+        var o=audioCtx.createOscillator(), g=audioCtx.createGain();
+        o.type='sine'; o.frequency.value=freq; g.gain.value=0.12; o.connect(g); g.connect(audioCtx.destination);
+        o.onended=function(){ if(ringOsc===o) ringOsc=null; };
+        ringOsc=o; o.start(); o.stop(audioCtx.currentTime+0.45);
+      }
+      if(vib && navigator.vibrate) navigator.vibrate([400,200,400]);
+    }catch(e){}
+  }
+  beep(); ringTimer=setInterval(beep,2000);
+}
+
+/* TURN servers (same worker as Gupzy) so calls also work across different mobile networks */
+async function loadIce(){
+  if(Date.now()-iceAt<6*3600*1000) return;
+  try{ var c=JSON.parse(localStorage.getItem('gc_ice')||'null'); if(c && c.s && Date.now()-c.t<6*3600*1000){ RTC_CONFIG.iceServers=[{urls:['stun:stun.l.google.com:19302']}].concat(c.s); iceAt=Date.now(); return; } }catch(e){}
+  try{
+    var t=await auth.currentUser.getIdToken(); var ctl=new AbortController(); setTimeout(function(){ ctl.abort(); },4000);
+    var r=await fetch(API_BASE+'/turn',{ headers:{Authorization:'Bearer '+t}, signal:ctl.signal }); if(!r.ok) return;
+    var d=await r.json();
+    if(d && d.iceServers){ RTC_CONFIG.iceServers=[{urls:['stun:stun.l.google.com:19302']}].concat(d.iceServers); iceAt=Date.now(); try{ localStorage.setItem('gc_ice',JSON.stringify({t:Date.now(),s:d.iceServers})); }catch(e){} }
+  }catch(e){}
+}
+function callCfg(){ return Object.assign({}, RTC_CONFIG); }
+function getMedia(type,facing){ return navigator.mediaDevices.getUserMedia({ audio:{echoCancellation:true,noiseSuppression:true}, video: type==='video' ? {facingMode:facing||'user',width:{ideal:640},height:{ideal:480}} : false }); }
+async function getMediaRobust(type,facing){
+  var last;
+  for(var i=0;i<3;i++){ try{ return await getMedia(type,facing); }catch(e){ last=e; if(e && e.name==='NotFoundError') break; await sleep(500); } }
+  if(type==='video' && !(last && (last.name==='NotAllowedError'||last.name==='SecurityError'))){ try{ var st=await getMedia('audio'); toast('Camera unavailable - continuing with voice only'); return st; }catch(e){ last=e; } }
+  throw last;
+}
+function mediaErr(e){
+  if(e && (e.name==='NotAllowedError' || /denied|permission/i.test(e.message||''))) return 'Allow camera/microphone permission to make calls';
+  if(e && e.name==='NotFoundError') return 'No camera or microphone found';
+  return 'Could not access camera/microphone';
+}
+function callPeerName(){ return (CL && CL.peer && CL.peer.name) || ''; }
+
+/* ---- UI ---- */
+function setSt(s){ $('gccSt').textContent=s; }
+function refreshCallUI(){
+  if(!CL) return; var sc=$('gcCall');
+  sc.classList.toggle('rv',!!CL.remoteVideo); sc.classList.toggle('lv',!!CL.cam);
+  $('gcbVid').classList.toggle('on',!!CL.cam); $('gcbSpk').classList.toggle('on',!!CL.speaker);
+  $('gcbFlip').classList.toggle('hidden',!CL.cam);
+}
+function showCallUI(peer,type,status){
+  $('gccAv').innerHTML=av(peer.logo,peer.name); $('gccName').textContent=peer.name||'Unknown'; setSt(status);
+  CL.remoteVideo=(type==='video'); CL.speaker=(type==='video'); nativeSpeaker(CL.speaker); reapplySpeaker();
+  $('gcCall').classList.remove('hidden'); $('gcCall').classList.remove('connected');
+  $('gcbMute').classList.remove('on'); refreshCallUI();
+  CL.openedLocked=deviceLocked(); clearInterval(CL.wd); CL.wd=setInterval(audioTick,600);
+}
+function attachLocal(){
+  var lv=$('gcLocal');
+  if(!CL.camInit){ CL.camInit=true; CL.cam=CL.local.getVideoTracks()[0]||null; }
+  lv.srcObject=CL.local; lv.classList.toggle('rear',CL.facing==='environment'); var p=lv.play(); if(p && p.catch) p.catch(function(){});
+  refreshCallUI();
+}
+function keepCallAlive(){ andCall('callStarted', !!(CL && CL.type==='video'), callPeerName()); }
+function fmt(sec){ var m=Math.floor(sec/60), s=sec%60; return (m<10?'0':'')+m+':'+(s<10?'0':'')+s; }
+function onConnected(){
+  if(!CL || CL.connected) return;
+  CL.connected=true; stopRing(); clearTimeout(CL.ringTimeout); reapplySpeaker();
+  $('gcCall').classList.add('connected'); CL.startedAt=Date.now(); setSt('00:00');
+  CL.timer=setInterval(function(){ if(CL) setSt(fmt(Math.floor((Date.now()-CL.startedAt)/1000))); },1000);
+}
+function pokeAudio(){
+  try{ if(audioCtx && audioCtx.state==='suspended') audioCtx.resume(); }catch(e){}
+  ['gcRemote','gcLocal'].forEach(function(id){ var v=$(id); if(v && v.srcObject){ var p=v.play(); if(p && p.catch) p.catch(function(){}); } });
+}
+/* remote sound must start by itself (also after answering from the lock screen, where autoplay is blocked) */
+function audioTick(){
+  if(!CL || CL.ended) return;
+  if(!CL.micAt || Date.now()-CL.micAt>3000){ CL.micAt=Date.now(); refreshMic(); }
+  var rv=$('gcRemote'), btn=$('gcSound');
+  if(!CL.remote || !CL.remote.getAudioTracks().length){ btn.classList.add('hidden'); return; }
+  if(rv.srcObject!==CL.remote) rv.srcObject=CL.remote;
+  rv.muted=false; rv.volume=1;
+  if(rv.paused || rv.ended){
+    var p=rv.play();
+    if(p && p.then) p.then(function(){ btn.classList.add('hidden'); }).catch(function(err){ if(CL && !CL.ended && err && err.name==='NotAllowedError') btn.classList.remove('hidden'); });
+  }else btn.classList.add('hidden');
+}
+/* Android can hand out a silent microphone while the phone is locked: open a fresh one and swap it in */
+async function refreshMic(){
+  if(!CL || CL.ended || !CL.pc || !CL.local || !CL.connected || CL.micBusy || document.hidden) return;
+  var old=CL.local.getAudioTracks()[0];
+  if(old && old.readyState==='live' && !old.muted) return;
+  CL.micBusy=true;
+  try{
+    var st=await navigator.mediaDevices.getUserMedia({ audio:{echoCancellation:true,noiseSuppression:true} });
+    var nt=st.getAudioTracks()[0]; if(!nt || !CL || CL.ended){ st.getTracks().forEach(function(t){ t.stop(); }); return; }
+    nt.enabled=old?old.enabled:true;
+    var tr=CL.pc.getTransceivers().find(function(t){ return (t.sender.track && t.sender.track.kind==='audio') || (t.receiver.track && t.receiver.track.kind==='audio'); });
+    if(tr && tr.sender) await tr.sender.replaceTrack(nt);
+    if(old){ try{ CL.local.removeTrack(old); old.stop(); }catch(e){} }
+    CL.local.addTrack(nt);
+  }catch(e){}
+  finally{ if(CL) CL.micBusy=false; }
+}
+$('gcSound').onclick=function(){ pokeAudio(); setTimeout(audioTick,50); };
+$('gcCall').addEventListener('pointerdown',pokeAudio,{passive:true});
+$('gcIn').addEventListener('pointerdown',pokeAudio,{passive:true});
+
+/* ---- peer connection ---- */
+function callRef(){ return db.collection('calls').doc(CL.id); }
+function newCallState(role,type,peer){
+  return { role:role, type:type, peer:peer, id:null, docReady:role!=='caller', candQueue:[], pc:null, local:null, remote:null, unsubs:[], pending:[], remoteSet:false,
+    connected:false, ended:false, facing:'user', cam:null, camInit:false, remoteVideo:false, speaker:false, dc:null, ringTimeout:0, discTimer:0, timer:0, startedAt:0 };
+}
+function ctlSend(o){ try{ if(CL && CL.dc && CL.dc.readyState==='open') CL.dc.send(JSON.stringify(o)); }catch(e){} }
+function ctlState(){ if(CL) ctlSend({ t:'state', video:!!CL.cam, share:false }); }
+function vSender(){ var t=CL && CL.pc && CL.pc.getTransceivers().find(function(x){ return x.receiver && x.receiver.track && x.receiver.track.kind==='video'; }); return t?t.sender:null; }
+function setupPc(role){
+  var pc=new RTCPeerConnection(callCfg()); CL.pc=pc;
+  CL.local.getTracks().forEach(function(tr){ pc.addTrack(tr,CL.local); });
+  if(role==='caller' && !CL.local.getVideoTracks().length){ try{ pc.addTransceiver('video',{direction:'sendrecv'}); }catch(e){} }
+  try{
+    var dc=pc.createDataChannel('ctl',{negotiated:true,id:1}); CL.dc=dc;
+    dc.onopen=function(){ ctlState(); };
+    dc.onmessage=function(ev){ var m; try{ m=JSON.parse(ev.data); }catch(e){ return; } if(CL && m && m.t==='state'){ CL.remoteVideo=!!m.video; refreshCallUI(); } };
+  }catch(e){}
+  var remote=new MediaStream(); CL.remote=remote; $('gcRemote').srcObject=remote;
+  pc.ontrack=function(e){
+    if(e.track && e.track.kind==='video') e.track.onunmute=function(){ if(CL && CL.pc===pc){ CL.remoteVideo=true; refreshCallUI(); } };
+    (e.streams[0]?e.streams[0].getTracks():[e.track]).forEach(function(tr){ if(remote.getTracks().indexOf(tr)<0) remote.addTrack(tr); });
+    var p=$('gcRemote').play(); if(p && p.catch) p.catch(function(){}); reapplySpeaker();
+  };
+  var col=(role==='caller')?'callerCandidates':'calleeCandidates';
+  pc.onicecandidate=function(e){
+    if(!e.candidate || !CL) return;
+    var cd=e.candidate.toJSON();
+    if(!CL.docReady){ CL.candQueue.push(cd); return; }
+    callRef().collection(col).add(cd).catch(function(){});
+  };
+  pc.onconnectionstatechange=function(){
+    if(!CL || CL.pc!==pc) return;
+    var s=pc.connectionState;
+    if(s==='connected'){ clearTimeout(CL.discTimer); onConnected(); }
+    else if(s==='failed') endCall('Call failed - check your internet',true);
+    else if(s==='disconnected'){
+      setSt('Reconnecting…'); clearTimeout(CL.discTimer);
+      CL.discTimer=setTimeout(function(){ if(CL && CL.pc===pc && pc.connectionState!=='connected') endCall('Connection lost',true); },30000);
+    }
+  };
+  return pc;
+}
+function listenCandidates(col){
+  CL.unsubs.push(callRef().collection(col).onSnapshot(function(sn){
+    sn.docChanges().forEach(function(ch){
+      if(ch.type!=='added' || !CL || !CL.pc) return;
+      var cand=ch.doc.data();
+      if(CL.remoteSet) CL.pc.addIceCandidate(new RTCIceCandidate(cand)).catch(function(){}); else CL.pending.push(cand);
+    });
+  },function(){}));
+}
+/* caller sees "Ringing" only while the other phone proves it is online (calleeBeat keeps changing) */
+function beatCheck(d){ if(!CL || !d || !d.calleeBeat) return; var k=d.calleeBeat.toMillis?String(d.calleeBeat.toMillis()):String(d.calleeBeat); if(k!==CL.beatKey){ CL.beatKey=k; CL.beatAt=Date.now(); CL.beatSeen=true; } }
+function beatFresh(){ return !CL || !CL.beatSeen || (Date.now()-CL.beatAt)<12000; }
+function beatWatch(){ if(!CL || CL.ended || CL.connected || CL.remoteSet) return; if(CL.ringing && !beatFresh()){ CL.ringing=false; stopRing(); setSt('Calling…'); } }
+async function pushCall(toUid,type,callId){
+  try{ var t=await auth.currentUser.getIdToken();
+    fetch(API_BASE+'/push',{ method:'POST', keepalive:true, headers:{'Content-Type':'application/json',Authorization:'Bearer '+t}, body:JSON.stringify({kind:'call',toUid:toUid,type:type,callId:callId}) }).catch(function(){});
+  }catch(e){}
+}
+
+/* ---- caller ---- */
+async function startCall(peer,type){
+  if(!me) return;
+  if(CL || INC){ toast('You are already in a call'); return; }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ toast('Calls are not supported on this device'); return; }
+  try{ if(await blockedPair(peer.uid)){ toast('Call unavailable'); return; } }catch(e){}
+  if(CL || INC) return;
+  CL=newCallState('caller',type,peer);
+  showCallUI(peer,type,'Starting…');
+  var icep=loadIce();
+  try{ CL.local=await getMediaRobust(type); }
+  catch(e){ toast(mediaErr(e)); return endCall(null,false); }
+  if(!CL) return;
+  await Promise.race([icep,sleep(400)]); if(!CL) return;
+  attachLocal(); keepCallAlive();
+  try{
+    var ref=db.collection('calls').doc(); CL.id=ref.id;
+    var pc=setupPc('caller');
+    var offer=await pc.createOffer(); await pc.setLocalDescription(offer);
+    await ref.set({
+      callerId:me.uid, callerName:me.name||'', callerLogo:me.logo||null,
+      calleeId:peer.uid, calleeName:peer.name||'', calleeLogo:peer.logo||null,
+      type:type, status:'ringing', offer:{type:offer.type,sdp:offer.sdp},
+      createdAt:FV.serverTimestamp()
+    });
+    if(!CL) return;
+    CL.docReady=true;
+    pushCall(peer.uid,type,ref.id);
+    CL.candQueue.splice(0).forEach(function(cd){ ref.collection('callerCandidates').add(cd).catch(function(){}); });
+    setSt('Calling…');
+    CL.beatWd=setInterval(beatWatch,2000);
+    CL.unsubs.push(ref.onSnapshot(function(doc){
+      var d=doc.data(); if(!d || !CL || CL.id!==doc.id) return;
+      beatCheck(d);
+      if(d.calleeRinging && !CL.ringing && !CL.remoteSet && !CL.connected && beatFresh()){ CL.ringing=true; setSt('Ringing…'); startRing(400,false); }
+      if(d.answer && !CL.remoteSet){
+        CL.remoteSet=true;
+        CL.pc.setRemoteDescription(new RTCSessionDescription(d.answer)).then(function(){
+          CL.pending.splice(0).forEach(function(c){ CL.pc.addIceCandidate(new RTCIceCandidate(c)).catch(function(){}); });
+        }).catch(function(){});
+        setSt('Connecting…'); stopRing();
+      }
+      if(d.status==='declined') endCall(d.reason==='nomedia'?'They could not use their microphone/camera':'Call declined',false);
+      else if(d.status==='busy') endCall('User is busy on another call',false);
+      else if(d.status==='ended' || d.status==='missed') endCall('Call ended',false);
+    },function(){}));
+    listenCandidates('calleeCandidates');
+    CL.ringTimeout=setTimeout(function(){
+      if(!CL || CL.connected) return;
+      if(CL.remoteSet){ CL.ringTimeout=setTimeout(function(){ if(CL && !CL.connected) endCall('Could not connect',true); },25000); return; }
+      var rang=!!CL.ringing;
+      ref.update({status:'missed'}).catch(function(){});
+      endCall(rang?'No answer':'User is offline or unreachable',false);
+    },RING_MS);
+  }catch(e){
+    console.error(e);
+    endCall(/permission/i.test(e.message||'') ? 'You can only call friends (people who follow each other)' : 'Could not start the call: '+(e.message||e),false);
+  }
+}
+
+/* ---- callee ---- */
+function dismissIncoming(){
+  if(!INC) return;
+  clearTimeout(INC.timer); clearInterval(INC.beat);
+  try{ if(INC.unsub) INC.unsub(); }catch(e){}
+  INC=null; stopRing(); andCall('cancelCallNotification');
+  $('gcIn').classList.add('hidden');
+}
+function onIncoming(id,d){
+  if((CL && CL.id===id) || (INC && INC.id===id) || seenCalls.has(id)) return;
+  seenCalls.add(id);
+  if(myBlocked.indexOf(d.callerId)>=0){ db.collection('calls').doc(id).update({status:'declined'}).catch(function(){}); return; }
+  if(CL || INC){ db.collection('calls').doc(id).update({status:'busy'}).catch(function(){}); return; }
+  INC={ id:id, d:d, locked:deviceLocked() };
+  db.collection('calls').doc(id).update({calleeRinging:true}).catch(function(){});
+  var beat=function(){ db.collection('calls').doc(id).update({calleeBeat:FV.serverTimestamp()}).catch(function(){}); };
+  beat(); INC.beat=setInterval(beat,4000);
+  $('gciAv').innerHTML=av(d.callerLogo,d.callerName); $('gciName').textContent=d.callerName||'Someone';
+  $('gciType').textContent=d.type==='video'?'Incoming video call…':'Incoming voice call…';
+  $('gcIn').classList.remove('hidden');
+  var auto=false; try{ auto=!!andCall('consumePendingAnswer'); }catch(e){}
+  if(auto){ setTimeout(function(){ var inc=INC; if(inc){ dismissIncoming(); answerCall(inc.id,inc.d); } },0); return; }
+  var native=false; try{ native=!!andCall('isNativeRinging'); }catch(e){}
+  if(!native) startRing(520,true);
+  try{ if(andCall('consumePendingDecline')){ setTimeout(declineIncoming,0); return; } }catch(e){}
+  INC.unsub=db.collection('calls').doc(id).onSnapshot(function(doc){
+    var x=doc.data();
+    if(!x || x.status!=='ringing'){
+      if(INC && INC.id===id){
+        var wl=INC.locked; dismissIncoming(); flushTaps();
+        if(x && (x.status==='ended' || x.status==='missed')) toast('Missed call from '+(d.callerName||'someone'));
+        if(wl) setTimeout(function(){ if(!CL && !INC) closeAfterLocked(); },300);
+      }
+    }
+  },function(){});
+  INC.timer=setTimeout(function(){ var wl=INC && INC.locked; dismissIncoming(); flushTaps(); if(wl) setTimeout(function(){ if(!CL && !INC) closeAfterLocked(); },300); },RING_MS);
+}
+async function answerCall(id,d){
+  if(CL) return;
+  CL=newCallState('callee',d.type,{uid:d.callerId,name:d.callerName,logo:d.callerLogo});
+  CL.id=id;
+  showCallUI(CL.peer,d.type,'Connecting…');
+  var icep=loadIce();
+  try{ CL.local=await getMediaRobust(d.type); }
+  catch(e){ toast(mediaErr(e)); db.collection('calls').doc(id).update({status:'declined',reason:'nomedia'}).catch(function(){}); return endCall(null,false); }
+  if(!CL) return;
+  await Promise.race([icep,sleep(300)]); if(!CL) return;
+  attachLocal(); keepCallAlive();
+  try{
+    var pc=setupPc('callee');
+    await pc.setRemoteDescription(new RTCSessionDescription(d.offer));
+    CL.remoteSet=true;
+    listenCandidates('callerCandidates');
+    pc.getTransceivers().forEach(function(t){ if(t.receiver && t.receiver.track && t.receiver.track.kind==='video' && t.direction==='recvonly'){ try{ t.direction='sendrecv'; }catch(e){} } });
+    var ans=await pc.createAnswer(); await pc.setLocalDescription(ans);
+    await callRef().update({ answer:{type:ans.type,sdp:ans.sdp}, status:'accepted' });
+    CL.unsubs.push(callRef().onSnapshot(function(doc){ var x=doc.data(); if(CL && x && x.status==='ended') endCall('Call ended',false); },function(){}));
+    CL.ringTimeout=setTimeout(function(){ if(CL && !CL.connected) endCall('Could not connect',true); },30000);
+  }catch(e){ console.error(e); endCall('Could not answer: '+(e.message||e),true); }
+}
+function declineIncoming(){
+  if(!INC) return;
+  var id=INC.id; dismissIncoming();
+  db.collection('calls').doc(id).update({status:'declined'}).catch(function(){}).then(function(){ andCall('declineDone'); });
+}
+$('gciAcc').onclick=function(){ if(!INC) return; var inc=INC; dismissIncoming(); answerCall(inc.id,inc.d); };
+$('gciDecl').onclick=declineIncoming;
+/* buttons on the Android call notification */
+window.__declineIncomingCall=declineIncoming;
+window.__answerIncomingCall=function(){
+  if(!INC) return false;
+  andCall('consumePendingAnswer');
+  var inc=INC; dismissIncoming(); answerCall(inc.id,inc.d); return true;
+};
+window.__endCurrentCall=function(){ if(CL && !CL.ended) endCall(null,true); };
+
+/* ---- end ---- */
+function endCall(msg,notify){
+  var c=CL; if(!c || c.ended) return;
+  c.ended=true;
+  stopRing(); clearTimeout(c.ringTimeout); clearInterval(c.beatWd); clearTimeout(c.discTimer); clearInterval(c.timer); clearInterval(c.wd);
+  if(notify && c.id) db.collection('calls').doc(c.id).update({status:'ended'}).catch(function(){});
+  c.unsubs.forEach(function(u){ try{ u(); }catch(e){} });
+  try{ if(c.pc) c.pc.close(); }catch(e){}
+  [c.local,c.remote].forEach(function(s){ if(s) s.getTracks().forEach(function(tr){ try{ tr.stop(); }catch(e){} }); });
+  try{ if(c.dc) c.dc.close(); }catch(e){}
+  andCall('release');
+  $('gcRemote').srcObject=null; $('gcLocal').srcObject=null;
+  $('gcCall').classList.add('hidden'); $('gcSound').classList.add('hidden');
+  CL=null;
+  if(c.openedLocked) closeAfterLocked();
+  flushTaps();
+  if(msg) toast(msg);
+}
+$('gcbEnd').onclick=function(){ endCall(null,true); };
+document.addEventListener('visibilitychange',function(){
+  if(!CL || CL.ended) return;
+  try{ var p=$('gcRemote').play(); if(p && p.catch) p.catch(function(){}); p=$('gcLocal').play(); if(p && p.catch) p.catch(function(){}); }catch(e){}
+  reapplySpeaker(); setTimeout(refreshMic,400);
+});
+
+/* ---- in-call controls ---- */
+$('gcbMute').onclick=function(){
+  if(!CL || !CL.local) return;
+  var tracks=CL.local.getAudioTracks(); if(!tracks.length) return;
+  var on=!tracks[0].enabled; tracks.forEach(function(tr){ tr.enabled=on; });
+  $('gcbMute').classList.toggle('on',!on);
+};
+async function webSpeaker(on){
+  var el=$('gcRemote');
+  if(!el.setSinkId || !(navigator.mediaDevices && navigator.mediaDevices.enumerateDevices)) return 'unsupported';
+  var devs=(await navigator.mediaDevices.enumerateDevices()).filter(function(d){ return d.kind==='audiooutput'; });
+  var pick=on ? (devs.find(function(d){ return /speaker/i.test(d.label) && !/ear/i.test(d.label); }) || devs.find(function(d){ return d.deviceId==='default'; }))
+              : (devs.find(function(d){ return /earpiece|receiver|handset/i.test(d.label); }) || devs.find(function(d){ return /phone/i.test(d.label) && !/speaker/i.test(d.label); }));
+  if(!pick) return 'nodevice';
+  await el.setSinkId(pick.deviceId); return 'ok';
+}
+$('gcbSpk').onclick=async function(){
+  if(!CL) return;
+  var want=!CL.speaker;
+  if(window.AndroidCall && window.AndroidCall.setSpeaker){ CL.speaker=want; var r=nativeSpeaker(want); refreshCallUI(); toast((want?'Speaker on':'Earpiece')+(/^ok/.test(r)?'':' ('+r+')')); return; }
+  try{ var r2=await webSpeaker(want); if(r2==='ok'){ CL.speaker=want; refreshCallUI(); toast(want?'Speaker on':'Earpiece'); } else toast('This browser has no speaker option'); }
+  catch(e){ toast('Could not switch audio output'); }
+};
+$('gcbVid').onclick=async function(){
+  if(!CL || !CL.local || !CL.pc) return;
+  try{
+    if(!CL.cam){
+      var s=await navigator.mediaDevices.getUserMedia({ video:{facingMode:CL.facing,width:{ideal:640},height:{ideal:480}} });
+      var tr=s.getVideoTracks()[0]; CL.local.addTrack(tr); CL.cam=tr;
+      var sd=vSender(); if(sd) await sd.replaceTrack(tr);
+    }else{
+      var old=CL.cam; CL.cam=null; CL.local.removeTrack(old); old.stop();
+      var sd2=vSender(); if(sd2) await sd2.replaceTrack(null);
+    }
+    attachLocal(); ctlState();
+  }catch(e){ toast(mediaErr(e)); }
+};
+$('gcbFlip').onclick=async function(){
+  if(!CL || !CL.cam || !CL.pc) return;
+  var next=CL.facing==='user'?'environment':'user';
+  try{
+    var s=await navigator.mediaDevices.getUserMedia({ video:{facingMode:next,width:{ideal:640},height:{ideal:480}} });
+    var nv=s.getVideoTracks()[0]; var sd=vSender(); if(sd) await sd.replaceTrack(nv);
+    var old=CL.cam; CL.local.removeTrack(old); old.stop();
+    CL.local.addTrack(nv); CL.cam=nv; CL.facing=next; attachLocal();
+  }catch(e){ toast('Could not switch camera'); }
+};
+
+/* ---- incoming listener (while signed in) ---- */
+function stopCallListener(){ try{ if(incUnsub) incUnsub(); }catch(e){} incUnsub=null; }
+function startCallListener(){
+  stopCallListener(); if(!me) return;
+  incUnsub=db.collection('calls').where('calleeId','==',me.uid).where('status','==','ringing').onSnapshot(function(sn){
+    sn.docChanges().forEach(function(ch){
+      if(ch.type!=='added') return;
+      var d=ch.doc.data();
+      var created=(d.createdAt && d.createdAt.toMillis)?d.createdAt.toMillis():Date.now();
+      if(Date.now()-created>RING_MS) return;
+      onIncoming(ch.doc.id,d);
+    });
+  },function(err){ console.error('calls listener',err); });
+  setTimeout(function(){ loadIce(); },2500);
+}
+function callEnded(){ dismissIncoming(); if(CL) endCall(null,true); stopCallListener(); }
+$('cCallV').onclick=function(){ if(cur) startCall(cur.peer,'voice'); };
+$('cCallVid').onclick=function(){ if(cur) startCall(cur.peer,'video'); };
+
 /* Android back button */
 window.__gcBack=function(){
+  if(CL && !CL.ended){ toast('Tap the red button to end the call'); return true; }
+  if(INC) return true;
   if(!$('pv').classList.contains('hidden')){ closePost(); return true; }
   if(!$('iv').classList.contains('hidden')){ $('iv').classList.add('hidden'); $('iv').innerHTML=''; return true; }
   if(!$('sv').classList.contains('hidden')){ svClose(); return true; }
