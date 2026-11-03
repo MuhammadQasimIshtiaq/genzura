@@ -1,5 +1,5 @@
 /* ================================================================
-   GUPZY — Dynamic video sitemap on CLOUDFLARE (replaces the Netlify function).
+   GUPZY — Dynamic video sitemap on CLOUDFLARE (runs on Cloudflare).
    Route:  GET /sitemap-videos.xml
    Needs the SAME 3 variables your push/views worker already uses:
      FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY

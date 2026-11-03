@@ -1,6 +1,6 @@
 VIBE STATUS (2-hour floating moods) + AUTO VIBE GROUPS  (2 steps)
 
-1) Deploy this folder to Netlify (index.html and service-worker.js changed).
+1) Push the folder to GitHub (index.html and service-worker.js changed).
 2) Firebase Console -> Firestore -> Rules: replace EVERYTHING with firestore.rules from this folder -> Publish.
    (presence/{uid} now accepts vibe / vibeUntil / vibeGroup; group chats can carry expiresAt)
 Android: NO rebuild needed (the app loads the website).

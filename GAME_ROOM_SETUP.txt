@@ -1,8 +1,8 @@
 TRUTH - DARE - ROAST SPIN (Game Room) - setup
 
-1) Deploy this folder to Netlify (index.html changed). Android app needs NO change (it opens the website).
+1) Push the folder to GitHub (index.html changed). Android app needs NO change (it opens the website).
 2) Firebase Console -> Firestore -> Rules: publish the new firestore.rules (adds gameRooms + gameInvites).
-3) Optional (push for invites): redeploy netlify/functions/push.js and worker/genzura-worker-all.js (new kind "game").
+3) Optional (push for invites): re-paste worker/genzura-worker-all.js (new kind "game").
 
 How it works
 - Home 3-lines menu -> "Truth - Dare - Roast Spin" and "Music - Soundbite Maker".

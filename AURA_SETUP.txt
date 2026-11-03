@@ -30,7 +30,7 @@ KYA HAI?
 
 IMPORTANT (sach)
 - Ye rule-based "AI" hai: koi external AI model / API use nahi hota, isliye kharcha zero hai aur data phone se bahar nahi jata.
-  Asli generative AI (photo se avatar, AI se likha aura) ke liye Netlify function + AI API key chahiye hogi - alag step.
+  Asli generative AI (photo se avatar, AI se likha aura) ke liye Cloudflare worker function + AI API key chahiye hogi - alag step.
 - "Music taste" ke liye abhi app mein music-listening data nahi hai, isliye ye aap ke "Music" category ke videos se nikalta hai.
 
 STEP 1 - FIREBASE RULES [2 minute]
@@ -39,7 +39,7 @@ STEP 1 - FIREBASE RULES [2 minute]
 - Koi index nahi chahiye.
 
 STEP 2 - DEPLOY
-- Web zip Netlify par drop karo (service-worker cache v78). Android app mein koi change nahi chahiye
+- Web zip GitHub par push karo (service-worker cache v78). Android app mein koi change nahi chahiye
   (Android zip sirf Near Me ke liye pehle wali hi use hoti hai).
 
 TEST

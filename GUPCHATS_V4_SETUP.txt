@@ -14,7 +14,7 @@ WHAT TO PUBLISH (in this order)
                                    (only change: the person being called may also write calleeRinging / calleeBeat,
                                     so the caller sees "Ringing" when the callee's page is open)
 2) worker/genzura-worker-all.js -> redeploy the Cloudflare worker (arain-api...workers.dev)
-                                   (call pushes now also reach Gupchats phones + carry callId). netlify/functions/push.js kept in sync.
+                                   (call pushes now also reach Gupchats phones + carry callId).
 3) the web zip (gupchats/index.html) -> publish as usual
 4) Gupchats Android: build the new gupchatts project (versionCode 3 / 1.2) and install. The app asks for Camera
    permission the first time you start a video call. Notifications permission must be ON to ring when closed.

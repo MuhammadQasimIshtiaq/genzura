@@ -36,7 +36,7 @@ function cors(env) {
 const out = (env, code, o) =>
   new Response(JSON.stringify(o), { status: code, headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ...cors(env) } });
 
-/* --- Firebase ID token check (same as the Netlify version) --- */
+/* --- Firebase ID token check (Firebase ID token verification) --- */
 async function verifyUser(request, env) {
   const idToken = (request.headers.get("Authorization") || "").replace(/^Bearer /i, "").trim();
   if (!idToken) return { err: "no token" };
@@ -570,7 +570,7 @@ async function rkHandle(request, env) {
    Optional variable: ANON_SALT (lamba random text; na dein to client email use hota hai)
 ================================================================ */
 const anEnc = new TextEncoder();
-const AN_ORIGINS = ["https://gupzy.com", "https://www.gupzy.com", "https://genzura.netlify.app", "https://genzura.muhammadqasimishtiaq0604.workers.dev"]; /* new domain + old links, so nothing breaks while moving */
+const AN_ORIGINS = ["https://gupzy.com", "https://www.gupzy.com", "https://genzura.muhammadqasimishtiaq0604.workers.dev"]; /* new domain + old links, so nothing breaks while moving */
 const AN_MAX = 300, AN_COOLDOWN_MS = 30000, AN_IP_PER_HOUR = 20, AN_TO_PER_HOUR = 100, AN_HOUR = 3600000;
 
 function anB64u(bytes) {
@@ -757,11 +757,11 @@ async function mmRun(env) {
 }
 
 /* ================================================================
-   CONTACTS + TRANSLATE  (ported from netlify/functions/contacts.js and translate.js)
+   CONTACTS + TRANSLATE  (contacts + translate endpoints)
      POST /contacts   {action: register | sync | clear | savedCount}
      POST /translate  {text, to: "ur" | "roman" | "en"}
    Both need  Authorization: Bearer <Firebase ID token>.
-   Uses the SAME secrets as the rest of this worker (FIREBASE_*). Optional: CONTACTS_PEPPER (copy it from Netlify ONLY if it was set there).
+   Uses the SAME secrets as the rest of this worker (FIREBASE_*). Optional: CONTACTS_PEPPER (set it only if it was set on the old host).
    ================================================================ */
 const CT_KEY_DEFAULT = "AIzaSyATkLM81knrj_enQUsg1L9XRXt9_jdvL0w"; /* public web key, same as the other routes */
 const CT_H = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -771,7 +771,7 @@ const ctHex = (buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16)
 const ctSha = async (s) => ctHex(await crypto.subtle.digest("SHA-256", anEnc.encode(s)));
 const CT_MAX_HASHES = 5000;
 
-/* same normalised PEM text the Netlify version used as fallback pepper (keeps old hashes valid) */
+/* same normalised PEM text used as the legacy fallback pepper (keeps old hashes valid) */
 function ctPem(rawIn) {
   let raw = String(rawIn || "").trim();
   if (raw.startsWith('"') && raw.endsWith('"')) raw = raw.slice(1, -1);

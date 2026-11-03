@@ -1,4 +1,4 @@
-/* Cloudflare Workers entry: serves the static site (index.html etc.) and replaces the Netlify _redirects proxy rules. */
+/* Cloudflare Workers entry: serves the static site (index.html etc.) and proxies the Firebase login pages and the sitemap. */
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);

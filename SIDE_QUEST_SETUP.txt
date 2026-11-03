@@ -10,7 +10,7 @@ KYA HAI?
   Clip post karne se pehle "sab ne OK kaha" checkbox lazmi hai.
 
 STEPS
-1) Netlify par poora folder deploy karo (index.html + service-worker.js badle; cache v83).
+1) GitHub par poora folder push karo (index.html + service-worker.js badle; cache v83).
 2) Firebase Console -> Firestore -> Rules: firestore.rules ka naya poora content paste karke Publish.
    Naye collections: sideQuests (uid_YYYY-MM-DD), questPoints (uid). Koi index nahi chahiye. Koi function/worker nahi.
 3) Test: do alag din ya quest complete karke points + streak check karo; dubara same din post kare to rules reject karte hain.

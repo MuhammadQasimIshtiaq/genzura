@@ -20,7 +20,7 @@
 <meta property="og:type" content="website">
 
 <!-- Structured data — tells Google the site's real name + logo, instead of
-     falling back to the netlify.app hosting platform's name -->
+     falling back to the hosting platform's name -->
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -159,7 +159,7 @@
       } else {
         try{ sessionStorage.removeItem(KEY); }catch(e){}
         el.innerHTML = box + '\u26a0\ufe0f Could not load.<br>Please check your internet connection.<br><br><button onclick="location.reload()" style="padding:10px 22px;border:0;border-radius:20px;background:#ff3b4e;color:#fff;font-weight:700;font-size:14px;">Retry</button>'
-          + (__isAdminDev() ? '<br><br><span style="font-size:11px;opacity:.7">If this keeps happening: the site may be paused (Netlify credits) or not hosted online.</span>' : '') + '</div>';
+          + (__isAdminDev() ? '<br><br><span style="font-size:11px;opacity:.7">If this keeps happening: the site may be paused or not hosted online.</span>' : '') + '</div>';
       }
     }, 12000);
     /* app started fine -> reset the counter */
@@ -1705,8 +1705,8 @@ nav{border-top:1px solid var(--border);padding:8px 0 12px;}
 ================================================================ */
 const firebaseConfig = {
   apiKey: "AIzaSyATkLM81knrj_enQUsg1L9XRXt9_jdvL0w",
-  /* login handler lives on our own domain; old Netlify link keeps working, other hosts (e.g. workers.dev test link) use Firebase's own domain */
-  authDomain: (function(h){ return (h==='gupzy.com'||h==='www.gupzy.com'||h==='genzura.netlify.app'||h==='genzura.muhammadqasimishtiaq0604.workers.dev') ? h : 'arain-tube-672a1.firebaseapp.com'; })(location.hostname),
+  /* login handler lives on our own domain; other hosts (e.g. workers.dev test link) use Firebase's own domain */
+  authDomain: (function(h){ return (h==='gupzy.com'||h==='www.gupzy.com'||h==='genzura.muhammadqasimishtiaq0604.workers.dev') ? h : 'arain-tube-672a1.firebaseapp.com'; })(location.hostname),
   projectId: "arain-tube-672a1",
   storageBucket: "arain-tube-672a1.firebasestorage.app",
   messagingSenderId: "649325973427",
@@ -1737,12 +1737,12 @@ let currentChannel = null;
    Find your UID in Firebase Console → Authentication → your account → User UID. */
 const ADMIN_UIDS = ['zLq96Q4K6iNJoUHDxrE0GwBL1vk1'];
 let shortsData = [];
-/* Backend for push + calls: the Netlify functions (/.netlify/functions/push and /turn). */
+/* Backend for push + calls: the arain-api Cloudflare worker (/push and /turn). */
 const AT_API_BASE = 'https://arain-api.muhammadqasimishtiaq0604.workers.dev';
-function atFn(name){ return AT_API_BASE ? AT_API_BASE.replace(/\/+$/, '') + '/' + name : '/.netlify/functions/' + name; }
+function atFn(name){ return AT_API_BASE.replace(/\/+$/, '') + '/' + name; }
 /* Views are saved straight from the phone (no country). Empty = this built-in behaviour. */
 const AT_VIEWS_BASE = 'https://arain-api.muhammadqasimishtiaq0604.workers.dev';
-/* TURN credentials are cached on the phone for 12 h, so the Netlify "turn" function runs ~2x a day per user instead of on every app open / call */
+/* TURN credentials are cached on the phone for 12 h, so the "turn" endpoint runs ~2x a day per user instead of on every app open / call */
 function iceCacheGet(){ try{ const o = JSON.parse(localStorage.getItem('at_ice') || 'null'); return (o && o.v && Date.now() - o.t < 12*3600*1000) ? o.v : null; }catch(e){ return null; } }
 function iceCacheSet(v){ try{ localStorage.setItem('at_ice', JSON.stringify({ t: Date.now(), v })); }catch(e){} }
 /* ---- badges everywhere: any element with data-bduid="<uid>" gets that channel's badges (admin / blue / silver / gold / diamond) ---- */
@@ -7040,7 +7040,7 @@ if('serviceWorker' in navigator){
   }
 
   /* ---------- caller ---------- */
-  /* fetch fresh TURN servers (free Netlify function) so calls work across different mobile networks */
+  /* fetch fresh TURN servers (API worker) so calls work across different mobile networks */
   let iceAt = 0;
   async function loadIce(){
     if(Date.now() - iceAt < 6*3600*1000) return;
@@ -9583,7 +9583,7 @@ $('dmMsgs')&&$('dmMsgs').addEventListener('click',async e=>{const m=e.target.clo
     else if(perm==='denied' && fromUser) toast('Notifications are blocked in your browser settings');
   }
   window.enablePush = enablePush;
-  /* ask the free Netlify function to deliver the push (no Firebase Blaze needed) */
+  /* ask the API worker to deliver the push (no Firebase Blaze needed) */
   window.atPush = async function(payload){
     try{
       if(!currentUser) return;
@@ -9632,7 +9632,7 @@ $('dmMsgs')&&$('dmMsgs').addEventListener('click',async e=>{const m=e.target.clo
   if(!/Android/i.test(ua)) return;
   if(window.AndroidAuth) return;
   try{ if(window.matchMedia('(display-mode: standalone)').matches) return; }catch(e){}
-  /* The APK is no longer hosted on this site (saves Netlify credits).
+  /* The APK is no longer hosted on this site (saves hosting bandwidth).
      Put a direct download link here (Google Drive / GitHub Releases ...). While empty, the banner stays hidden. */
   var APK_URL = 'https://drive.google.com/uc?export=download&id=1JFOPyR1BybyOzqaHoCjssheWi-FEf7Ix';
   var el = document.getElementById('apkBanner');
@@ -10677,7 +10677,7 @@ function openATStudioApp(tab){
      You get 2 minutes to post what you are doing RIGHT NOW: back camera + front camera, live camera only, no filters.
      You can see your friends' (mutual followers) moments after you have posted yours.
      Firestore collection: moments/{uid_YYYY-MM-DD} {uid,name,logoURL,day,backURL,frontURL,caption,late,momentAt,createdAt}
-     (rules: see REAL_MOMENTS_SETUP.txt). The daily time must match netlify/functions/moment-push.js (same hash). -->
+     (rules: see REAL_MOMENTS_SETUP.txt). The daily time must match the moment-push worker (same hash). -->
 <style id="rmCss">
   .rm-ov{position:fixed;inset:0;z-index:99996;background:var(--bg);color:var(--text);display:flex;flex-direction:column;max-width:560px;margin:0 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;}
   .rm-ov.hidden{display:none !important;}
@@ -11137,7 +11137,7 @@ function openATStudioApp(tab){
 
 <!-- ===================== MOOD STATUS + DO-NOT-DISTURB + CREATOR TIP JAR =====================
      Firestore: presence/{uid} (mood + quiet hours), tipJars/{uid} (EasyPaisa / JazzCash numbers).  Rules: firestore.rules
-     Quiet hours are also enforced on the server (netlify/functions/push.js) so a sleeping phone stays silent. -->
+     Quiet hours are also enforced on the server (API worker push) so a sleeping phone stays silent. -->
 <style id="gzCss">
   .gz-pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;padding:3px 10px;border-radius:99px;background:var(--surface2,#eee);color:var(--text);margin-left:8px;vertical-align:middle;white-space:nowrap;cursor:default;}
   .gz-pill.own{cursor:pointer;}
@@ -11421,7 +11421,7 @@ function openATStudioApp(tab){
 
 
 <!-- ===================== CHAT SELF-DESTRUCT TIMER + PUBLIC Q&A PAGE + TRANSLATE BUTTON =====================
-     chats/{id}.ttl / ttlSince  |  qa/{id}  |  /.netlify/functions/translate    (rules: firestore.rules) -->
+     chats/{id}.ttl / ttlSince  |  qa/{id}  |  /translate    (rules: firestore.rules) -->
 <style id="gz2Css">
   #chatTtl{font-size:17px;line-height:1;} #chatTtl small{font-size:9px;font-weight:800;display:block;margin-top:1px;color:var(--accent,#ec2b8e);}
   .gz-tr{font-size:12px;font-weight:700;color:var(--accent2,#4a5cff);cursor:pointer;display:inline-block;margin:2px 8px 2px 0;}

@@ -18,7 +18,7 @@ service cloud.firestore {
     // follow helpers
     function subPath(a, b) { return /databases/$(database)/documents/subscriptions/$(a + '_' + b); }
     function followsBoth(a, b) { return exists(subPath(a, b)) && exists(subPath(b, a)); }
-    // mutual phone-contacts link (written ONLY by the Netlify function 'contacts'; doc id = sorted "uidA_uidB")
+    // mutual phone-contacts link (written ONLY by the API worker 'contacts'; doc id = sorted "uidA_uidB")
     function contactPath(a, b) { return /databases/$(database)/documents/contactLinks/$(a < b ? a + '_' + b : b + '_' + a); }
     // chat / call allowed when both follow each other OR are in each other's phone contacts
     function canTalk(a, b) { return followsBoth(a, b) || exists(contactPath(a, b)); }
