@@ -547,7 +547,7 @@ async function initKeys(){
   try{ var d=await db.collection('keyBackups').doc(me.uid).get(); bk=d.exists?d.data():null; }catch(e){}
   try{ var d2=await db.collection('userKeys').doc(me.uid).get(); pubDoc=d2.exists?d2.data().pub:null; }catch(e){}
   srvPub=pubDoc;
-  var DBG=function(t){ try{ toast('KEY v3: '+t); }catch(e){} };
+  var DBG=function(t){ try{ console.log('KEY v3: '+t); }catch(e){} };
   DBG('start, local key '+(rec&&rec.priv?'YES':'NO')+', backup '+(bk?'YES':'NO')+', server key '+(pubDoc?'YES':'NO')+(rec&&pubDoc?(rec.pub===pubDoc?', SAME':', DIFFERENT'):''));
   if(rec && rec.priv){
     myKP={ priv:rec.priv, pub:rec.pub, old:old };
@@ -579,7 +579,8 @@ async function peerPub(uid){
   return p;
 }
 /* every public key the peer ever published (a sender key must be one of them) */
-async function knownPubs(uid){
+async function knownPubs(uid, fresh){
+  if(fresh) ppCache.delete(uid);
   var cur=await peerPub(uid), list=(await idbGet('p_'+uid))||[];
   if(cur && list.indexOf(cur)<0){ list=list.concat([cur]); await idbSet('p_'+uid,list); }
   return { cur:cur, list:list };
@@ -602,9 +603,12 @@ async function encPayload(chatId, peerUid, obj){
 async function openMsg(chatId, peerUid, m){
   try{
     var kp=await knownPubs(peerUid), mine=m.from===me.uid, theirs=mine?m.rpk:m.spk;
-    if(!mine && kp.list.indexOf(m.spk)<0) return null;     /* sender key not published by that person */
-    var key=await skey(theirs, kfor(mine?m.spk:m.rpk));
-    var pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(m.iv),additionalData:te.encode(chatId)}, key, unb64(m.ct));
+    if(!mine && kp.list.indexOf(m.spk)<0){ kp=await knownPubs(peerUid,true); if(kp.list.indexOf(m.spk)<0) return null; }   /* sender key not published by that person (re-checked fresh from server) */
+    var pt=null, mk=kfor(mine?m.spk:m.rpk), tries=[mk].concat([myKP].concat(myKP.old||[]).filter(function(k){ return k!==mk; }));
+    for(var ti=0;ti<tries.length && !pt;ti++){
+      try{ var key=await skey(theirs, tries[ti]); pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(m.iv),additionalData:te.encode(chatId)}, key, unb64(m.ct)); }catch(e){ pt=null; }
+    }
+    if(!pt) return null;
     var o=JSON.parse(td.decode(pt)); o.t=(o.t==null)?'':String(o.t); return o;
   }catch(e){ return null; }
 }
@@ -1979,9 +1983,10 @@ async function openGroupMsg(chatId, m){
     var w=m.keys && m.keys[me.uid]; if(!w) return null;
     var th;
     if(m.from===me.uid) th=w.pk;
-    else{ var kp=await knownPubs(m.from); if(kp.list.indexOf(m.spk)<0) return null; th=m.spk; }   /* sender key must be one the sender published */
-    var wk=await skey(th, kfor(w.pk));
-    var raw=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(w.wi),additionalData:te.encode(chatId+'|'+me.uid)}, wk, unb64(w.w));
+    else{ var kp=await knownPubs(m.from); if(kp.list.indexOf(m.spk)<0){ kp=await knownPubs(m.from,true); if(kp.list.indexOf(m.spk)<0) return null; } th=m.spk; }   /* sender key must be one the sender published */
+    var raw=null, gk=kfor(w.pk), gtries=[gk].concat([myKP].concat(myKP.old||[]).filter(function(k){ return k!==gk; }));
+    for(var gi=0;gi<gtries.length && !raw;gi++){ try{ var wk=await skey(th, gtries[gi]); raw=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(w.wi),additionalData:te.encode(chatId+'|'+me.uid)}, wk, unb64(w.w)); }catch(e){ raw=null; } }
+    if(!raw) return null;
     var cek=await crypto.subtle.importKey('raw', raw, {name:'AES-GCM'}, false, ['decrypt']);
     var pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(m.iv),additionalData:te.encode(chatId)}, cek, unb64(m.ct));
     var o=JSON.parse(td.decode(pt)); o.t=(o.t==null)?'':String(o.t);
