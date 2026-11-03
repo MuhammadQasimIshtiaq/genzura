@@ -607,14 +607,14 @@ async function encPayload(chatId, peerUid, obj){
 async function openMsg(chatId, peerUid, m){
   try{
     var kp=await knownPubs(peerUid), mine=m.from===me.uid, theirs=mine?m.rpk:m.spk;
-    if(!mine && kp.list.indexOf(m.spk)<0){ kp=await knownPubs(peerUid,true); if(kp.list.indexOf(m.spk)<0) return null; }   /* sender key not published by that person (re-checked fresh from server) */
+    if(!mine && kp.list.indexOf(m.spk)<0){ kp=await knownPubs(peerUid,true); if(kp.list.indexOf(m.spk)<0){ m.__why='sender key not published'; return null; } }   /* sender key not published by that person (re-checked fresh from server) */
     var pt=null, mk=kfor(mine?m.spk:m.rpk), tries=[mk].concat([myKP].concat(myKP.old||[]).filter(function(k){ return k!==mk; }));
     for(var ti=0;ti<tries.length && !pt;ti++){
       try{ var key=await skey(theirs, tries[ti]); pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(m.iv),additionalData:te.encode(chatId)}, key, unb64(m.ct)); }catch(e){ pt=null; }
     }
-    if(!pt) return null;
+    if(!pt){ m.__why='no matching key on this device (my key '+(myKP&&myKP.pub?myKP.pub.slice(0,6):'?')+', msg for '+String(m.rpk||'').slice(0,6)+', server '+String(srvPub||'').slice(0,6)+')'; return null; }
     var o=JSON.parse(td.decode(pt)); o.t=(o.t==null)?'':String(o.t); return o;
-  }catch(e){ return null; }
+  }catch(e){ m.__why='error: '+(e&&e.message||e); return null; }
 }
 
 /* ---------------- media: encrypted on the phone, hosted on Cloudinary (same as Gupzy) ---------------- */
@@ -1362,7 +1362,7 @@ async function parseMsg(m, peerUid, chatId){
   if(isG && !base.mine){ var gi=(chats[chatId]&&chats[chatId].info&&chats[chatId].info[m.from])||{}; base.sn=String(gi.name||m.fromName||'User'); }
   var o=null;
   if(m.enc===2){ o=await openGroupMsg(chatId, m); if(!o) return Object.assign(base,{kind:'lock'}); }
-  else if(m.enc){ o=await openMsg(chatId, peerUid, m); if(!o) return Object.assign(base,{kind:'lock'}); }
+  else if(m.enc){ o=await openMsg(chatId, peerUid, m); if(!o) return Object.assign(base,{kind:'lock',why:m.__why||''}); }
   var ty=m.type||'text';
   if(ty==='text' && !m.enc && m.postId){ return Object.assign(base,{ kind:'post', postId:String(m.postId), text:String(m.text||'\uD83D\uDCCE Post') }); }   /* a post shared from Gupzy */
   if(ty==='text'){ return Object.assign(base,{ kind:'text', text:m.enc?o.t:String(m.text||''), q:(o&&o.q)||'' }); }
@@ -1387,7 +1387,7 @@ async function renderMsgs(snap, tok){
     var side=m.mine?'me':'th';
     if(m.kind==='sys'){ html+='<div class="tm">'+esc(m.text)+'</div>'; return; }
     var sn=m.sn?'<div class="sn">'+esc(m.sn)+'</div>':'';
-    if(m.kind==='lock'){ html+='<div class="b '+side+' lock">'+sn+'🔒 Can’t read this message</div>'; return; }
+    if(m.kind==='lock'){ html+='<div class="b '+side+' lock">'+sn+'🔒 Can’t read this message'+(m.why?'<div style="font-size:10px;opacity:.6;font-style:normal">'+esc(m.why)+'</div>':'')+'</div>'; return; }
     if(m.kind==='post'){ html+='<div class="b '+side+' post" data-post="'+esc(m.postId)+'">'+sn+'<div class="pth" data-pid="'+esc(m.postId)+'"><div class="ph">\uD83D\uDCCE</div></div><div class="pt">'+esc(m.text)+'</div><div class="ps">Tap to view post</div></div>'; return; }
     if(m.media){ mediaSpec.set(m.media.u,m.media); MSGTXT[m.id]={t:(m.media.kind==='img'?'📷 Photo':m.media.kind==='vid'?'🎥 Video':'🎤 Voice message'),n:m.mine?'You':(m.sn||peer.name||''),mine:m.mine,rx:m.rx}; html+='<div class="b '+side+' media" data-mid="'+esc(m.id)+'">'+sn+mediaInner(m.media)+rxHtml(m)+'</div>'; if(m.media.enc && !mediaUrls.has(m.media.u)) toLoad.push(m.media); return; }
     MSGTXT[m.id]={t:m.text,n:m.mine?'You':(m.sn||peer.name||''),mine:m.mine,rx:m.rx}; html+='<div class="b '+side+'" data-mid="'+esc(m.id)+'">'+sn+(m.q?'<div class="rq">'+esc(m.q)+'</div>':'')+esc(m.text)+rxHtml(m)+'</div>';
