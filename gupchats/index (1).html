@@ -523,6 +523,7 @@ async function backupSheet(first){
   };
 }
 async function initKeys(){
+  try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}   /* keep the key storage from being evicted */
   var rec=await idbGet('k_'+me.uid), old=(await idbGet('o_'+me.uid))||[], bk=null, pubDoc=null;
   try{ var d=await db.collection('keyBackups').doc(me.uid).get(); bk=d.exists?d.data():null; }catch(e){}
   try{ var d2=await db.collection('userKeys').doc(me.uid).get(); pubDoc=d2.exists?d2.data().pub:null; }catch(e){}
@@ -532,7 +533,9 @@ async function initKeys(){
     if(!pubDoc){ await publishPub(myKP); }
     else if(pubDoc!==rec.pub){
       /* the key published for this account is a different one (it was changed in Gupzy): never overwrite it, restore it instead */
-      if(bk){ var r0=await restoreFlow(bk); if(r0){ myKP=r0; backupState='on'; } }
+      var rsKey='gc_rs_'+me.uid, rsDone=false; try{ rsDone=(localStorage.getItem(rsKey)===pubDoc); }catch(e){}
+      if(rsDone){ backupState = bk ? 'on' : 'off'; }   /* password was already entered once for this key: never ask again on every open */
+      else if(bk){ var r0=await restoreFlow(bk); if(r0){ myKP=r0; backupState='on'; } try{ localStorage.setItem(rsKey,pubDoc); }catch(e){} }
       else toast('Your chat key differs from Gupzy. Make a Chat backup in Gupzy, then reopen Gupchats.');
     }
     return;
