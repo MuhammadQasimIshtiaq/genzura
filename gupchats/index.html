@@ -377,7 +377,7 @@ hr{border:0;border-top:1px solid var(--border);margin:8px 0}
 <script>
 (function(){
 'use strict';
-var CFG = {"apiKey": "AIzaSyATkLM81knrj_enQUsg1L9XRXt9_jdvL0w", "authDomain": "arain-tube-672a1.firebaseapp.com", "projectId": "arain-tube-672a1", "storageBucket": "arain-tube-672a1.firebasestorage.app", "messagingSenderId": "649325973427", "appId": "1:649325973427:web:8021eab6a361352f7ec5c6"};
+var CFG = {"apiKey": "AIzaSyATkLM81knrj_enQUsg1L9XRXt9_jdvL0w", "authDomain": (function(h){ return (h==='gupzy.com'||h==='www.gupzy.com'||h==='genzura.netlify.app'||h==='genzura.muhammadqasimishtiaq0604.workers.dev') ? h : 'arain-tube-672a1.firebaseapp.com'; })(location.hostname), "projectId": "arain-tube-672a1", "storageBucket": "arain-tube-672a1.firebasestorage.app", "messagingSenderId": "649325973427", "appId": "1:649325973427:web:8021eab6a361352f7ec5c6"};
 firebase.initializeApp(CFG);
 var auth = firebase.auth(), db = firebase.firestore(), FV = firebase.firestore.FieldValue, TS = firebase.firestore.Timestamp;
 var $ = function(id){ return document.getElementById(id); };
