@@ -556,9 +556,12 @@ async function initKeys(){
     else if(pubDoc!==rec.pub){
       /* the key published for this account is a different one (it was changed in Gupzy): never overwrite it, restore it instead */
       var rsKey='gc_rs_'+me.uid, rsDone=false; try{ rsDone=(localStorage.getItem(rsKey)===pubDoc); }catch(e){}
-      if(rsDone){ backupState = bk ? 'on' : 'off'; }   /* password was already entered once for this key: never ask again on every open */
+      var oi=-1; for(var q=0;q<old.length;q++){ if(old[q] && old[q].pub===pubDoc){ oi=q; break; } }
+      if(oi>=0){ var okp=old[oi]; myKP={ priv:okp.priv, pub:okp.pub, old:[{priv:rec.priv,pub:rec.pub}].concat(old.filter(function(x,i){ return i!==oi; })) }; backupState = bk ? 'on' : 'off'; }
+      else if(rsDone && myKP.pub===pubDoc){ backupState = bk ? 'on' : 'off'; }
       else if(bk){ var r0=await restoreFlow(bk); if(r0){ myKP=r0; backupState='on'; } try{ localStorage.setItem(rsKey,pubDoc); }catch(e){} }
       else toast('Your chat key differs from Gupzy. Make a Chat backup in Gupzy, then reopen Gupchats.');
+      if(myKP.pub!==pubDoc){ try{ localStorage.removeItem(rsKey); }catch(e){} }
     }
     return;
   }
@@ -595,6 +598,7 @@ async function skey(pubB64, k){
 function kfor(p){ var all=[myKP].concat(myKP.old||[]); for(var i=0;i<all.length;i++){ if(all[i].pub===p) return all[i]; } return myKP; }
 /* payload = {t:text, q:quote, m:media info}; the chat id is bound to the ciphertext (same as Gupzy) */
 async function encPayload(chatId, peerUid, obj){
+  if(srvPub && myKP.pub!==srvPub) throw new Error('keymismatch');
   var pp=await peerPub(peerUid); if(!pp) throw new Error('nokey');
   var key=await skey(pp), iv=crypto.getRandomValues(new Uint8Array(12));
   var ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:iv,additionalData:te.encode(chatId)}, key, te.encode(JSON.stringify(obj)));
@@ -1423,13 +1427,15 @@ async function sendMsgG(peer, id, base, payload){
 }
 function sendErr(err,peer){
   if(peer && peer.group){
-    if(err && err.message==='nokey') toast('Some group members have not updated Gupzy yet, so this cannot be sent encrypted');
+    if(err && err.message==='keymismatch') toast('Your chat key differs from Gupzy, so people cannot read this. Reopen Gupchats and enter your backup password.');
+    else if(err && err.message==='nokey') toast('Some group members have not updated Gupzy yet, so this cannot be sent encrypted');
     else if(err && err.message==='notmember') toast('You are not in this group any more');
     else if(err && /permission/i.test(err.message||'')) toast('This group is locked or you are no longer a member.');
     else toast('Send failed: '+(err&&err.message||err));
     return;
   }
-  if(err && err.message==='nokey') toast(peer.name+' has not updated Gupzy yet, so this cannot be sent encrypted');
+  if(err && err.message==='keymismatch') toast('Your chat key differs from Gupzy, so people cannot read this. Reopen Gupchats and enter your backup password.');
+  else if(err && err.message==='nokey') toast(peer.name+' has not updated Gupzy yet, so this cannot be sent encrypted');
   else if(err && err.message==='blocked') toast('You can’t message this user');
   else if(err && /permission/i.test(err.message||'')) toast('You can only message friends (follow each other).');
   else toast('Send failed: '+(err&&err.message||err));
@@ -1995,6 +2001,7 @@ async function openGroupMsg(chatId, m){
   }catch(e){ return null; }
 }
 async function encGroup(chatId, members, obj){
+  if(srvPub && myKP.pub!==srvPub) throw new Error('keymismatch');
   var l=Array.from(new Set(members.concat([me.uid])));
   var pubs=await Promise.all(l.map(function(u){ return u===me.uid ? Promise.resolve(myKP.pub) : peerPub(u); }));
   if(pubs.some(function(x){ return !x; })) throw new Error('nokey');
