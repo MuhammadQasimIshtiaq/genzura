@@ -2791,9 +2791,10 @@ function renderEarnTab(){
   const recentReferrals = myReferrals.filter(r => r.createdAt && r.createdAt.toMillis() >= sevenDaysAgo).length;
 
   const criteria = [
+    { label: 'Upload 7 reels (last 7 days)', have: recentReels.length, need: 7 },
     { label: 'Get 7 followers (last 7 days)', have: recentFollowers, need: 7 },
-    { label: 'Get 70 views (last 7 days)', have: totalViews, need: 70 },
-    { label: 'Refer 3 new channels (last 7 days)', have: recentReferrals, need: 3 },
+    { label: 'Watch 1000 reels (3+ seconds each, last 7 days)', have: gzWatched7(), need: 1000 },
+    { label: 'Refer 5 new channels (last 7 days)', have: recentReferrals, need: 5 },
   ];
 
   const allDone = criteria.every(c => c.have >= c.need);
@@ -3494,6 +3495,8 @@ function releaseFarVideos(activeSlide){
    One signal doc per user per video per type (videoSignals/{uid}_{videoId}_{type}); the counters on the video
    change in the same batch, and firestore.rules only allow the counter change if that signal doc is created with it. */
 /* monetization: a reel counts as "watched" once it stayed on screen 3 seconds (each reel once per day, summed over 7 days in Studio) */
+/* watched reels (3+ seconds each) of the last 7 days: same counter Gupzy Studio uses */
+function gzWatched7(){ const wd=(currentChannel&&currentChannel.watchDays)||{}; let w=0; for(let i=0;i<7;i++){ const t=new Date(Date.now()-i*86400000), k=t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0'); w+=wd[k]||0; } return w; }
 window.gzReelWatched = function(id){
   try{
     if(!currentUser || !id) return;
@@ -9820,9 +9823,10 @@ function openEarnLite(){
       <div id="earnLiteEst"><button id="earnLiteEstBtn" style="width:100%;padding:11px;border:0;border-radius:22px;background:var(--green,#2fbf71);color:#fff;font-weight:700;font-size:14px;cursor:pointer;">Show estimated earnings this month</button></div></div>`;
   }else{
     const crit = [
+      ['Upload 7 reels (last 7 days)', vids.filter(v=>v.createdAt && v.createdAt.toMillis && v.createdAt.toMillis()>=wk).length, 7],
       ['Get 7 followers (last 7 days)', wkFollowers, 7],
-      ['Get 70 views (last 7 days)', wkViews, 70],
-      ['Refer 3 new channels (last 7 days)', wkRefs, 3]
+      ['Watch 1000 reels (3+ seconds each, last 7 days)', gzWatched7(), 1000],
+      ['Refer 5 new channels (last 7 days)', wkRefs, 5]
     ];
     const allDone = crit.every(c=>c[1]>=c[2]);
     body += `<div style="${card}"><div style="font-weight:700;margin-bottom:10px;">${allDone ? '🎉 You are eligible for monetization!' : 'Monetization — not yet eligible, keep going!'}</div>`
