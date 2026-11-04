@@ -8826,8 +8826,8 @@ function gzPinSheet(o){
     var bx=mk('div','background:#fff;color:#111;border-radius:18px;padding:22px 18px;width:100%;max-width:360px;font:14px/1.45 system-ui,sans-serif;text-align:center;box-sizing:border-box');
     var create=o.mode==='create', legacyOn=false;
     bx.appendChild(mk('div','font-size:34px;line-height:1','🔐'));
-    bx.appendChild(mk('div','font-weight:800;font-size:18px;margin:6px 0 4px',o.title||(create?'Chats ka PIN banao':'Chats ka PIN daalo')));
-    bx.appendChild(mk('div','color:#555;margin-bottom:14px',o.sub||(create?'6 number ka PIN banao (jaise 1234 56). Naye phone ya app dobara install karne par ye PIN sirf ek baar poocha jayega. PIN bhool gaye to purane messages wapas nahi aayenge.':'Apne chats kholne ke liye apna 6 number ka PIN daalo. Ye sirf ek baar poocha jata hai.')));
+    bx.appendChild(mk('div','font-weight:800;font-size:18px;margin:6px 0 4px',o.title||(create?'Create your chat PIN':'Enter your chat PIN')));
+    bx.appendChild(mk('div','color:#555;margin-bottom:14px',o.sub||(create?'Create a 6-digit PIN. It is asked only once on a new phone or after reinstalling the app. If you forget it, old messages cannot be recovered.':'Enter your 6-digit PIN to open your chats. It is asked only once on this device.')));
     function row(label){
       var wrap=mk('div','margin-bottom:10px');
       if(label) wrap.appendChild(mk('div','font-size:12px;color:#777;margin:2px 0 5px',label));
@@ -8845,10 +8845,10 @@ function gzPinSheet(o){
       var r={ el:wrap, bs:bs, changed:function(){ if(r.onch) r.onch(); }, get:function(){ return bs.map(function(b){ return b.value; }).join(''); }, clear:function(){ bs.forEach(function(b){ b.value=''; }); }, focus:function(){ bs[0].focus(); } };
       return r;
     }
-    var r1=row(create?'Naya PIN':''), r2=create?row('PIN dobara daalo'):null;
-    var lg=mk('input','width:100%;box-sizing:border-box;padding:12px;border:1.5px solid #bbb;border-radius:10px;font-size:15px;margin-bottom:10px;display:none'); lg.type='password'; lg.placeholder='Purana backup password'; lg.autocomplete='off';
+    var r1=row(create?'New PIN':''), r2=create?row('Repeat PIN'):null;
+    var lg=mk('input','width:100%;box-sizing:border-box;padding:12px;border:1.5px solid #bbb;border-radius:10px;font-size:15px;margin-bottom:10px;display:none'); lg.type='password'; lg.placeholder='Old backup password'; lg.autocomplete='off';
     var em=mk('div','color:#d93025;min-height:18px;font-size:13px;margin:2px 0 8px');
-    var go=mk('button','width:100%;border:0;border-radius:12px;padding:13px;font-weight:700;font-size:15px;background:#1a73e8;color:#fff;cursor:pointer',create?'PIN banao':'Kholo');
+    var go=mk('button','width:100%;border:0;border-radius:12px;padding:13px;font-weight:700;font-size:15px;background:#1a73e8;color:#fff;cursor:pointer',create?'Create PIN':'Unlock');
     bx.appendChild(r1.el); if(r2) bx.appendChild(r2.el); bx.appendChild(lg); bx.appendChild(em); bx.appendChild(go);
     var busy=false;
     function sec(){ return legacyOn?lg.value:r1.get(); }
@@ -8856,20 +8856,20 @@ function gzPinSheet(o){
     function refresh(){ go.disabled=busy||!ready(); go.style.opacity=go.disabled?'.5':'1'; }
     function run(){
       if(busy||!ready()) return; em.style.color='#555';
-      if(create&&!legacyOn&&r1.get()!==r2.get()){ em.style.color='#d93025'; em.textContent='Dono PIN same nahi hain'; r2.clear(); r2.focus(); refresh(); return; }
-      busy=true; refresh(); em.textContent='Ruko… (kuch second lagte hain)'; var secret=sec();
+      if(create&&!legacyOn&&r1.get()!==r2.get()){ em.style.color='#d93025'; em.textContent='PINs do not match'; r2.clear(); r2.focus(); refresh(); return; }
+      busy=true; refresh(); em.textContent='Please wait… (a few seconds)'; var secret=sec();
       Promise.resolve().then(function(){ return o.submit(secret); }).then(function(){ ov.remove(); resolve(true); }).catch(function(e){
         busy=false; em.style.color='#d93025';
-        em.textContent=(e&&e.message==='badpass')?'Galat PIN. Dobara koshish karo.':'Masla: '+((e&&e.message)||e);
+        em.textContent=(e&&e.message==='badpass')?'Wrong PIN. Try again.':'Problem: '+((e&&e.message)||e);
         if(!legacyOn){ r1.clear(); if(r2) r2.clear(); r1.focus(); } refresh();
       });
     }
     r1.onch=function(){ if(create&&r1.get().length===6&&!r2.get()) r2.focus(); if(!create&&r1.get().length===6) run(); refresh(); };
     if(r2) r2.onch=function(){ refresh(); };
     lg.oninput=refresh; go.onclick=run; lg.onkeydown=function(e){ if(e.key==='Enter') run(); };
-    if(!create&&o.legacy){ var lk=mk('div','color:#1a73e8;font-size:13px;margin-top:12px;cursor:pointer','Purana (lamba) password hai?'); lk.onclick=function(){ legacyOn=!legacyOn; r1.el.style.display=legacyOn?'none':''; lg.style.display=legacyOn?'':'none'; lk.textContent=legacyOn?'6 number wala PIN daalo':'Purana (lamba) password hai?'; go.textContent='Kholo'; em.textContent=''; refresh(); (legacyOn?lg:r1.bs[0]).focus(); }; bx.appendChild(lk); }
-    if(!create&&o.forgot){ var fg=mk('div','color:#d93025;font-size:13px;margin-top:10px;cursor:pointer','PIN yaad nahi? Naya PIN banao'); fg.onclick=function(){ if(busy) return; ov.style.display='none'; Promise.resolve(o.forgot()).then(function(v){ if(v){ ov.remove(); resolve(true); } else { ov.style.display='flex'; } }).catch(function(){ ov.style.display='flex'; }); }; bx.appendChild(fg); }
-    if(o.closable){ var cl=mk('div','color:#777;font-size:13px;margin-top:12px;cursor:pointer','Abhi nahi'); cl.onclick=function(){ if(busy) return; ov.remove(); resolve(false); }; bx.appendChild(cl); }
+    if(!create&&o.legacy){ var lk=mk('div','color:#1a73e8;font-size:13px;margin-top:12px;cursor:pointer','Have an old long password?'); lk.onclick=function(){ legacyOn=!legacyOn; r1.el.style.display=legacyOn?'none':''; lg.style.display=legacyOn?'':'none'; lk.textContent=legacyOn?'Use your 6-digit PIN':'Have an old long password?'; go.textContent='Unlock'; em.textContent=''; refresh(); (legacyOn?lg:r1.bs[0]).focus(); }; bx.appendChild(lk); }
+    if(!create&&o.forgot){ var fg=mk('div','color:#d93025;font-size:13px;margin-top:10px;cursor:pointer','Forgot PIN? Create a new one'); fg.onclick=function(){ if(busy) return; ov.style.display='none'; Promise.resolve(o.forgot()).then(function(v){ if(v){ ov.remove(); resolve(true); } else { ov.style.display='flex'; } }).catch(function(){ ov.style.display='flex'; }); }; bx.appendChild(fg); }
+    if(o.closable){ var cl=mk('div','color:#777;font-size:13px;margin-top:12px;cursor:pointer','Not now'); cl.onclick=function(){ if(busy) return; ov.remove(); resolve(false); }; bx.appendChild(cl); }
     ov.appendChild(bx); document.body.appendChild(ov); refresh(); setTimeout(function(){ try{ r1.focus(); }catch(e){} },60);
   });
 }
@@ -8886,14 +8886,14 @@ window.gzChatGate=function(){
       let st=await E2E.status(),flag=false,need=false;try{flag=localStorage.getItem(okKey)==='1';need=localStorage.getItem(needKey)==='1';}catch(e){}
       const synced=st.hasLocal&&(!st.srvPub||st.localPub===st.srvPub);
       if(synced&&!need&&(flag||st.backup)){mark();return true;}      /* already unlocked here (or an older account that already has a backup) */
-      const newPin=()=>gzPinSheet({mode:'create',title:'Naya PIN banao',submit:async pin=>{await E2E.resetKey(pin);mark();}});
+      const newPin=()=>gzPinSheet({mode:'create',title:'Create a new PIN',submit:async pin=>{await E2E.resetKey(pin);mark();}});
       if(st.backup){
         return await gzPinSheet({mode:'ask',legacy:true,closable:true,
-          submit:async pin=>{await E2E.restore(pin);mark();toast('✅ Chats khul gaye');},
-          forgot:async()=>{ if(!(await gzConfirm('Naya PIN banane par purane messages jo purani key se bane the wo wapas nahi khulenge. Nayi key bhi banegi aur backup khud save ho jayega. Aage barhein?','Naya PIN')))return false; return newPin(); }});
+          submit:async pin=>{await E2E.restore(pin);mark();toast('✅ Chats unlocked');},
+          forgot:async()=>{ if(!(await gzConfirm('Creating a new PIN means old messages made with the old key will not open again. A new key is created and the backup is saved automatically. Continue?','New PIN')))return false; return newPin(); }});
       }
-      return await gzPinSheet({mode:'create',closable:true,title:'Chats ka PIN banao',submit:async pin=>{ if(synced) await E2E.backup(pin); else await E2E.resetKey(pin); mark(); toast('✅ PIN ban gaya'); }});
-    }catch(e){toast('PIN setup fail: '+e.message);return false;}
+      return await gzPinSheet({mode:'create',closable:true,title:'Create your chat PIN',submit:async pin=>{ if(synced) await E2E.backup(pin); else await E2E.resetKey(pin); mark(); toast('✅ PIN created'); }});
+    }catch(e){toast('PIN setup failed: '+e.message);return false;}
     finally{window.__gzGateP=null;}
   })();
   return window.__gzGateP;
@@ -8919,8 +8919,8 @@ function askPass(title,sub,confirm){return new Promise(res=>{
   k.onclick=()=>{if(confirm){if(i1.value.length<10){em.textContent='Use at least 10 characters';return;}if(i1.value!==i2.value){em.textContent='Passwords do not match';return;}}if(!i1.value){em.textContent='Enter your password';return;}done(i1.value);};
 });}
 window.e2eeBackupUI=async function(){
-  if(window.__e2eStale&&!(await gzConfirm('Is account ka purana backup abhi restore nahi hua. Naya backup purane ko replace kar dega aur purane messages hamesha ke liye nahi khulenge. Pehle "Restore chat backup" try karein. Phir bhi naya backup banana hai?','Continue')))return;
-  await gzPinSheet({mode:'create',closable:true,title:'Chats ka PIN badlo',sub:'Naya 6 number ka PIN banao. Gupchats mein bhi yahi PIN chalega.',submit:async pin=>{await E2E.backup(pin);window.__gzPinDone=true;try{localStorage.setItem('gz_pin_ok_'+me(),'1');}catch(e){} toast('✅ PIN save ho gaya');}});
+  if(window.__e2eStale&&!(await gzConfirm('This account already has a chat backup that is not restored on this phone. Creating a new PIN will replace it and old messages will not open again. Try restoring first. Continue anyway?','Continue')))return;
+  await gzPinSheet({mode:'create',closable:true,title:'Change your chat PIN',sub:'Create a new 6-digit PIN. The same PIN works in Gupchats.',submit:async pin=>{await E2E.backup(pin);window.__gzPinDone=true;try{localStorage.setItem('gz_pin_ok_'+me(),'1');}catch(e){} toast('✅ PIN saved');}});
 };
 window.e2eeRestoreUI=async function(){
   await gzPinSheet({mode:'ask',legacy:true,closable:true,submit:async pin=>{await E2E.restore(pin);window.__gzPinDone=true;try{localStorage.setItem('gz_pin_ok_'+me(),'1');localStorage.removeItem('gz_pin_need_'+me());}catch(e){} toast('✅ Chat backup restored');if(typeof openId!=='undefined'&&openId)renderMsgs();}});

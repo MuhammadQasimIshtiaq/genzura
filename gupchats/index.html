@@ -559,8 +559,8 @@ function linkFlow(){
 /* set up / change the backup password */
 async function backupSheet(first){
   if(!myKP) return;
-  var ok=await gzPinSheet({ mode:'create', closable:true, title:'Chats ka PIN badlo', sub:'Naya 6 number ka PIN banao. Ye Gupzy ke saath same backup hai, dono jagah yahi PIN chalega.', submit:async function(pin){ await makeBackup(pin); } });
-  if(ok) toast('PIN save ho gaya ✓');
+  var ok=await gzPinSheet({ mode:'create', closable:true, title:'Change your chat PIN', sub:'Create a new 6-digit PIN. It is the same backup as Gupzy, so one PIN works in both apps.', submit:async function(pin){ await makeBackup(pin); } });
+  if(ok) toast('PIN saved ✓');
 }
 /* the password was right but the backup does NOT hold the key the server publishes (that private key is gone for good):
    the only real cure is to publish the key we DO have, so sending + all NEW messages work again. Old keys are kept to read what can still be read. */
@@ -579,8 +579,8 @@ function gzPinSheet(o){
     var bx=mk('div','background:#fff;color:#111;border-radius:18px;padding:22px 18px;width:100%;max-width:360px;font:14px/1.45 system-ui,sans-serif;text-align:center;box-sizing:border-box');
     var create=o.mode==='create', legacyOn=false;
     bx.appendChild(mk('div','font-size:34px;line-height:1','🔐'));
-    bx.appendChild(mk('div','font-weight:800;font-size:18px;margin:6px 0 4px',o.title||(create?'Chats ka PIN banao':'Chats ka PIN daalo')));
-    bx.appendChild(mk('div','color:#555;margin-bottom:14px',o.sub||(create?'6 number ka PIN banao (jaise 1234 56). Naye phone ya app dobara install karne par ye PIN sirf ek baar poocha jayega. PIN bhool gaye to purane messages wapas nahi aayenge.':'Apne chats kholne ke liye apna 6 number ka PIN daalo. Ye sirf ek baar poocha jata hai.')));
+    bx.appendChild(mk('div','font-weight:800;font-size:18px;margin:6px 0 4px',o.title||(create?'Create your chat PIN':'Enter your chat PIN')));
+    bx.appendChild(mk('div','color:#555;margin-bottom:14px',o.sub||(create?'Create a 6-digit PIN. It is asked only once on a new phone or after reinstalling the app. If you forget it, old messages cannot be recovered.':'Enter your 6-digit PIN to open your chats. It is asked only once on this device.')));
     function row(label){
       var wrap=mk('div','margin-bottom:10px');
       if(label) wrap.appendChild(mk('div','font-size:12px;color:#777;margin:2px 0 5px',label));
@@ -598,10 +598,10 @@ function gzPinSheet(o){
       var r={ el:wrap, bs:bs, changed:function(){ if(r.onch) r.onch(); }, get:function(){ return bs.map(function(b){ return b.value; }).join(''); }, clear:function(){ bs.forEach(function(b){ b.value=''; }); }, focus:function(){ bs[0].focus(); } };
       return r;
     }
-    var r1=row(create?'Naya PIN':''), r2=create?row('PIN dobara daalo'):null;
-    var lg=mk('input','width:100%;box-sizing:border-box;padding:12px;border:1.5px solid #bbb;border-radius:10px;font-size:15px;margin-bottom:10px;display:none'); lg.type='password'; lg.placeholder='Purana backup password'; lg.autocomplete='off';
+    var r1=row(create?'New PIN':''), r2=create?row('Repeat PIN'):null;
+    var lg=mk('input','width:100%;box-sizing:border-box;padding:12px;border:1.5px solid #bbb;border-radius:10px;font-size:15px;margin-bottom:10px;display:none'); lg.type='password'; lg.placeholder='Old backup password'; lg.autocomplete='off';
     var em=mk('div','color:#d93025;min-height:18px;font-size:13px;margin:2px 0 8px');
-    var go=mk('button','width:100%;border:0;border-radius:12px;padding:13px;font-weight:700;font-size:15px;background:#1a73e8;color:#fff;cursor:pointer',create?'PIN banao':'Kholo');
+    var go=mk('button','width:100%;border:0;border-radius:12px;padding:13px;font-weight:700;font-size:15px;background:#1a73e8;color:#fff;cursor:pointer',create?'Create PIN':'Unlock');
     bx.appendChild(r1.el); if(r2) bx.appendChild(r2.el); bx.appendChild(lg); bx.appendChild(em); bx.appendChild(go);
     var busy=false;
     function sec(){ return legacyOn?lg.value:r1.get(); }
@@ -609,20 +609,20 @@ function gzPinSheet(o){
     function refresh(){ go.disabled=busy||!ready(); go.style.opacity=go.disabled?'.5':'1'; }
     function run(){
       if(busy||!ready()) return; em.style.color='#555';
-      if(create&&!legacyOn&&r1.get()!==r2.get()){ em.style.color='#d93025'; em.textContent='Dono PIN same nahi hain'; r2.clear(); r2.focus(); refresh(); return; }
-      busy=true; refresh(); em.textContent='Ruko… (kuch second lagte hain)'; var secret=sec();
+      if(create&&!legacyOn&&r1.get()!==r2.get()){ em.style.color='#d93025'; em.textContent='PINs do not match'; r2.clear(); r2.focus(); refresh(); return; }
+      busy=true; refresh(); em.textContent='Please wait… (a few seconds)'; var secret=sec();
       Promise.resolve().then(function(){ return o.submit(secret); }).then(function(){ ov.remove(); resolve(true); }).catch(function(e){
         busy=false; em.style.color='#d93025';
-        em.textContent=(e&&e.message==='badpass')?'Galat PIN. Dobara koshish karo.':'Masla: '+((e&&e.message)||e);
+        em.textContent=(e&&e.message==='badpass')?'Wrong PIN. Try again.':'Problem: '+((e&&e.message)||e);
         if(!legacyOn){ r1.clear(); if(r2) r2.clear(); r1.focus(); } refresh();
       });
     }
     r1.onch=function(){ if(create&&r1.get().length===6&&!r2.get()) r2.focus(); if(!create&&r1.get().length===6) run(); refresh(); };
     if(r2) r2.onch=function(){ refresh(); };
     lg.oninput=refresh; go.onclick=run; lg.onkeydown=function(e){ if(e.key==='Enter') run(); };
-    if(!create&&o.legacy){ var lk=mk('div','color:#1a73e8;font-size:13px;margin-top:12px;cursor:pointer','Purana (lamba) password hai?'); lk.onclick=function(){ legacyOn=!legacyOn; r1.el.style.display=legacyOn?'none':''; lg.style.display=legacyOn?'':'none'; lk.textContent=legacyOn?'6 number wala PIN daalo':'Purana (lamba) password hai?'; go.textContent='Kholo'; em.textContent=''; refresh(); (legacyOn?lg:r1.bs[0]).focus(); }; bx.appendChild(lk); }
-    if(!create&&o.forgot){ var fg=mk('div','color:#d93025;font-size:13px;margin-top:10px;cursor:pointer','PIN yaad nahi? Naya PIN banao'); fg.onclick=function(){ if(busy) return; ov.style.display='none'; Promise.resolve(o.forgot()).then(function(v){ if(v){ ov.remove(); resolve(true); } else { ov.style.display='flex'; } }).catch(function(){ ov.style.display='flex'; }); }; bx.appendChild(fg); }
-    if(o.closable){ var cl=mk('div','color:#777;font-size:13px;margin-top:12px;cursor:pointer','Abhi nahi'); cl.onclick=function(){ if(busy) return; ov.remove(); resolve(false); }; bx.appendChild(cl); }
+    if(!create&&o.legacy){ var lk=mk('div','color:#1a73e8;font-size:13px;margin-top:12px;cursor:pointer','Have an old long password?'); lk.onclick=function(){ legacyOn=!legacyOn; r1.el.style.display=legacyOn?'none':''; lg.style.display=legacyOn?'':'none'; lk.textContent=legacyOn?'Use your 6-digit PIN':'Have an old long password?'; go.textContent='Unlock'; em.textContent=''; refresh(); (legacyOn?lg:r1.bs[0]).focus(); }; bx.appendChild(lk); }
+    if(!create&&o.forgot){ var fg=mk('div','color:#d93025;font-size:13px;margin-top:10px;cursor:pointer','Forgot PIN? Create a new one'); fg.onclick=function(){ if(busy) return; ov.style.display='none'; Promise.resolve(o.forgot()).then(function(v){ if(v){ ov.remove(); resolve(true); } else { ov.style.display='flex'; } }).catch(function(){ ov.style.display='flex'; }); }; bx.appendChild(fg); }
+    if(o.closable){ var cl=mk('div','color:#777;font-size:13px;margin-top:12px;cursor:pointer','Not now'); cl.onclick=function(){ if(busy) return; ov.remove(); resolve(false); }; bx.appendChild(cl); }
     ov.appendChild(bx); document.body.appendChild(ov); refresh(); setTimeout(function(){ try{ r1.focus(); }catch(e){} },60);
   });
 }
@@ -662,24 +662,40 @@ async function initKeys(){
       submit:async function(pin){
         var r=await openBackup(bk,pin); myKP=r;
         if(pubDoc && r.pub!==pubDoc){ await publishPub(myKP); srvPub=myKP.pub; ppCache.clear(); shared={}; await makeBackup(pin); }
-        done(); toast('Chats khul gaye ✓');
+        done(); toast('Chats unlocked ✓');
       },
       forgot:async function(){
-        var yes=await ask('Naya PIN banana hai?','Purane messages jo purani key se bane the wo wapas nahi khulenge. Naya PIN banega aur nayi key bhi banegi (Gupzy mein bhi khud save ho jayegi).','Naya PIN banao',true);
+        var yes=await ask('Create a new PIN?','Old messages made with the old key will not open again. A new PIN and a new key will be created (and saved to Gupzy automatically).','Create a new PIN',true);
         if(!yes) return false;
-        return gzPinSheet({ mode:'create', title:'Naya PIN banao', submit:newKeyWithPin });
+        return gzPinSheet({ mode:'create', title:'Create a new PIN', submit:newKeyWithPin });
       } });
     return;
   }
   /* no backup yet */
   if(hasKey && (!pubDoc || rec.pub===pubDoc)){
-    await gzPinSheet({ mode:'create', title:'Chats ka PIN banao', submit:async function(pin){
+    await gzPinSheet({ mode:'create', title:'Create your chat PIN', submit:async function(pin){
       myKP={ priv:rec.priv, pub:rec.pub, old:old }; if(!pubDoc) await publishPub(myKP);
-      await makeBackup(pin); done(); toast('PIN ban gaya ✓'); } });
+      await makeBackup(pin); done(); toast('PIN created ✓'); } });
     return;
   }
-  await gzPinSheet({ mode:'create', title:'Chats ka PIN banao', submit:newKeyWithPin });
+  await gzPinSheet({ mode:'create', title:'Create your chat PIN', submit:newKeyWithPin });
 }
+/* tap an unreadable message: enter the PIN again and merge EVERY key from the Gupzy backup into this device */
+async function unlockMore(why){
+  var d=null; try{ d=await db.collection('keyBackups').doc(me.uid).get(); }catch(e){}
+  if(!d||!d.exists){ toast('No backup found. '+(why||'')); return; }
+  var bk=d.data();
+  var ok=await gzPinSheet({ mode:'ask', legacy:true, closable:true, title:'Unlock old messages', sub:'Enter your chat PIN to load all your saved keys on this phone.',
+    submit:async function(pin){
+      var r=await openBackup(bk,pin), all=[{priv:r.priv,pub:r.pub}].concat(r.old||[]), mi=0;
+      for(var i=0;i<all.length;i++){ if(srvPub && all[i].pub===srvPub){ mi=i; break; } }
+      var main=all[mi], rest=all.filter(function(x,i){ return i!==mi; });
+      myKP={ priv:main.priv, pub:main.pub, old:rest }; await idbSet('k_'+me.uid, main); await idbSet('o_'+me.uid, rest); shared={}; ppCache.clear();
+      if(srvPub && myKP.pub!==srvPub){ await publishPub(myKP); srvPub=myKP.pub; await makeBackup(pin); }
+    } });
+  if(ok){ toast('Keys loaded ✓ reloading…'); setTimeout(function(){ location.reload(); },700); }
+}
+document.addEventListener('click',function(e){ var t=e.target&&e.target.closest&&e.target.closest('.b.lock'); if(t) unlockMore(t.getAttribute('data-why')||''); });
 async function peerPub(uid){
   var c=ppCache.get(uid); if(c && Date.now()-c.t<300000) return c.p;
   var d=await db.collection('userKeys').doc(uid).get();
@@ -1498,7 +1514,7 @@ async function renderMsgs(snap, tok){
     var side=m.mine?'me':'th';
     if(m.kind==='sys'){ html+='<div class="tm">'+esc(m.text)+'</div>'; return; }
     var sn=m.sn?'<div class="sn">'+esc(m.sn)+'</div>':'';
-    if(m.kind==='lock'){ if(m.mine&&m.id){ MSGTXT[m.id]={t:'',n:'You',mine:true,rx:null}; } html+='<div class="b '+side+' lock"'+(m.mine&&m.id?' data-mid="'+esc(m.id)+'"':'')+'>'+sn+'⏳ Waiting for this message…</div>'; return; }
+    if(m.kind==='lock'){ if(m.mine&&m.id){ MSGTXT[m.id]={t:'',n:'You',mine:true,rx:null}; } html+='<div class="b '+side+' lock" data-why="'+esc(m.why||'')+'"'+(m.mine&&m.id?' data-mid="'+esc(m.id)+'"':'')+'>'+sn+'🔒 Can\u2019t read yet \u00b7 tap to unlock</div>'; return; }
     if(m.kind==='post'){ html+='<div class="b '+side+' post" data-post="'+esc(m.postId)+'">'+sn+'<div class="pth" data-pid="'+esc(m.postId)+'"><div class="ph">\uD83D\uDCCE</div></div><div class="pt">'+esc(m.text)+'</div><div class="ps">Tap to view post</div></div>'; return; }
     if(m.media){ mediaSpec.set(m.media.u,m.media); MSGTXT[m.id]={t:(m.media.kind==='img'?'📷 Photo':m.media.kind==='vid'?'🎥 Video':'🎤 Voice message'),n:m.mine?'You':(m.sn||peer.name||''),mine:m.mine,rx:m.rx}; html+='<div class="b '+side+' media" data-mid="'+esc(m.id)+'">'+sn+mediaInner(m.media)+rxHtml(m)+'</div>'; if(m.media.enc && !mediaUrls.has(m.media.u)) toLoad.push(m.media); return; }
     MSGTXT[m.id]={t:m.text,n:m.mine?'You':(m.sn||peer.name||''),mine:m.mine,rx:m.rx}; html+='<div class="b '+side+'" data-mid="'+esc(m.id)+'">'+sn+(m.q?'<div class="rq">'+esc(m.q)+'</div>':'')+esc(m.text)+rxHtml(m)+'</div>';
