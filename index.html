@@ -3280,9 +3280,8 @@ function appendShortsBatch(scroll){
             viewTimer = setTimeout(()=> registerView(s.id), 3000);
           }
           wEnter = Date.now(); wMax = 0; wLast = 0; wLoops = 0;
-          if(window.gzReelWatched){ clearTimeout(vidEl._rwT); vidEl._rwT = setTimeout(()=>window.gzReelWatched(s.id), 3000); }
         }else{
-          vidEl.pause(); clearTimeout(vidEl._rwT);
+          vidEl.pause();
           if(viewTimer){ clearTimeout(viewTimer); viewTimer = null; }
           if(wEnter){
             const dwell = Date.now() - wEnter, dur = vidEl.duration;
@@ -3493,16 +3492,6 @@ function releaseFarVideos(activeSlide){
 /* ---- FEED SIGNALS (shares, watch completion, skips) — used by the trending score ----
    One signal doc per user per video per type (videoSignals/{uid}_{videoId}_{type}); the counters on the video
    change in the same batch, and firestore.rules only allow the counter change if that signal doc is created with it. */
-/* monetization: a reel counts as "watched" once it stayed on screen 3 seconds (each reel once per day, summed over 7 days in Studio) */
-window.gzReelWatched = function(id){
-  try{
-    if(!currentUser || !id) return;
-    const d = new Date(), k = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-    const sk = 'gzRW_'+currentUser.uid+'_'+k; let seen = []; try{ seen = JSON.parse(localStorage.getItem(sk)||'[]'); }catch(e){}
-    if(seen.indexOf(id) >= 0) return; seen.push(id); try{ localStorage.setItem(sk, JSON.stringify(seen)); }catch(e){}
-    db.collection('channels').doc(currentUser.uid).update({ ['watchDays.'+k]: firebase.firestore.FieldValue.increment(1) }).catch(()=>{});
-  }catch(e){}
-};
 const signalSent = new Set();
 function sendVideoSignal(videoId, type, ownerUid, counters){
   try{
@@ -8059,13 +8048,14 @@ document.querySelector('#app > header .top-icons').insertAdjacentHTML('afterbegi
 
 /* ================= overlays ================= */
 R.insertAdjacentHTML('beforeend',
- `<div class="ig-ov" id="igDm"><div class="ig-ov-h"><button class="ig-x" id="dmBack">${ic.back.replace('<svg','<svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"')}</button><h3>Messages</h3><button class="ig-x" id="dmNew" aria-label="New message">${ic.edit.replace('<svg','<svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"')}</button></div><div id="dmTabs"><button data-t="all" class="on">All</button><button data-t="friends">👥 Friends</button><button data-t="follow">Following</button></div><div class="ig-ov-b" id="dmList"></div></div>
+ `<div class="ig-ov" id="igDm"><div class="ig-ov-h"><button class="ig-x" id="dmBack">${ic.back.replace('<svg','<svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"')}</button><h3>Messages</h3><button class="ig-x" id="dmNew" aria-label="New message">${ic.edit.replace('<svg','<svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"')}</button></div><div id="dmTabs"><button data-t="all" class="on">All</button><button data-t="friends">👥 Friends</button><button data-t="follow">Following</button><button data-t="unread" class="dsk">Unread</button><button data-t="groups" class="dsk">Groups</button></div><div class="ig-ov-b" id="dmList"></div></div>
   <div class="ig-ov" id="igNc" style="z-index:81"><div class="ig-ov-h"><button class="ig-x" id="ncBack">${ic.back.replace('<svg','<svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"')}</button><h3>New message</h3><span></span></div><input class="dm-search" id="ncQ" placeholder="Search by name…" autocomplete="off"><div class="ig-ov-b" id="ncList"></div></div>
   <div class="ig-ov" id="igChat"><div class="dm-head"><button class="ic" id="chatBack">${ic.back}</button><div class="who" id="chatWho"></div><button class="ic" id="chatAud" aria-label="Voice call">${ic.phone}</button><button class="ic" id="chatVid" aria-label="Video call">${ic.video}</button></div>
    <div id="dmMsgs"></div>
    <div class="dm-bar" id="dmBar"><button id="dmImg" aria-label="Photo">${ic.img}</button><div class="in"><input type="text" id="dmIn" placeholder="Message…" maxlength="2000" autocomplete="off"><button id="dmMic" aria-label="Voice message">${ic.mic}</button><button class="snd hidden" id="dmSend">Send</button><button class="hidden" id="dmSch" aria-label="Schedule message" style="background:none;border:0;font-size:20px;padding:0 6px;cursor:pointer">🕒</button></div>
     <div class="dm-rec"><button id="dmRecX" aria-label="Cancel">${ic.trash}</button><span class="rd"></span><span class="tm" id="dmTm">0:00</span><button class="sendr" id="dmRecS" aria-label="Send">${ic.send}</button></div></div>
-   <input type="file" id="dmFile" accept="image/*,video/*" class="hidden"></div>`);
+   <input type="file" id="dmFile" accept="image/*,video/*" class="hidden"></div>
+  <div id="dmEmpty"><svg width="90" height="90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-12.2 7.5L3 20.5l1.6-5.3A8.4 8.4 0 1 1 21 11.5z"/></svg><h2>Gupzy Chats</h2><div>Select a chat to start messaging.</div><div style="font-size:13px;margin-top:18px">🔒 End-to-end encrypted</div></div>`);
 
 /* ================= inbox ================= */
 let chats={},cUn=null,openId=null,peer=null,mUn=null,firstLoad=true;
@@ -8109,9 +8099,9 @@ function renderInbox(){
   const ct=new Set((typeof contactPeople!=='undefined'&&contactPeople||[]).map(p=>p.id));
   const isCt=c=>{const p=peerOf(c);return !p.group&&ct.has(p.id);};
   let a=Object.values(chats).filter(c=>c.lastAt||c.lastText).filter(c=>{if(c.isTemp&&c.expiresAt&&c.expiresAt<Date.now())return false;const p=peerOf(c);if(!p.group){const cl=Number((c.clearedAt||{})[me()])||0;if(cl&&ts(c.lastAt)<=cl)return false;}return p.group||!isBlockedUid(p.id);}).sort((x,y)=>ts(y.lastAt)-ts(x.lastAt));
-  if(dmTab==='friends')a=a.filter(isCt);else if(dmTab==='follow')a=a.filter(c=>!isCt(c));
+  if(dmTab==='unread')a=a.filter(c=>unreadN(c)>0);else if(dmTab==='groups')a=a.filter(c=>peerOf(c).group);else if(dmTab==='friends')a=a.filter(isCt);else if(dmTab==='follow')a=a.filter(c=>!isCt(c));
   const row=c=>{const p=peerOf(c),u=unreadN(c)>0;
-    return `<div class="dm-row ${u?'unread':''}" data-c="${c.id}">${avbox(p.name,p.logo,52,p.group?'':p.id)}<div class="tx"><b>${esc(p.group?p.name:((c.nicks&&c.nicks[p.id])||window.__gzLN(p.id,p.name)))}${tmpTag(c)}</b><span>${esc((c.lastFrom===me()?'You: ':'')+prev(c))} · ${ago(c.lastAt)}</span></div>${u?'<i class="dot"></i>':''}</div>`;};
+    return `<div class="dm-row ${u?'unread':''}${openId===c.id?' act':''}" data-c="${c.id}">${avbox(p.name,p.logo,52,p.group?'':p.id)}<div class="tx"><b>${esc(p.group?p.name:((c.nicks&&c.nicks[p.id])||window.__gzLN(p.id,p.name)))}${tmpTag(c)}</b><span>${esc((c.lastFrom===me()?'You: ':'')+prev(c))} · ${ago(c.lastAt)}</span></div>${u?'<i class="dot"></i>':''}</div>`;};
   let h=a.map(row).join('');
   if(dmTab==='friends'){
     const have=new Set(a.map(c=>peerOf(c).id));
@@ -8378,7 +8368,7 @@ function openChat0(p){
   if(!currentChannel){toast('Create your channel first');return;}
   peer=p;openId=p.group?p.id:cidOf(me(),p.id);$('chatAud').style.display=$('chatVid').style.display=p.group?'none':'';
   $('chatWho').innerHTML=avbox(p.name,p.logo,36,p.group?'':p.id)+`<div style="min-width:0"><b id="dmWho">${esc(p.group?p.name:window.__gzLN(p.id,p.name))}</b><small id="dmTyp"></small></div>`;
-  $('dmMsgs').innerHTML='';msgs=[];clr=0;$('igChat').classList.add('show');$('dmIn').value='';toggleSend();stopAudio();
+  $('dmMsgs').innerHTML='';msgs=[];clr=0;$('igChat').classList.add('show');if($('igDm').classList.contains('show'))renderInbox();$('dmIn').value='';toggleSend();stopAudio();
   if(window.__tU)window.__tU();rTo=null;
   try{ if(window.__gz) window.__gz.watchPeer(p.group?null:p.id); }catch(e){}
   window.__tU=db.collection('chats').doc(openId).onSnapshot(d=>{
@@ -8411,6 +8401,7 @@ function openChat0(p){
   },er=>{$('dmMsgs').innerHTML='<div class="ig-empty">'+esc(er.message)+'</div>';});
   if(chats[openId]&&unreadN(chats[openId])>0)markRead();
 }
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&innerWidth>=900&&$('igDm').classList.contains('show')&&$('igChat').classList.contains('show')&&!document.querySelector('.ig-ov.show:not(#igDm):not(#igChat)'))closeChat();});
 function closeChat(){if(window.__tU){window.__tU();window.__tU=null;}if(rec)cancelRec();$('igChat').classList.remove('show');if(mUn){mUn();mUn=null;}openId=null;stopAudio();if($('igDm').classList.contains('show'))renderInbox();}
 $('chatBack').onclick=closeChat;
 $('chatWho').onclick=()=>{if(!peer)return;if(peer.group)openGroupInfo();else if(window.__gzCi)window.__gzCi.open();else openChannelScreen(peer.id,peer.name,peer.logo);};
@@ -14723,6 +14714,26 @@ window.gzConfirm=function(msg,okLabel){
   })();
 })();
 </script>
+<style id="gzWaDesktop">
+#dmTabs .dsk{display:none}
+@media (min-width:900px){
+ #dmTabs .dsk{display:inline-block}
+ #dmTabs{overflow-x:auto}#dmTabs button{flex:none;padding:7px 16px}
+ #igDm .ig-ov-h h3{font-size:22px;font-weight:800}
+ #igDm{right:auto;width:400px;border-right:1px solid var(--border)}
+ #igNc{right:auto;width:400px}
+ #igDm.show ~ #igChat.show{left:400px}
+ #igDm.show ~ #igChat.show #chatBack{display:none}
+ #igDm.show ~ #igChat.show #dmMsgs{background:var(--surface2);padding:16px 6%}
+ #igDm.show ~ #igChat.show .dm-m{max-width:65%}
+ #igDm.show ~ #igChat.show .dm-m:not(.me){background:#fff;box-shadow:0 1px 1px rgba(0,0,0,.08)}
+ .dm-row:hover{background:var(--surface)}
+ .dm-row.act{background:var(--surface2)}
+ #dmEmpty{display:none;position:absolute;top:0;bottom:0;left:400px;right:0;z-index:80;background:var(--surface);flex-direction:column;align-items:center;justify-content:center;text-align:center;color:var(--text-dim);gap:10px}
+ #dmEmpty h2{margin:6px 0 0;color:var(--text);font-size:26px;font-weight:600}
+ #igDm.show ~ #igChat:not(.show) + #dmEmpty{display:flex}
+}
+</style>
 <style id="gzDesktopCenter">
 /* desktop: the home feed (stories, aura row, posts) sits in the middle of the page */
 @media (min-width:900px){

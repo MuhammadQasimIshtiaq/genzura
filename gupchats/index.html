@@ -231,6 +231,31 @@ hr{border:0;border-top:1px solid var(--border);margin:8px 0}
 .gi-tag{font-size:12px;color:var(--blue);font-weight:700}
 .gi-link{display:block;width:100%;text-align:left;border:0;background:none;padding:13px 0;font-size:16px;font-weight:700;color:var(--blue);border-top:1px solid var(--border)}
 .gi-link.red{color:var(--red)}
+<style id="waDesktop">
+.dsk{display:none}
+@media (min-width:900px){
+ .dsk{display:flex}
+ #app{right:auto;width:440px;flex-direction:row;border-right:1px solid var(--border)}
+ #app nav{order:-1;flex-direction:column;justify-content:flex-start;align-items:center;gap:8px;width:72px;padding:14px 0;border-top:0;border-right:1px solid var(--border);background:var(--surface)}
+ #app nav button{width:48px;height:48px}
+ #app nav .dot{right:4px;top:4px}
+ #app main{flex:1;min-width:0}
+ #chat{left:440px}
+ #cBack{display:none}
+ #chat #msgs{background:var(--surface);padding:16px 5%}
+ #chat .b{max-width:65%}
+ #chat .b.th{background:#fff;box-shadow:0 1px 1px rgba(0,0,0,.08)}
+ .row{padding:10px 16px}
+ .row:hover{background:var(--surface)}
+ .row.act{background:var(--blue-soft)}
+ #picker,#grpNew{left:72px;right:auto;width:368px}
+ #emptyPane{display:none;position:fixed;top:0;bottom:0;left:440px;right:0;background:var(--surface);flex-direction:column;align-items:center;justify-content:center;text-align:center;color:var(--dim);gap:10px;padding:24px}
+ #emptyPane img{width:120px;height:auto;opacity:.9}
+ #emptyPane h2{margin:6px 0 0;color:var(--text);font-size:26px;font-weight:600}
+ #app:not(.hidden) ~ #chat.hidden + #emptyPane{display:flex}
+ .sheetbg{align-items:center;justify-content:center}
+ .sheet{max-width:480px;border-radius:16px}
+}
 </style>
 </head>
 <body>
@@ -256,6 +281,7 @@ hr{border:0;border-top:1px solid var(--border);margin:8px 0}
       <div class="hdr"><div class="brand"><img src="/gupchats/gupchats-emblem.png" alt=""><span>GupChats</span></div>
         <button class="iconbtn" id="composeBtn" aria-label="New message"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z"/></svg></button></div>
       <div class="search"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id="q" placeholder="Search chats or friends" autocomplete="off"></div>
+      <div class="chips dsk" id="chFilter"><button class="chip on" data-f="all">All</button><button class="chip" data-f="unread">Unread</button><button class="chip" data-f="groups">Groups</button></div>
       <div class="strip" id="strip"></div>
       <div id="chatList"></div>
     </section>
@@ -299,6 +325,8 @@ hr{border:0;border-top:1px solid var(--border);margin:8px 0}
   </div>
   <div id="recBar" class="hidden"><span class="rd"></span><span class="sp" id="recT">0:00</span><button class="btn gray" id="recCancel">Cancel</button><button class="btn" id="recSend">Send</button></div>
 </div>
+
+<div id="emptyPane"><img src="/gupchats/gupchats-emblem.png" alt=""><h2>GupChats for desktop</h2><div>Select a chat to start messaging.</div><div style="font-size:13px;margin-top:18px">🔒 Your personal messages are end-to-end encrypted</div></div>
 
 <input type="file" id="fileIn" accept="image/*,video/*" class="hidden">
 <input type="file" id="fileStory" accept="image/*,video/*" class="hidden">
@@ -1140,6 +1168,7 @@ function renderChats(){
   var q=($('q').value||'').trim().toLowerCase();
   var list=Object.keys(chats).map(function(k){ return chats[k]; }).filter(function(c){ return !(c.isGroup && c.isTemp && c.expiresAt && c.expiresAt<Date.now()); }).sort(function(a,b){ return (ms(b.lastAt)||Date.now())-(ms(a.lastAt)||Date.now()); });
   if(q) list=list.filter(function(c){ return peerOf(c).name.toLowerCase().indexOf(q)>=0; });
+  if(chatFilter==='unread') list=list.filter(function(c){ return ((c.unread||{})[me.uid]||0)>0; }); else if(chatFilter==='groups') list=list.filter(function(c){ return c.isGroup; });
   var html=list.map(function(c){
     var p=peerOf(c), un=((c.unread||{})[me.uid]||0)>0;
     if(p.group) return '<div class="row'+(un?' unread':'')+'" data-grp="'+esc(c.id)+'"><div class="avw">'+av(p.logo,p.name)+'</div><div class="rb"><div class="rn">'+esc(p.name)+tmpTag(c)+'</div><div class="rs" data-pv="'+esc(c.id)+'">…</div></div><div class="rt">'+esc(fmtTime(c.lastAt))+'</div>'+(un?'<div class="ub"></div>':'')+'</div>';
@@ -1152,10 +1181,14 @@ function renderChats(){
   }
   if(!html) html='<div class="empty">'+(q?'No results.':'No chats yet.<br>Tap the pencil icon to start a conversation with a friend.')+'</div>';
   $('chatList').innerHTML=html;
-  bindRows($('chatList'));
+  bindRows($('chatList')); markActive();
   list.forEach(fillPreview);
   renderStrip();
 }
+var chatFilter='all';
+$('chFilter').onclick=function(e){ var b=e.target.closest('[data-f]'); if(!b) return; chatFilter=b.getAttribute('data-f'); $('chFilter').querySelectorAll('.chip').forEach(function(x){ x.classList.toggle('on',x===b); }); renderChats(); };
+function markActive(){ try{ var pid=cur&&!cur.group?cur.peer.uid:null, gid=cur&&cur.group?cur.id:null; $('chatList').querySelectorAll('.row').forEach(function(r){ r.classList.toggle('act',!!((pid&&r.getAttribute('data-peer')===pid)||(gid&&r.getAttribute('data-grp')===gid))); }); }catch(e){} }
+document.addEventListener('keydown',function(e){ if(e.key==='Escape'&&window.innerWidth>=900&&cur&&!$('chat').classList.contains('hidden')&&!document.querySelector('.sheetbg,.ovl:not(.hidden)')) closeChat(); });
 var pvBusy=0;
 function pvSet(id,txt){ var e2=$('chatList').querySelector('[data-pv="'+id+'"]'); if(e2) e2.textContent=txt; }
 function tmpTag(c){ if(!(c.isTemp && c.expiresAt)) return ''; var m=Math.max(1,Math.ceil((c.expiresAt-Date.now())/60000)); return '<span class="tmp">⏳ '+(m>=60?Math.floor(m/60)+'h '+(m%60)+'m':m+'m')+'</span>'; }
@@ -1303,7 +1336,7 @@ $('composeBtn').onclick=openPicker; $('pkBack').onclick=function(){ $('picker').
 async function openChat(peerUid){
   var c; try{ c=await getCh(peerUid); }catch(e){ c={name:'User',logo:null,handle:''}; }
   cur={ id:dmId(me.uid,peerUid), peer:{uid:peerUid,name:c.name,logo:c.logo}, canSend:false };
-  $('chat').classList.remove('hidden');   /* show the chat first so a small UI error can never block it */
+  markActive(); $('chat').classList.remove('hidden');   /* show the chat first so a small UI error can never block it */
   try{ $('cCallV').classList.remove('hidden'); $('cCallVid').classList.remove('hidden'); $('cName').parentNode.onclick=null; $('cName').parentNode.style.cursor=''; }catch(e){ console.warn(e); }
   try{ $('cName').textContent=c.name; updateHeaderSub(); }catch(e){ console.warn(e); }
   try{ $('msgs').innerHTML=''; $('mIn').value=''; $('mIn').style.height='auto'; $('note').classList.add('hidden'); if(typeof clearReply==='function') clearReply(); }catch(e){ console.warn(e); }
@@ -1322,7 +1355,7 @@ async function openChat(peerUid){
   }catch(e){ cur.canSend=true; }
   updateSend();
 }
-function closeChat(){ recCancel(true); if(unsubMsgs){ unsubMsgs(); unsubMsgs=null; } msgTok++; cur=null; $('chat').classList.add('hidden'); }
+function closeChat(){ recCancel(true); if(unsubMsgs){ unsubMsgs(); unsubMsgs=null; } msgTok++; cur=null; $('chat').classList.add('hidden'); markActive(); }
 $('cBack').onclick=closeChat;
 function updateSend(){
   var has=!!$('mIn').value.trim(), ok=!!(cur && cur.canSend), rec=!!REC.mr;
@@ -2048,7 +2081,7 @@ async function openGroup(gid){
   $('cName').textContent=c.name||'Group'; updateHeaderSub();
   $('msgs').innerHTML=''; $('mIn').value=''; $('mIn').style.height='auto'; $('note').classList.add('hidden'); if(typeof clearReply==='function') clearReply();
   recCancel(true); updateSend();
-  $('chat').classList.remove('hidden');
+  $('chat').classList.remove('hidden'); markActive();
   if(unsubMsgs) unsubMsgs();
   var tok=++msgTok;
   unsubMsgs=db.collection('chats').doc(gid).collection('messages').orderBy('createdAt','asc').limitToLast(150).onSnapshot(function(snap){

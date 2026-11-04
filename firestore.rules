@@ -107,9 +107,7 @@ service cloud.firestore {
         isAdmin()
         // owner: edit own profile, but never the protected counters / badges
         || (me() == uid
-            && !changed().hasAny(['subscriberCount', 'likesTotal', 'referralCount', 'referredByAdmin', 'createdAt'])
-            // auto-monetization: owner may only switch monetized from off to ON (never off)
-            && (!changed().hasAny(['monetized']) || (request.resource.data.monetized == true && resource.data.get('monetized', false) == false))
+            && !changed().hasAny(['subscriberCount', 'likesTotal', 'referralCount', 'monetized', 'referredByAdmin', 'createdAt'])
             && (request.resource.data.get('channelId', null) == resource.data.get('channelId', null)
                 || getAfter(/databases/$(database)/documents/channelIds/$(request.resource.data.channelId)).data.ownerUid == me()))
         // anyone else: ONLY subscriberCount +1 / -1 and ONLY together with a real follow / unfollow
@@ -704,9 +702,7 @@ service cloud.firestore {
       allow get: if signedIn() && (me() == uid || isAdmin());
       allow list: if isAdmin();
       // user can only apply as "pending" (never self-approve)
-      // one-time payout form: auto-approved for a monetized channel (old 'pending' path kept for compatibility)
-      allow create: if signedIn() && me() == uid && (request.resource.data.status == 'pending'
-        || (request.resource.data.status == 'approved' && get(/databases/$(database)/documents/channels/$(uid)).data.get('monetized', false) == true));
+      allow create: if signedIn() && me() == uid && request.resource.data.status == 'pending';
       allow update: if signedIn() && (
         isAdmin()
         || (me() == uid
@@ -714,16 +710,6 @@ service cloud.firestore {
             && request.resource.data.status == 'pending')
       );
       allow delete: if isAdmin();
-    }
-
-    // withdrawals (min $2): same payment method as the saved form -> 'approved' automatically, a different one -> 'pending' for the team
-    match /withdrawals/{id} {
-      allow read: if signedIn() && (resource.data.uid == me() || isAdmin());
-      allow create: if signedIn() && request.resource.data.uid == me()
-        && request.resource.data.status in ['approved', 'pending']
-        && request.resource.data.amount is number && request.resource.data.amount >= 2
-        && get(/databases/$(database)/documents/channels/$(me())).data.get('monetized', false) == true;
-      allow update, delete: if isAdmin();
     }
 
     match /promotions/{id} {
