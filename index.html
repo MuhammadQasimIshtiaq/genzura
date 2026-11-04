@@ -989,6 +989,58 @@ nav{border-top:1px solid var(--border);padding:8px 0 12px;}
 
 .ig-gm{position:absolute;top:4px;left:4px;width:30px;height:30px;border-radius:50%;border:0;background:rgba(0,0,0,.55);color:#fff;font-size:20px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;z-index:2;cursor:pointer;}
 </style>
+<style id="pro-btn-polish">
+/* ===== PRO BUTTON POLISH ===== */
+button,[role=button],input[type=button],input[type=submit]{-webkit-tap-highlight-color:transparent;touch-action:manipulation;-webkit-user-select:none;user-select:none;font-family:inherit;transition:transform .12s ease,background-color .18s ease,box-shadow .18s ease,filter .18s ease,opacity .18s ease,color .18s ease,border-color .18s ease}
+button:not(:disabled):active,[role=button]:active{transform:scale(.96);filter:brightness(.94)}
+button:focus{outline:none}
+button:focus-visible,[role=button]:focus-visible{outline:2px solid var(--accent,var(--blue,#1a73e8));outline-offset:2px}
+button:disabled,button[disabled]{opacity:.5;cursor:not-allowed;box-shadow:none!important;transform:none!important}
+button:not(:disabled){cursor:pointer}
+button svg{pointer-events:none}
+@media (prefers-reduced-motion:reduce){button,[role=button]{transition:none!important}}
+
+.primary-btn,.alb-btn,.sv-btn,.cv-btn,.go,.ig-go{letter-spacing:.2px;box-shadow:0 2px 8px rgba(236,43,142,.28)}
+.primary-btn:not(:disabled):hover,.go:hover,.ig-go:hover{filter:brightness(1.07);box-shadow:0 4px 14px rgba(236,43,142,.38)}
+.primary-btn:disabled{box-shadow:none}
+.join-btn-small,.gz-btn,.ld-btn,.gr-btn,.wp-btn,.sb-btn,.sq-btn,.rm-btn,.cp-btn,.an-btn,.lm-btn,.pf-pill,.pf-icon-btn,.pl-action-btn,button.alt{font-weight:700;letter-spacing:.1px}
+.join-btn-small:hover,.gz-btn:hover,.ld-btn:hover,.gr-btn:hover,.wp-btn:hover,.sb-btn:hover,.sq-btn:hover,.rm-btn:hover,.cp-btn:hover,.an-btn:hover,.lm-btn:hover,.pf-pill:hover,.pf-icon-btn:hover,.pl-action-btn:hover,button.alt:hover{background:var(--surface3);border-color:var(--text-faint)}
+.ig-x,.an-x,.alb-x,.st-hide,.cl-hide,.x{border-radius:50%;transition:background-color .18s,transform .12s}
+.ig-x:hover,.an-x:hover,.alb-x:hover,.x:hover{background:var(--surface2)}
+.nav-btn:active svg{transform:scale(.88)}
+.nav-btn svg{transition:transform .15s,stroke .18s}
+.pf-tab{transition:color .18s,border-color .18s,background-color .18s}
+.pf-tab:hover{background:var(--surface2)}
+button.red,.red[role=button]{font-weight:700}
+
+/* ===== PRO BUTTON ANIM V2 ===== */
+@keyframes proSpin{0%{transform:rotate(0) scale(1)}50%{transform:rotate(200deg) scale(1.25)}100%{transform:rotate(360deg) scale(1)}}
+@keyframes proRipple{from{transform:scale(0);opacity:.5}to{transform:scale(4);opacity:0}}
+@keyframes proRing{0%{box-shadow:0 0 0 0 var(--pro-ring,rgba(120,120,255,.45))}100%{box-shadow:0 0 0 14px rgba(120,120,255,0)}}
+@keyframes proShine{from{transform:translateX(-120%) skewX(-20deg)}to{transform:translateX(320%) skewX(-20deg)}}
+@keyframes proPop{0%{transform:scale(1)}40%{transform:scale(.9)}70%{transform:scale(1.08) rotate(-2deg)}100%{transform:scale(1)}}
+button.pro-spin svg{animation:proSpin .6s cubic-bezier(.34,1.56,.64,1)}
+button.pro-ring{animation:proRing .55s ease-out}
+button.pro-pop{animation:proPop .4s ease}
+.pro-rip{overflow:hidden}
+.pro-rip>.pro-ripple{position:absolute;border-radius:50%;pointer-events:none;background:rgba(255,255,255,.55);animation:proRipple .65s ease-out forwards;z-index:0}
+.pro-rip.light>.pro-ripple{background:rgba(0,0,0,.14)}
+.pro-rip::after{content:"";position:absolute;top:0;left:0;width:35%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.4),transparent);transform:translateX(-120%) skewX(-20deg);pointer-events:none}
+.pro-rip:not(:disabled):hover::after{animation:proShine .8s ease}
+@media (prefers-reduced-motion:reduce){button.pro-spin svg,button.pro-ring,button.pro-pop{animation:none!important}.pro-ripple,.pro-rip::after{display:none}}
+
+/* ===== PRO SPLASH V2 ===== */
+@keyframes spSpinIn{0%{opacity:0;transform:rotate(-300deg) scale(.2)}55%{opacity:1;transform:rotate(18deg) scale(1.12)}80%{transform:rotate(-6deg) scale(.97)}100%{opacity:1;transform:rotate(0) scale(1)}}
+@keyframes spBreath{0%,100%{transform:scale(1);filter:drop-shadow(0 0 0 #8a3bff00)}50%{transform:scale(1.05);filter:drop-shadow(0 0 22px #8a3bff66)}}
+@keyframes spRing{to{transform:rotate(360deg)}}
+@keyframes spRingIn{from{opacity:0;scale:.4}to{opacity:1;scale:1}}
+@keyframes spBar{0%{transform:translateX(-110%)}100%{transform:translateX(260%)}}
+#bootLoading::before{content:"";position:absolute;left:50%;top:50%;width:230px;height:230px;margin:-115px 0 0 -115px;border-radius:50%;background:conic-gradient(#8a3bff,#ec2b8e,transparent 65%,#8a3bff);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 4px),#000 calc(100% - 3px));mask:radial-gradient(farthest-side,transparent calc(100% - 4px),#000 calc(100% - 3px));opacity:0;animation:spRingIn .5s ease .25s forwards,spRing 1.3s linear .25s infinite;pointer-events:none}
+#bootLoading::after{content:"";position:absolute;left:50%;top:50%;width:90px;height:4px;margin:137px 0 0 -45px;border-radius:4px;background:linear-gradient(90deg,transparent,#8a3bff,#ec2b8e,transparent);background-size:100% 100%;animation:spBar 1.2s ease-in-out infinite;pointer-events:none;-webkit-mask:linear-gradient(90deg,#000,#000);overflow:hidden}
+#bootLoading .boot-logo{opacity:0;animation:spSpinIn .95s cubic-bezier(.2,.9,.3,1.2) .1s forwards,spBreath 1.9s ease-in-out 1.1s infinite!important;animation:spSpinIn .95s cubic-bezier(.2,.9,.3,1.2) .1s forwards,spBreath 1.9s ease-in-out 1.1s infinite}
+html.in-apk #bootLoading::before,html.in-apk #bootLoading::after{display:none}
+@media (prefers-reduced-motion:reduce){#bootLoading::before,#bootLoading::after{animation:none;opacity:.6}#bootLoading .boot-logo{animation:none;opacity:1;transform:none}}
+</style>
 </head>
 <body>
 <div id="root">
@@ -14917,5 +14969,25 @@ body.gz-on-reels, html.gz-on-reels{background:#000 !important;}
   };
 })();
 </script>
+
+<script id="pro-btn-anim">(function(){
+var RIP='.primary-btn,.btn,.st-btn,.mini,.join-btn-small,.gz-btn,.ld-btn,.gr-btn,.wp-btn,.sb-btn,.sq-btn,.rm-btn,.cp-btn,.an-btn,.lm-btn,.alb-btn,.sv-btn,.cv-btn,.chip,.pf-pill,.pl-action-btn,button.alt,.go,.ig-go';
+var SPIN='.nav-btn,.iconbtn,.pf-icon-btn,.ig-x,.an-x,.alb-x,.st-x,.st-dots,.svb,.x,.gcb,.cl-hide,.st-hide';
+function once(el,cls,ms){el.classList.remove(cls);void el.offsetWidth;el.classList.add(cls);setTimeout(function(){el.classList.remove(cls)},ms)}
+document.addEventListener('pointerdown',function(e){
+ var b=e.target.closest&&e.target.closest('button');if(!b||b.disabled)return;
+ try{
+  if(b.matches(RIP)){
+   if(!b.classList.contains('pro-rip')){b.classList.add('pro-rip');if(getComputedStyle(b).position==='static')b.style.position='relative';var bg=getComputedStyle(b).backgroundColor;if(/rgba?\(0, 0, 0, 0\)|transparent/.test(bg)||b.matches('.chip:not(.on),.btn.gray,.st-btn:not(.pri):not(.grn),.join-btn-small,button.alt'))b.classList.add('light')}
+   var r=b.getBoundingClientRect(),d=Math.max(r.width,r.height),s=document.createElement('span');
+   s.className='pro-ripple';s.style.width=s.style.height=d+'px';s.style.left=(e.clientX-r.left-d/2)+'px';s.style.top=(e.clientY-r.top-d/2)+'px';
+   b.appendChild(s);setTimeout(function(){s.remove()},700);
+   once(b,'pro-pop',420);
+  }else if(b.matches(SPIN)){
+   if(b.querySelector('svg'))once(b,'pro-spin',650);else once(b,'pro-ring',560);
+  }else{once(b,'pro-ring',560)}
+ }catch(_){}
+},{passive:true});
+})();</script>
 </body>
 </html>
