@@ -194,7 +194,7 @@ const firebaseConfig = {
   appId: "1:649325973427:web:8021eab6a361352f7ec5c6"
 };
 const CLOUDINARY_CLOUD_NAME = "rct4qeol", CLOUDINARY_UPLOAD_PRESET = "arain_unsigned";
-const CREATOR_SHARE = 0.96;                       /* 96% creator / 4% platform (same as the old Earn page) */
+const CREATOR_SHARE = 0.70;                       /* 70% creator / 30% platform (same as the old Earn page) */
 const ST_SUB = /^studio\./.test(location.hostname);            /* running on studio.gupzy.com */
 const MAIN_APP = ST_SUB ? 'https://gupzy.com/' : location.origin + '/';           /* Gupzy main site */
 
@@ -530,7 +530,7 @@ async function openPostAnalytics(p){
 
 /* ---------- EARN (monetization lives here now) ---------- */
 function howCard(){
-  return '<div class="st-card"><h3>How earning works</h3><ol class="st-how"><li><b>Meet the requirements.</b> Within 7 days: upload 7 reels, get 7 followers, watch 1000 reels (a reel counts when you watch it for at least 3 seconds) and refer 5 new channels.</li><li><b>Automatic monetization.</b> As soon as all four are done your channel is monetized by itself &mdash; no application. Your earnings then show here.</li><li><b>Earn every month.</b> The month\'s ad revenue is shared between all monetized channels by their share of views, country by country &mdash; views from higher-paying countries earn more, and views through a VPN or proxy are paid at the lowest rate. You get <b>96%</b> of your share, Gupzy keeps 4%.</li><li><b>Withdraw at $2.</b> When you reach $2, tap Withdraw. The first time you fill the payment form once. After that you only choose a payment method: the same one as before is approved automatically, a different one needs its details again. Paid by JazzCash, EasyPaisa, bank (Pakistan) or Payoneer (international).</li></ol></div>';
+  return '<div class="st-card"><h3>How earning works</h3><ol class="st-how"><li><b>Meet the requirements.</b> Within 7 days: upload 7 reels, get 7 followers, watch 1000 reels (a reel counts when you watch it for at least 3 seconds) and refer 5 new channels.</li><li><b>Automatic monetization.</b> As soon as all four are done your channel is monetized by itself &mdash; no application. Your earnings then show here.</li><li><b>Earn every month.</b> The month\'s ad revenue is shared between all monetized channels by their share of views, country by country &mdash; views from higher-paying countries earn more, and views through a VPN or proxy are paid at the lowest rate. You get <b>70%</b> of your share.</li><li><b>Withdraw at $2.</b> When you reach $2, tap Withdraw. The first time you fill the payment form once. After that you only choose a payment method: the same one as before is approved automatically, a different one needs its details again. Paid by JazzCash, EasyPaisa, bank (Pakistan) or Payoneer (international).</li></ol></div>';
 }
 function earn(){
   const mon = !!(currentChannel && currentChannel.monetized);

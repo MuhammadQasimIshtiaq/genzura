@@ -5610,8 +5610,8 @@ document.getElementById('adminDetailCloseBtn').addEventListener('click', ()=>{
   document.getElementById('adminDetailOverlay').classList.add('hidden');
 });
 
-/* --- Monetized Creators & Payouts (96% creator / 4% platform) --- */
-const CREATOR_SHARE = 0.96; /* 96% to creator, 4% platform */
+/* --- Monetized Creators & Payouts (70% creator / 30% platform) --- */
+const CREATOR_SHARE = 0.70; /* 70% to creator, 30% platform */
 
 /* the month shown in the Creators + Revenue tabs ('YYYY-MM'); default = this month */
 let adminMonth = null;
@@ -5723,8 +5723,8 @@ function openAdminCreatorDetail(ch, d){
     <div style="font-weight:700;font-size:13px;margin:0 0 8px;">How the gross is made up</div>
     <div style="background:var(--surface);border-radius:12px;padding:14px;margin-bottom:16px;">${partRows}</div>
     <div style="background:var(--surface);border-radius:12px;padding:14px;">
-      ${row('Creator gets (96%)', '$' + d.creatorUSD.toFixed(2))}
-      ${row('Platform keeps (4%)', '$' + platformUSD.toFixed(2))}
+      ${row('Creator gets (70%)', '$' + d.creatorUSD.toFixed(2))}
+      ${row('Platform keeps (30%)', '$' + platformUSD.toFixed(2))}
     </div>`;
 }
 
