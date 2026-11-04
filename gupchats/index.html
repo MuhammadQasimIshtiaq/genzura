@@ -509,8 +509,10 @@ async function makeBackup(pw){
 }
 async function openBackup(bk, pw){
   var items;
-  try{ var pt=await crypto.subtle.decrypt({name:'AES-GCM', iv:unb64(bk.iv), additionalData:te.encode('keybackup|'+me.uid)}, await pwKey(pw,unb64(bk.salt),bk.iter), unb64(bk.ct)); items=JSON.parse(td.decode(pt)); }
+  var pt;
+  try{ pt=await crypto.subtle.decrypt({name:'AES-GCM', iv:unb64(bk.iv), additionalData:te.encode('keybackup|'+me.uid)}, await pwKey(pw,unb64(bk.salt),bk.iter), unb64(bk.ct)); }
   catch(e){ throw new Error('badpass'); }
+  try{ items=JSON.parse(td.decode(pt)); }catch(e){ throw new Error('backup file damaged'); }
   var keys=[]; for(var i=0;i<items.length;i++) keys.push({ pub:items[i].pub, priv:await crypto.subtle.importKey('pkcs8', unb64(items[i].k), {name:'ECDH',namedCurve:'P-256'}, true, ['deriveBits']) });
   if(!keys.length) throw new Error('empty');
   /* the key the server publishes (the one people encrypt TO) must be the main key, otherwise new messages stay unreadable */
@@ -569,6 +571,14 @@ async function backupSheet(first){
     catch(err){ go.disabled=false; e.textContent='Could not save: '+(err&&err.message||err); }
   };
 }
+/* the password was right but the backup does NOT hold the key the server publishes (that private key is gone for good):
+   the only real cure is to publish the key we DO have, so sending + all NEW messages work again. Old keys are kept to read what can still be read. */
+async function healKey(pubDoc){
+  if(!myKP || !pubDoc || myKP.pub===pubDoc) return;
+  try{ await publishPub(myKP); srvPub=myKP.pub; ppCache.clear(); shared={}; backupState='off'; }catch(e){ toast('Key fix failed: '+(e&&e.message||e)); return; }
+  toast('Chat key theek ho gayi ✓ Ab naye messages chalenge. Ab backup password dobara save karo.');
+  setTimeout(function(){ backupSheet(false); }, 1200);
+}
 async function initKeys(){
   try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}   /* keep the key storage from being evicted */
   var rec=await idbGet('k_'+me.uid), old=(await idbGet('o_'+me.uid))||[], bk=null, pubDoc=null;
@@ -588,8 +598,7 @@ async function initKeys(){
       if(oi>=0){ var okp=old[oi]; myKP={ priv:okp.priv, pub:okp.pub, old:[{priv:rec.priv,pub:rec.pub}].concat(old.filter(function(x,i){ return i!==oi; })) }; backupState = bk ? 'on' : 'off'; }
       else if(rsDone && myKP.pub===pubDoc){ backupState = bk ? 'on' : 'off'; }
       else if(bk){ var r0=await restoreFlow(bk); if(r0){ myKP=r0; backupState='on'; } try{ localStorage.setItem(rsKey,pubDoc); }catch(e){} }
-      else toast('Your chat key differs from Gupzy. Make a Chat backup in Gupzy, then reopen Gupchats.');
-      if(myKP.pub!==pubDoc){ try{ localStorage.removeItem(rsKey); }catch(e){} }
+      if(myKP.pub!==pubDoc){ await healKey(pubDoc); }
     }
     return;
   }
@@ -597,7 +606,7 @@ async function initKeys(){
   if(!bk && pubDoc){ var lk=await linkFlow(); if(lk.bk) bk=lk.bk; else bk=null; if(lk.fresh){ myKP=await genKey(); myKP.old=[]; await publishPub(myKP); backupState='off'; setTimeout(function(){ backupSheet(true); },700); return; } }
   if(bk){
     var r=await restoreFlow(bk);
-    if(r){ myKP=r; backupState='on'; toast('Chats restored ✓'); return; }
+    if(r){ myKP=r; backupState='on'; toast('Chats restored ✓'); if(pubDoc && r.pub!==pubDoc) await healKey(pubDoc); return; }
   }
   myKP=await genKey(); myKP.old=[]; await publishPub(myKP); backupState='off';
   setTimeout(function(){ backupSheet(true); }, 700);
