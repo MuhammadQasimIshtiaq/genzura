@@ -695,7 +695,17 @@ async function unlockMore(why){
     } });
   if(ok){ toast('Keys loaded ✓ reloading…'); setTimeout(function(){ location.reload(); },700); }
 }
-document.addEventListener('click',function(e){ var t=e.target&&e.target.closest&&e.target.closest('.b.lock'); if(t) unlockMore(t.getAttribute('data-why')||''); });
+function lockInfo(why){
+  var ks=[myKP].concat(myKP&&myKP.old||[]).map(function(k){ return k&&k.pub?k.pub.slice(0,6):'?'; });
+  return (why||'unknown reason')+' | keys on this phone: '+ks.join(', ')+' | server key: '+String(srvPub||'none').slice(0,6);
+}
+document.addEventListener('click',function(e){
+  var t=e.target&&e.target.closest&&e.target.closest('.b.lock'); if(!t) return;
+  var why=t.getAttribute('data-why')||'';
+  var bg=sheet('<div class="sh-t">Message cannot be read yet</div><p class="sh-p">This message was locked with a key this phone does not have. Enter your PIN to load all keys saved in your Gupzy backup.</p><p class="sh-p" style="font-size:11px;word-break:break-all;opacity:.7">'+esc(lockInfo(why))+'</p><button class="btn" id="lkPin" style="width:100%;padding:13px;margin-top:8px">Enter PIN to unlock</button><button class="btn gray" id="lkX" style="width:100%;padding:13px;margin-top:8px">Close</button>');
+  bg.querySelector('#lkX').onclick=function(){ bg.remove(); };
+  bg.querySelector('#lkPin').onclick=function(){ bg.remove(); unlockMore(why); };
+});
 async function peerPub(uid){
   var c=ppCache.get(uid); if(c && Date.now()-c.t<300000) return c.p;
   var d=await db.collection('userKeys').doc(uid).get();

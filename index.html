@@ -8656,6 +8656,7 @@ const E2E=(()=>{
       shared={};cache=new Map();my={uid,priv:rec.priv,pub:rec.pub,old};
       /* publishing my public key no longer blocks opening chats: check/upload it in the background (cached once per device) */
       (async()=>{ try{
+        if(window.__e2eStale) return;   /* a backup exists on the server: do NOT publish a fresh key until the PIN is entered (or a new PIN is made) */
         const ck='at_kpub_'+uid; if(localStorage.getItem(ck)===rec.pub) return;
         let cur=null;try{const d=await ref.get();cur=d.exists?d.data().pub:null;}catch(e){}
         if(cur!==rec.pub)await ref.set({uid,pub:rec.pub,updatedAt:FV.serverTimestamp()});
