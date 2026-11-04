@@ -14823,6 +14823,7 @@ window.gzConfirm=function(msg,okLabel){
 })();
 </script>
 <style id="gzWaDesktop">
+#dmEmpty{display:none !important}
 #dmTabs .dsk{display:none}
 @media (min-width:900px){
  #dmTabs .dsk{display:inline-block}
@@ -14839,7 +14840,7 @@ window.gzConfirm=function(msg,okLabel){
  .dm-row.act{background:var(--surface2)}
  #dmEmpty{display:none;position:absolute;top:0;bottom:0;left:400px;right:0;z-index:80;background:var(--surface);flex-direction:column;align-items:center;justify-content:center;text-align:center;color:var(--text-dim);gap:10px}
  #dmEmpty h2{margin:6px 0 0;color:var(--text);font-size:26px;font-weight:600}
- #igDm.show ~ #igChat:not(.show) + #dmEmpty{display:flex}
+ #igDm.show ~ #igChat:not(.show) + #dmEmpty{display:flex !important}
 }
 </style>
 <style id="gzDesktopCenter">
