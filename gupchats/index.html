@@ -1499,7 +1499,7 @@ async function parseMsg(m, peerUid, chatId){
   if(isG && !base.mine){ var gi=(chats[chatId]&&chats[chatId].info&&chats[chatId].info[m.from])||{}; base.sn=String(gi.name||m.fromName||'User'); }
   var o=null;
   if(m.enc===2){ o=await openGroupMsg(chatId, m); if(!o) return Object.assign(base,{kind:'lock'}); }
-  else if(m.enc){ o=await openMsg(chatId, peerUid, m); if(!o) try{ console.warn('Gupchats: message not readable yet —',m.__why); }catch(e){} return Object.assign(base,{kind:'lock',why:m.__why||''}); }
+  else if(m.enc){ o=await openMsg(chatId, peerUid, m); if(!o){ try{ console.warn('Gupchats: message not readable yet —',m.__why); }catch(e){} return Object.assign(base,{kind:'lock',why:m.__why||''}); } }
   var ty=m.type||'text';
   if(ty==='text' && !m.enc && m.postId){ return Object.assign(base,{ kind:'post', postId:String(m.postId), text:String(m.text||'\uD83D\uDCCE Post') }); }   /* a post shared from Gupzy */
   if(ty==='text'){ return Object.assign(base,{ kind:'text', text:m.enc?o.t:String(m.text||''), q:(o&&o.q)||'' }); }
