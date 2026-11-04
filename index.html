@@ -3280,8 +3280,9 @@ function appendShortsBatch(scroll){
             viewTimer = setTimeout(()=> registerView(s.id), 3000);
           }
           wEnter = Date.now(); wMax = 0; wLast = 0; wLoops = 0;
+          if(window.gzReelWatched){ clearTimeout(vidEl._rwT); vidEl._rwT = setTimeout(()=>window.gzReelWatched(s.id), 3000); }
         }else{
-          vidEl.pause();
+          vidEl.pause(); clearTimeout(vidEl._rwT);
           if(viewTimer){ clearTimeout(viewTimer); viewTimer = null; }
           if(wEnter){
             const dwell = Date.now() - wEnter, dur = vidEl.duration;
@@ -3492,6 +3493,16 @@ function releaseFarVideos(activeSlide){
 /* ---- FEED SIGNALS (shares, watch completion, skips) — used by the trending score ----
    One signal doc per user per video per type (videoSignals/{uid}_{videoId}_{type}); the counters on the video
    change in the same batch, and firestore.rules only allow the counter change if that signal doc is created with it. */
+/* monetization: a reel counts as "watched" once it stayed on screen 3 seconds (each reel once per day, summed over 7 days in Studio) */
+window.gzReelWatched = function(id){
+  try{
+    if(!currentUser || !id) return;
+    const d = new Date(), k = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const sk = 'gzRW_'+currentUser.uid+'_'+k; let seen = []; try{ seen = JSON.parse(localStorage.getItem(sk)||'[]'); }catch(e){}
+    if(seen.indexOf(id) >= 0) return; seen.push(id); try{ localStorage.setItem(sk, JSON.stringify(seen)); }catch(e){}
+    db.collection('channels').doc(currentUser.uid).update({ ['watchDays.'+k]: firebase.firestore.FieldValue.increment(1) }).catch(()=>{});
+  }catch(e){}
+};
 const signalSent = new Set();
 function sendVideoSignal(videoId, type, ownerUid, counters){
   try{
