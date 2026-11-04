@@ -8123,7 +8123,7 @@ function renderInbox(){
   $('dmList').innerHTML=h||'<div class="ig-empty">'+(dmTab==='follow'?'No chats with people you follow yet.':'No chats yet.<br>Tap the pencil above to start a new message.')+'</div>';
 }
 $('dmTabs').onclick=e=>{const b=e.target.closest('[data-t]');if(!b)return;dmTab=b.dataset.t;$('dmTabs').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));renderInbox();};
-function openGupzyChats(){igPauseHome&&igPauseHome();$('igDm').classList.add('show');renderInbox();loadContactPeople().then(renderInbox);}
+function openGupzyChats(){gzChatGate().then(ok=>{if(!ok)return;igPauseHome&&igPauseHome();$('igDm').classList.add('show');renderInbox();loadContactPeople().then(renderInbox);});}
 /* Messages button: choose between the chats inside Gupzy and the separate Gupchats app */
 const AT_CHATS_APK_URL = '';   /* Gupchats APK download link, only used while Gupchats is NOT on Google Play yet */
 const AT_CHATS_ON_PLAYSTORE = false;   /* set to true once Gupchats is live on Google Play: "Chats on Gupchats" then opens its Play Store page, and Gupzy opens Gupchats by itself after the install */
@@ -8363,7 +8363,8 @@ $('ncList').onclick=e=>{const r=e.target.closest('[data-p]');if(!r)return;$('igN
 
 /* ================= chat screen ================= */
 let msgs=[];let clr=0;
-function openChat(p){
+function openChat(p){ if(!requireAuth())return; gzChatGate().then(ok=>{if(ok)openChatG(p);}); }
+function openChatG(p){
   if(!requireAuth())return;
   if(gupchatsInstalled()){ openGupchatsApp(p.group?('g:'+p.id):p.id); return; }   /* Gupchats installed: 1-to-1 chats AND groups open there ("g:" + group id = open that group) */
   if(!p.group&&!chats[cidOf(me(),p.id)]){
@@ -8646,7 +8647,7 @@ const E2E=(()=>{
       if(rec&&rec.priv&&!rec.priv.extractable){old=[rec,...old];await idbSet('o_'+uid,old);rec=null;} /* old non-backup-able key: keep only to read old msgs */
       if(!rec||!rec.priv){
         let bk=null;try{bk=await db.collection('keyBackups').doc(uid).get();}catch(e){}
-        if(bk&&bk.exists&&!old.length)window.__e2eStale=true; /* old backup exists on server: do NOT block the app / pop up - make a fresh key so new msgs work; old msgs come back via Restore chat backup */
+        if(bk&&bk.exists&&!old.length){window.__e2eStale=true;try{localStorage.setItem('gz_pin_need_'+uid,'1');}catch(e){}} /* old backup exists on server: do NOT block the app / pop up - make a fresh key so new msgs work; old msgs come back via Restore chat backup */
         const kp=await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'},true,['deriveBits']);
         rec={priv:kp.privateKey,pub:b64(await crypto.subtle.exportKey('raw',kp.publicKey))};
         await idbSet('k_'+uid,rec);
@@ -8788,6 +8789,7 @@ const E2E=(()=>{
     const b=d.data();let items;
     try{const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(b.iv),additionalData:enc.encode('keybackup|'+uid)},await kdf(pw,unb64(b.salt),b.iter),unb64(b.ct));items=JSON.parse(dec.decode(pt));}catch(e){throw new Error('badpass');}
     const keys=[];for(const it of items)keys.push({pub:it.pub,priv:await crypto.subtle.importKey('pkcs8',unb64(it.k),{name:'ECDH',namedCurve:'P-256'},true,['deriveBits'])});
+    try{const d3=await db.collection('userKeys').doc(uid).get();const sp=d3.exists?d3.data().pub:null;const si=keys.findIndex(k=>k.pub===sp);if(si>0)keys.unshift(keys.splice(si,1)[0]);}catch(e){}
     let cur=null,oldL=[];try{cur=await idbGet('k_'+uid);oldL=(await idbGet('o_'+uid))||[];}catch(e){}
     const rest=keys.slice(1);const seen=new Set(keys.map(k=>k.pub));
     [cur,...oldL].forEach(k=>{if(k&&k.priv&&k.pub&&!seen.has(k.pub)){seen.add(k.pub);rest.push(k);}});
@@ -8795,9 +8797,107 @@ const E2E=(()=>{
     window.__e2eStale=false;
     my=null;initP=null;shared={};cache=new Map();await init();return keys.length;
   }
-  return {backup,restore,init,encrypt,encryptGroup,canEncryptGroup,openAll,canEncrypt,encryptFile,decryptFile};
+  async function status(){
+    const uid=me();await init();const rec=await idbGet('k_'+uid);let bkp=false,srv=null;
+    try{const d=await db.collection('keyBackups').doc(uid).get();bkp=d.exists;}catch(e){}
+    try{const d2=await db.collection('userKeys').doc(uid).get();srv=d2.exists?d2.data().pub:null;}catch(e){}
+    return {hasLocal:!!(rec&&rec.priv&&rec.priv.extractable),localPub:rec&&rec.pub,backup:bkp,srvPub:srv};
+  }
+  /* forgot PIN: brand-new key (published right away) + a backup under the new PIN; old keys are kept only to read what can still be read */
+  async function resetKey(pin){
+    const uid=me();await init();const cur=my;const oldL=(await idbGet('o_'+uid))||[];
+    const keep=[cur,...oldL].filter(k=>k&&k.priv);
+    const kp=await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'},true,['deriveBits']);
+    const rec={priv:kp.privateKey,pub:b64(await crypto.subtle.exportKey('raw',kp.publicKey))};
+    await idbSet('o_'+uid,keep);await idbSet('k_'+uid,rec);
+    await db.collection('userKeys').doc(uid).set({uid,pub:rec.pub,updatedAt:FV.serverTimestamp()});
+    try{localStorage.setItem('at_kpub_'+uid,rec.pub);}catch(e){}
+    window.__e2eStale=false;my=null;initP=null;shared={};cache=new Map();await init();return backup(pin);
+  }
+  return {status,resetKey,backup,restore,init,encrypt,encryptGroup,canEncryptGroup,openAll,canEncrypt,encryptFile,decryptFile};
 window.__blkRefreshB=function(){try{renderInbox();}catch(e){}};
 })();
+/* ===== GUPZY CHAT PIN (6 boxes) - shared by Gupzy + Gupchats =====
+   o={mode:'create'|'ask', title, sub, closable, legacy, forgot:()=>Promise<bool>, submit:async(secret)=>{throw Error('badpass') = wrong pin}} -> Promise<bool> */
+function gzPinSheet(o){
+  return new Promise(function(resolve){
+    var mk=function(t,css,txt){ var e=document.createElement(t); if(css) e.style.cssText=css; if(txt!=null) e.textContent=txt; return e; };
+    var ov=mk('div','position:fixed;left:0;top:0;right:0;bottom:0;z-index:100000;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:18px;overflow:auto');
+    var bx=mk('div','background:#fff;color:#111;border-radius:18px;padding:22px 18px;width:100%;max-width:360px;font:14px/1.45 system-ui,sans-serif;text-align:center;box-sizing:border-box');
+    var create=o.mode==='create', legacyOn=false;
+    bx.appendChild(mk('div','font-size:34px;line-height:1','🔐'));
+    bx.appendChild(mk('div','font-weight:800;font-size:18px;margin:6px 0 4px',o.title||(create?'Chats ka PIN banao':'Chats ka PIN daalo')));
+    bx.appendChild(mk('div','color:#555;margin-bottom:14px',o.sub||(create?'6 number ka PIN banao (jaise 1234 56). Naye phone ya app dobara install karne par ye PIN sirf ek baar poocha jayega. PIN bhool gaye to purane messages wapas nahi aayenge.':'Apne chats kholne ke liye apna 6 number ka PIN daalo. Ye sirf ek baar poocha jata hai.')));
+    function row(label){
+      var wrap=mk('div','margin-bottom:10px');
+      if(label) wrap.appendChild(mk('div','font-size:12px;color:#777;margin:2px 0 5px',label));
+      var line=mk('div','display:flex;justify-content:center;gap:6px'), bs=[];
+      for(var i=0;i<6;i++){ (function(i){
+        var b=mk('input','width:42px;height:50px;font-size:22px;font-weight:700;text-align:center;border:1.5px solid #bbb;border-radius:10px;background:#f6f6f6;color:#111;outline:none;padding:0;box-sizing:border-box');
+        b.type='password'; b.inputMode='numeric'; b.maxLength=1; b.autocomplete='off'; b.setAttribute('pattern','[0-9]*');
+        b.onfocus=function(){ b.style.borderColor='#1a73e8'; b.select&&b.select(); }; b.onblur=function(){ b.style.borderColor='#bbb'; };
+        b.oninput=function(){ var v=(b.value||'').replace(/\D/g,''); b.value=v.slice(-1); if(v&&i<5) bs[i+1].focus(); r.changed(); };
+        b.onkeydown=function(e){ if(e.key==='Backspace'&&!b.value&&i>0){ bs[i-1].value=''; bs[i-1].focus(); e.preventDefault(); r.changed(); } };
+        b.onpaste=function(e){ var t=((e.clipboardData||window.clipboardData).getData('text')||'').replace(/\D/g,'').slice(0,6); if(!t) return; e.preventDefault(); for(var k=0;k<6;k++) bs[k].value=t[k]||''; bs[Math.min(t.length,5)].focus(); r.changed(); };
+        bs.push(b); line.appendChild(b);
+      })(i); }
+      wrap.appendChild(line);
+      var r={ el:wrap, bs:bs, changed:function(){ if(r.onch) r.onch(); }, get:function(){ return bs.map(function(b){ return b.value; }).join(''); }, clear:function(){ bs.forEach(function(b){ b.value=''; }); }, focus:function(){ bs[0].focus(); } };
+      return r;
+    }
+    var r1=row(create?'Naya PIN':''), r2=create?row('PIN dobara daalo'):null;
+    var lg=mk('input','width:100%;box-sizing:border-box;padding:12px;border:1.5px solid #bbb;border-radius:10px;font-size:15px;margin-bottom:10px;display:none'); lg.type='password'; lg.placeholder='Purana backup password'; lg.autocomplete='off';
+    var em=mk('div','color:#d93025;min-height:18px;font-size:13px;margin:2px 0 8px');
+    var go=mk('button','width:100%;border:0;border-radius:12px;padding:13px;font-weight:700;font-size:15px;background:#1a73e8;color:#fff;cursor:pointer',create?'PIN banao':'Kholo');
+    bx.appendChild(r1.el); if(r2) bx.appendChild(r2.el); bx.appendChild(lg); bx.appendChild(em); bx.appendChild(go);
+    var busy=false;
+    function sec(){ return legacyOn?lg.value:r1.get(); }
+    function ready(){ if(legacyOn) return lg.value.length>0; if(create) return r1.get().length===6&&r2.get().length===6; return r1.get().length===6; }
+    function refresh(){ go.disabled=busy||!ready(); go.style.opacity=go.disabled?'.5':'1'; }
+    function run(){
+      if(busy||!ready()) return; em.style.color='#555';
+      if(create&&!legacyOn&&r1.get()!==r2.get()){ em.style.color='#d93025'; em.textContent='Dono PIN same nahi hain'; r2.clear(); r2.focus(); refresh(); return; }
+      busy=true; refresh(); em.textContent='Ruko… (kuch second lagte hain)'; var secret=sec();
+      Promise.resolve().then(function(){ return o.submit(secret); }).then(function(){ ov.remove(); resolve(true); }).catch(function(e){
+        busy=false; em.style.color='#d93025';
+        em.textContent=(e&&e.message==='badpass')?'Galat PIN. Dobara koshish karo.':'Masla: '+((e&&e.message)||e);
+        if(!legacyOn){ r1.clear(); if(r2) r2.clear(); r1.focus(); } refresh();
+      });
+    }
+    r1.onch=function(){ if(create&&r1.get().length===6&&!r2.get()) r2.focus(); if(!create&&r1.get().length===6) run(); refresh(); };
+    if(r2) r2.onch=function(){ refresh(); };
+    lg.oninput=refresh; go.onclick=run; lg.onkeydown=function(e){ if(e.key==='Enter') run(); };
+    if(!create&&o.legacy){ var lk=mk('div','color:#1a73e8;font-size:13px;margin-top:12px;cursor:pointer','Purana (lamba) password hai?'); lk.onclick=function(){ legacyOn=!legacyOn; r1.el.style.display=legacyOn?'none':''; lg.style.display=legacyOn?'':'none'; lk.textContent=legacyOn?'6 number wala PIN daalo':'Purana (lamba) password hai?'; go.textContent='Kholo'; em.textContent=''; refresh(); (legacyOn?lg:r1.bs[0]).focus(); }; bx.appendChild(lk); }
+    if(!create&&o.forgot){ var fg=mk('div','color:#d93025;font-size:13px;margin-top:10px;cursor:pointer','PIN yaad nahi? Naya PIN banao'); fg.onclick=function(){ if(busy) return; ov.style.display='none'; Promise.resolve(o.forgot()).then(function(v){ if(v){ ov.remove(); resolve(true); } else { ov.style.display='flex'; } }).catch(function(){ ov.style.display='flex'; }); }; bx.appendChild(fg); }
+    if(o.closable){ var cl=mk('div','color:#777;font-size:13px;margin-top:12px;cursor:pointer','Abhi nahi'); cl.onclick=function(){ if(busy) return; ov.remove(); resolve(false); }; bx.appendChild(cl); }
+    ov.appendChild(bx); document.body.appendChild(ov); refresh(); setTimeout(function(){ try{ r1.focus(); }catch(e){} },60);
+  });
+}
+
+/* chats only open after a PIN exists / was entered once on this device */
+window.gzChatGate=function(){
+  if(window.__gzPinDone) return Promise.resolve(true);
+  if(!me()) return Promise.resolve(true);
+  if(window.__gzGateP) return window.__gzGateP;
+  const uid=me(),okKey='gz_pin_ok_'+uid,needKey='gz_pin_need_'+uid;
+  const mark=()=>{window.__gzPinDone=true;try{localStorage.setItem(okKey,'1');localStorage.removeItem(needKey);}catch(e){}};
+  window.__gzGateP=(async()=>{
+    try{
+      let st=await E2E.status(),flag=false,need=false;try{flag=localStorage.getItem(okKey)==='1';need=localStorage.getItem(needKey)==='1';}catch(e){}
+      const synced=st.hasLocal&&(!st.srvPub||st.localPub===st.srvPub);
+      if(synced&&!need&&(flag||st.backup)){mark();return true;}      /* already unlocked here (or an older account that already has a backup) */
+      const newPin=()=>gzPinSheet({mode:'create',title:'Naya PIN banao',submit:async pin=>{await E2E.resetKey(pin);mark();}});
+      if(st.backup){
+        return await gzPinSheet({mode:'ask',legacy:true,closable:true,
+          submit:async pin=>{await E2E.restore(pin);mark();toast('✅ Chats khul gaye');},
+          forgot:async()=>{ if(!(await gzConfirm('Naya PIN banane par purane messages jo purani key se bane the wo wapas nahi khulenge. Nayi key bhi banegi aur backup khud save ho jayega. Aage barhein?','Naya PIN')))return false; return newPin(); }});
+      }
+      return await gzPinSheet({mode:'create',closable:true,title:'Chats ka PIN banao',submit:async pin=>{ if(synced) await E2E.backup(pin); else await E2E.resetKey(pin); mark(); toast('✅ PIN ban gaya'); }});
+    }catch(e){toast('PIN setup fail: '+e.message);return false;}
+    finally{window.__gzGateP=null;}
+  })();
+  return window.__gzGateP;
+};
 let decTok=0,nokeyWarned={};
 function askPass(title,sub,confirm){return new Promise(res=>{
   const o=document.createElement('div');o.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:20px';
@@ -8820,13 +8920,10 @@ function askPass(title,sub,confirm){return new Promise(res=>{
 });}
 window.e2eeBackupUI=async function(){
   if(window.__e2eStale&&!(await gzConfirm('Is account ka purana backup abhi restore nahi hua. Naya backup purane ko replace kar dega aur purane messages hamesha ke liye nahi khulenge. Pehle "Restore chat backup" try karein. Phir bhi naya backup banana hai?','Continue')))return;
-  const p=await askPass('Chat backup','Create a password. If you forget it, your chats cannot be restored. There is no reset.',true);if(!p)return;
-  try{toast('Creating backup…');const r=await E2E.backup(p);toast('✅ Chat backup saved'+(r.skipped?' ('+r.skipped+' old key could not be backed up)':''));}catch(e){toast('Backup failed: '+e.message);}
+  await gzPinSheet({mode:'create',closable:true,title:'Chats ka PIN badlo',sub:'Naya 6 number ka PIN banao. Gupchats mein bhi yahi PIN chalega.',submit:async pin=>{await E2E.backup(pin);window.__gzPinDone=true;try{localStorage.setItem('gz_pin_ok_'+me(),'1');}catch(e){} toast('✅ PIN save ho gaya');}});
 };
 window.e2eeRestoreUI=async function(){
-  const p=await askPass('Restore chat backup','Enter your backup password to restore your old chats.',false);if(!p)return;
-  try{await E2E.restore(p);toast('✅ Chat backup restored');if(typeof openId!=='undefined'&&openId)renderMsgs();}
-  catch(e){toast(e.message==='badpass'?'Wrong password':e.message==='nobackup'?'No backup found for this account':'Restore failed: '+e.message);}
+  await gzPinSheet({mode:'ask',legacy:true,closable:true,submit:async pin=>{await E2E.restore(pin);window.__gzPinDone=true;try{localStorage.setItem('gz_pin_ok_'+me(),'1');localStorage.removeItem('gz_pin_need_'+me());}catch(e){} toast('✅ Chat backup restored');if(typeof openId!=='undefined'&&openId)renderMsgs();}});
 };
 document.getElementById('e2eeBackupBtn')&&document.getElementById('e2eeBackupBtn').addEventListener('click',()=>window.e2eeBackupUI());
 document.getElementById('e2eeRestoreBtn')&&document.getElementById('e2eeRestoreBtn').addEventListener('click',()=>window.e2eeRestoreUI());

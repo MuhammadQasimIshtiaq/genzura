@@ -559,17 +559,8 @@ function linkFlow(){
 /* set up / change the backup password */
 async function backupSheet(first){
   if(!myKP) return;
-  var bg=sheet('<div class="sh-t">'+(first?'Protect your chats':'Chat backup password')+'</div><p class="sh-p">Your messages are end-to-end encrypted. A backup password lets you read them again on a new phone or after reinstalling. It is the <b>same backup as in Gupzy</b>, so one password works in both apps. We never see it – if you forget it, it cannot be recovered.</p><input id="bpA" type="password" class="inp" placeholder="Backup password (min 10 characters)" autocomplete="off"><input id="bpB" type="password" class="inp" placeholder="Repeat password" autocomplete="off"><div class="err" id="bpE"></div><button class="btn" id="bpGo" style="width:100%;padding:13px;margin-top:8px">Save backup</button><button class="btn gray" id="bpNo" style="width:100%;padding:13px;margin-top:8px">'+(first?'Skip for now':'Cancel')+'</button>');
-  var e=bg.querySelector('#bpE'), go=bg.querySelector('#bpGo');
-  bg.querySelector('#bpNo').onclick=function(){ bg.remove(); };
-  go.onclick=async function(){
-    var a=bg.querySelector('#bpA').value, b=bg.querySelector('#bpB').value;
-    if(a.length<10){ e.textContent='Use at least 10 characters.'; return; }
-    if(a!==b){ e.textContent='Passwords do not match.'; return; }
-    go.disabled=true; e.textContent='Saving…';
-    try{ await makeBackup(a); bg.remove(); toast('Backup saved ✓'); }
-    catch(err){ go.disabled=false; e.textContent='Could not save: '+(err&&err.message||err); }
-  };
+  var ok=await gzPinSheet({ mode:'create', closable:true, title:'Chats ka PIN badlo', sub:'Naya 6 number ka PIN banao. Ye Gupzy ke saath same backup hai, dono jagah yahi PIN chalega.', submit:async function(pin){ await makeBackup(pin); } });
+  if(ok) toast('PIN save ho gaya ✓');
 }
 /* the password was right but the backup does NOT hold the key the server publishes (that private key is gone for good):
    the only real cure is to publish the key we DO have, so sending + all NEW messages work again. Old keys are kept to read what can still be read. */
@@ -579,37 +570,115 @@ async function healKey(pubDoc){
   toast('Chat key theek ho gayi ✓ Ab naye messages chalenge. Ab backup password dobara save karo.');
   setTimeout(function(){ backupSheet(false); }, 1200);
 }
-async function initKeys(){
-  try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}   /* keep the key storage from being evicted */
-  var rec=await idbGet('k_'+me.uid), old=(await idbGet('o_'+me.uid))||[], bk=null, pubDoc=null;
-  try{ var d=await db.collection('keyBackups').doc(me.uid).get(); bk=d.exists?d.data():null; }catch(e){}
-  try{ var d2=await db.collection('userKeys').doc(me.uid).get(); pubDoc=d2.exists?d2.data().pub:null; }catch(e){}
-  srvPub=pubDoc;
-  var DBG=function(t){ try{ console.log('KEY v3: '+t); }catch(e){} };
-  DBG('start, local key '+(rec&&rec.priv?'YES':'NO')+', backup '+(bk?'YES':'NO')+', server key '+(pubDoc?'YES':'NO')+(rec&&pubDoc?(rec.pub===pubDoc?', SAME':', DIFFERENT'):''));
-  if(rec && rec.priv){
-    myKP={ priv:rec.priv, pub:rec.pub, old:old };
-    backupState = bk ? 'on' : 'off';
-    if(!pubDoc){ await publishPub(myKP); }
-    else if(pubDoc!==rec.pub){
-      /* the key published for this account is a different one (it was changed in Gupzy): never overwrite it, restore it instead */
-      var rsKey='gc_rs_'+me.uid, rsDone=false; try{ rsDone=(localStorage.getItem(rsKey)===pubDoc); }catch(e){}
-      var oi=-1; for(var q=0;q<old.length;q++){ if(old[q] && old[q].pub===pubDoc){ oi=q; break; } }
-      if(oi>=0){ var okp=old[oi]; myKP={ priv:okp.priv, pub:okp.pub, old:[{priv:rec.priv,pub:rec.pub}].concat(old.filter(function(x,i){ return i!==oi; })) }; backupState = bk ? 'on' : 'off'; }
-      else if(rsDone && myKP.pub===pubDoc){ backupState = bk ? 'on' : 'off'; }
-      else if(bk){ var r0=await restoreFlow(bk); if(r0){ myKP=r0; backupState='on'; } try{ localStorage.setItem(rsKey,pubDoc); }catch(e){} }
-      if(myKP.pub!==pubDoc){ await healKey(pubDoc); }
+/* ===== GUPZY CHAT PIN (6 boxes) - shared by Gupzy + Gupchats =====
+   o={mode:'create'|'ask', title, sub, closable, legacy, forgot:()=>Promise<bool>, submit:async(secret)=>{throw Error('badpass') = wrong pin}} -> Promise<bool> */
+function gzPinSheet(o){
+  return new Promise(function(resolve){
+    var mk=function(t,css,txt){ var e=document.createElement(t); if(css) e.style.cssText=css; if(txt!=null) e.textContent=txt; return e; };
+    var ov=mk('div','position:fixed;left:0;top:0;right:0;bottom:0;z-index:100000;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:18px;overflow:auto');
+    var bx=mk('div','background:#fff;color:#111;border-radius:18px;padding:22px 18px;width:100%;max-width:360px;font:14px/1.45 system-ui,sans-serif;text-align:center;box-sizing:border-box');
+    var create=o.mode==='create', legacyOn=false;
+    bx.appendChild(mk('div','font-size:34px;line-height:1','🔐'));
+    bx.appendChild(mk('div','font-weight:800;font-size:18px;margin:6px 0 4px',o.title||(create?'Chats ka PIN banao':'Chats ka PIN daalo')));
+    bx.appendChild(mk('div','color:#555;margin-bottom:14px',o.sub||(create?'6 number ka PIN banao (jaise 1234 56). Naye phone ya app dobara install karne par ye PIN sirf ek baar poocha jayega. PIN bhool gaye to purane messages wapas nahi aayenge.':'Apne chats kholne ke liye apna 6 number ka PIN daalo. Ye sirf ek baar poocha jata hai.')));
+    function row(label){
+      var wrap=mk('div','margin-bottom:10px');
+      if(label) wrap.appendChild(mk('div','font-size:12px;color:#777;margin:2px 0 5px',label));
+      var line=mk('div','display:flex;justify-content:center;gap:6px'), bs=[];
+      for(var i=0;i<6;i++){ (function(i){
+        var b=mk('input','width:42px;height:50px;font-size:22px;font-weight:700;text-align:center;border:1.5px solid #bbb;border-radius:10px;background:#f6f6f6;color:#111;outline:none;padding:0;box-sizing:border-box');
+        b.type='password'; b.inputMode='numeric'; b.maxLength=1; b.autocomplete='off'; b.setAttribute('pattern','[0-9]*');
+        b.onfocus=function(){ b.style.borderColor='#1a73e8'; b.select&&b.select(); }; b.onblur=function(){ b.style.borderColor='#bbb'; };
+        b.oninput=function(){ var v=(b.value||'').replace(/\D/g,''); b.value=v.slice(-1); if(v&&i<5) bs[i+1].focus(); r.changed(); };
+        b.onkeydown=function(e){ if(e.key==='Backspace'&&!b.value&&i>0){ bs[i-1].value=''; bs[i-1].focus(); e.preventDefault(); r.changed(); } };
+        b.onpaste=function(e){ var t=((e.clipboardData||window.clipboardData).getData('text')||'').replace(/\D/g,'').slice(0,6); if(!t) return; e.preventDefault(); for(var k=0;k<6;k++) bs[k].value=t[k]||''; bs[Math.min(t.length,5)].focus(); r.changed(); };
+        bs.push(b); line.appendChild(b);
+      })(i); }
+      wrap.appendChild(line);
+      var r={ el:wrap, bs:bs, changed:function(){ if(r.onch) r.onch(); }, get:function(){ return bs.map(function(b){ return b.value; }).join(''); }, clear:function(){ bs.forEach(function(b){ b.value=''; }); }, focus:function(){ bs[0].focus(); } };
+      return r;
     }
+    var r1=row(create?'Naya PIN':''), r2=create?row('PIN dobara daalo'):null;
+    var lg=mk('input','width:100%;box-sizing:border-box;padding:12px;border:1.5px solid #bbb;border-radius:10px;font-size:15px;margin-bottom:10px;display:none'); lg.type='password'; lg.placeholder='Purana backup password'; lg.autocomplete='off';
+    var em=mk('div','color:#d93025;min-height:18px;font-size:13px;margin:2px 0 8px');
+    var go=mk('button','width:100%;border:0;border-radius:12px;padding:13px;font-weight:700;font-size:15px;background:#1a73e8;color:#fff;cursor:pointer',create?'PIN banao':'Kholo');
+    bx.appendChild(r1.el); if(r2) bx.appendChild(r2.el); bx.appendChild(lg); bx.appendChild(em); bx.appendChild(go);
+    var busy=false;
+    function sec(){ return legacyOn?lg.value:r1.get(); }
+    function ready(){ if(legacyOn) return lg.value.length>0; if(create) return r1.get().length===6&&r2.get().length===6; return r1.get().length===6; }
+    function refresh(){ go.disabled=busy||!ready(); go.style.opacity=go.disabled?'.5':'1'; }
+    function run(){
+      if(busy||!ready()) return; em.style.color='#555';
+      if(create&&!legacyOn&&r1.get()!==r2.get()){ em.style.color='#d93025'; em.textContent='Dono PIN same nahi hain'; r2.clear(); r2.focus(); refresh(); return; }
+      busy=true; refresh(); em.textContent='Ruko… (kuch second lagte hain)'; var secret=sec();
+      Promise.resolve().then(function(){ return o.submit(secret); }).then(function(){ ov.remove(); resolve(true); }).catch(function(e){
+        busy=false; em.style.color='#d93025';
+        em.textContent=(e&&e.message==='badpass')?'Galat PIN. Dobara koshish karo.':'Masla: '+((e&&e.message)||e);
+        if(!legacyOn){ r1.clear(); if(r2) r2.clear(); r1.focus(); } refresh();
+      });
+    }
+    r1.onch=function(){ if(create&&r1.get().length===6&&!r2.get()) r2.focus(); if(!create&&r1.get().length===6) run(); refresh(); };
+    if(r2) r2.onch=function(){ refresh(); };
+    lg.oninput=refresh; go.onclick=run; lg.onkeydown=function(e){ if(e.key==='Enter') run(); };
+    if(!create&&o.legacy){ var lk=mk('div','color:#1a73e8;font-size:13px;margin-top:12px;cursor:pointer','Purana (lamba) password hai?'); lk.onclick=function(){ legacyOn=!legacyOn; r1.el.style.display=legacyOn?'none':''; lg.style.display=legacyOn?'':'none'; lk.textContent=legacyOn?'6 number wala PIN daalo':'Purana (lamba) password hai?'; go.textContent='Kholo'; em.textContent=''; refresh(); (legacyOn?lg:r1.bs[0]).focus(); }; bx.appendChild(lk); }
+    if(!create&&o.forgot){ var fg=mk('div','color:#d93025;font-size:13px;margin-top:10px;cursor:pointer','PIN yaad nahi? Naya PIN banao'); fg.onclick=function(){ if(busy) return; ov.style.display='none'; Promise.resolve(o.forgot()).then(function(v){ if(v){ ov.remove(); resolve(true); } else { ov.style.display='flex'; } }).catch(function(){ ov.style.display='flex'; }); }; bx.appendChild(fg); }
+    if(o.closable){ var cl=mk('div','color:#777;font-size:13px;margin-top:12px;cursor:pointer','Abhi nahi'); cl.onclick=function(){ if(busy) return; ov.remove(); resolve(false); }; bx.appendChild(cl); }
+    ov.appendChild(bx); document.body.appendChild(ov); refresh(); setTimeout(function(){ try{ r1.focus(); }catch(e){} },60);
+  });
+}
+
+/* ---- PIN gate: chats do NOT start until a PIN exists / is entered. Same backup doc (keyBackups) as Gupzy. ---- */
+async function initKeys(){
+  try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
+  var uid=me.uid, okKey='gz_pin_ok_'+uid, needKey='gz_pin_need_'+uid;
+  var rec=await idbGet('k_'+uid), old=(await idbGet('o_'+uid))||[], bk=null, pubDoc=null;
+  try{ var d=await db.collection('keyBackups').doc(uid).get(); bk=d.exists?d.data():null; }catch(e){}
+  try{ var d2=await db.collection('userKeys').doc(uid).get(); pubDoc=d2.exists?d2.data().pub:null; }catch(e){}
+  srvPub=pubDoc;
+  var flagOk=false, need=false; try{ flagOk=localStorage.getItem(okKey)==='1'; need=localStorage.getItem(needKey)==='1'; }catch(e){}
+  var hasKey=!!(rec&&rec.priv), oi=-1;
+  for(var q=0;q<old.length;q++){ if(old[q]&&old[q].pub===pubDoc){ oi=q; break; } }
+  var inSync=hasKey && (!pubDoc || rec.pub===pubDoc || oi>=0);
+  function done(){ backupState='on'; try{ localStorage.setItem(okKey,'1'); localStorage.removeItem(needKey); }catch(e){} }
+  /* 1) this phone already has the right key (PIN was made / entered before, or an older account that already has a backup): no question asked */
+  if(hasKey && inSync && !need && (flagOk || bk)){
+    if(oi>=0 && rec.pub!==pubDoc){ var okp=old[oi]; myKP={ priv:okp.priv, pub:okp.pub, old:[{priv:rec.priv,pub:rec.pub}].concat(old.filter(function(x,i){ return i!==oi; })) }; }
+    else { myKP={ priv:rec.priv, pub:rec.pub, old:old }; if(!pubDoc) await publishPub(myKP); }
+    backupState=bk?'on':'off'; try{ localStorage.setItem(okKey,'1'); }catch(e){} return;
+  }
+  /* a NEW key + a NEW PIN (first time without backup, or the PIN was forgotten) */
+  var fresh=null;
+  async function newKeyWithPin(pin){
+    if(!fresh){
+      var keep=[]; if(rec&&rec.priv) keep.push(rec); keep=keep.concat(old);
+      await idbSet('o_'+uid, keep);
+      fresh=await genKey(); fresh.old=keep;
+    }
+    myKP=fresh; await publishPub(myKP); srvPub=myKP.pub; ppCache.clear(); shared={};
+    await makeBackup(pin); done();
+  }
+  if(bk){
+    await gzPinSheet({ mode:'ask', legacy:true,
+      submit:async function(pin){
+        var r=await openBackup(bk,pin); myKP=r;
+        if(pubDoc && r.pub!==pubDoc){ await publishPub(myKP); srvPub=myKP.pub; ppCache.clear(); shared={}; await makeBackup(pin); }
+        done(); toast('Chats khul gaye ✓');
+      },
+      forgot:async function(){
+        var yes=await ask('Naya PIN banana hai?','Purane messages jo purani key se bane the wo wapas nahi khulenge. Naya PIN banega aur nayi key bhi banegi (Gupzy mein bhi khud save ho jayegi).','Naya PIN banao',true);
+        if(!yes) return false;
+        return gzPinSheet({ mode:'create', title:'Naya PIN banao', submit:newKeyWithPin });
+      } });
     return;
   }
-  /* no key on this phone */
-  if(!bk && pubDoc){ var lk=await linkFlow(); if(lk.bk) bk=lk.bk; else bk=null; if(lk.fresh){ myKP=await genKey(); myKP.old=[]; await publishPub(myKP); backupState='off'; setTimeout(function(){ backupSheet(true); },700); return; } }
-  if(bk){
-    var r=await restoreFlow(bk);
-    if(r){ myKP=r; backupState='on'; toast('Chats restored ✓'); if(pubDoc && r.pub!==pubDoc) await healKey(pubDoc); return; }
+  /* no backup yet */
+  if(hasKey && (!pubDoc || rec.pub===pubDoc)){
+    await gzPinSheet({ mode:'create', title:'Chats ka PIN banao', submit:async function(pin){
+      myKP={ priv:rec.priv, pub:rec.pub, old:old }; if(!pubDoc) await publishPub(myKP);
+      await makeBackup(pin); done(); toast('PIN ban gaya ✓'); } });
+    return;
   }
-  myKP=await genKey(); myKP.old=[]; await publishPub(myKP); backupState='off';
-  setTimeout(function(){ backupSheet(true); }, 700);
+  await gzPinSheet({ mode:'create', title:'Chats ka PIN banao', submit:newKeyWithPin });
 }
 async function peerPub(uid){
   var c=ppCache.get(uid); if(c && Date.now()-c.t<300000) return c.p;
