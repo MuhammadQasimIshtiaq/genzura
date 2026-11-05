@@ -13,6 +13,10 @@ export default {
     if (url.hostname.startsWith('studio.') && (p === '/' || p === '/index.html')) {
       return env.ASSETS.fetch(new Request(url.origin + '/studio/' + url.search, request));
     }
+    /* studio.gupzy.com: its own icons (not the main Gupzy ones) */
+    if (url.hostname.startsWith('studio.') && /^\/(favicon\.ico|favicon-(32|48|96)\.png|apple-touch-icon\.png|icon-(192|512)\.png)$/.test(p)) {
+      return env.ASSETS.fetch(new Request(url.origin + '/studio' + p, request));
+    }
     /* old Studio address -> new subdomain */
     if ((url.hostname === 'gupzy.com' || url.hostname === 'www.gupzy.com') && (p === '/studio' || p === '/studio/')) {
       return Response.redirect('https://studio.gupzy.com/' + url.search + url.hash, 301);
