@@ -57,6 +57,11 @@
 <meta name="apple-mobile-web-app-title" content="Gupzy">
 
 <!-- speed: open connections to the hosts we always need, before the scripts ask for them -->
+<link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" crossorigin="anonymous">
+<link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" crossorigin="anonymous">
+<link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js" crossorigin="anonymous">
+<link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js" crossorigin="anonymous">
+<link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js" crossorigin="anonymous">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
 <link rel="preconnect" href="https://res.cloudinary.com" crossorigin>
@@ -3229,6 +3234,7 @@ function renderShorts(){
   const scroll = document.getElementById('shortsScroll');
   scroll.innerHTML = '';
   if(shortsData.length===0){ scroll.innerHTML = `<div class="empty-state" style="color:var(--text-dim);">No Shorts yet.</div>`; return; }
+  _feedGen++;
   _feedTotalCount = 0;
   _feedLoopBusy = false;
   _followingShownChannels = new Set();
@@ -3241,8 +3247,10 @@ function renderShorts(){
    last slide so that when the user scrolls all the way to it, another pass gets
    appended automatically — the feed never "runs out", it just loops seamlessly,
    like there's always more content. */
+let _feedGen = 0;   /* bumped on every full re-render: stops late chunks of an old render from being appended */
 function appendShortsBatch(scroll){
-  shortsData.forEach((s)=>{
+  const _gen = _feedGen;
+  const _buildOne = (s)=>{
     const i = _feedTotalCount;
     if(ADS_ENABLED && !isAdFree() && i>0 && i % AD_EVERY === 0){
       const adSlide = renderNextAdSlide();
@@ -3381,10 +3389,31 @@ function appendShortsBatch(scroll){
     }, {threshold:0.1}).observe(slide);
 
     _feedTotalCount++;
-  });
+  };
+
+  /* SPEED: building all ~80 reels at once (80 slides, 160 observers) froze the phone right after the splash.
+     Now the first 5 appear immediately and the rest are added a few at a time while the person is already watching. */
+  const _items = shortsData.slice();
+  const FIRST = 5, CHUNK = 6;
+  let _pos = 0;
+  const _step = (n)=>{
+    for(let k=0; k<n && _pos<_items.length; k++) _buildOne(_items[_pos++]);
+  };
+  _step(FIRST);
+  if(_pos >= _items.length){ _armLoop(); return; }
+  _feedLoopBusy = true; /* no second pass while this one is still being added */
+  const _later = (fn)=>{ if(window.requestIdleCallback) requestIdleCallback(fn, {timeout:400}); else setTimeout(fn, 60); };
+  const _pump = ()=>{
+    if(_gen !== _feedGen) return;           /* feed was re-rendered meanwhile: forget this one */
+    _step(CHUNK);
+    if(_pos < _items.length) _later(_pump);
+    else { _feedLoopBusy = false; _armLoop(); }
+  };
+  _later(_pump);
 
   /* infinite-loop sentinel: once the last slide of this batch is reached, quietly
      append another full pass so the feed keeps going instead of running out */
+  function _armLoop(){
   const lastSlide = scroll.lastElementChild;
   if(lastSlide){
     new IntersectionObserver((entries, obs)=>{
@@ -3393,10 +3422,11 @@ function appendShortsBatch(scroll){
           _feedLoopBusy = true;
           obs.disconnect();
           appendShortsBatch(scroll);
-          _feedLoopBusy = false;
+          if(_feedLoopBusy && _feedGen === _gen && _pos >= _items.length) _feedLoopBusy = false;
         }
       });
     }, {threshold:0.1}).observe(lastSlide);
+  }
   }
 }
 
@@ -3539,15 +3569,15 @@ const viewedThisSession = new Set();
 /* keep only the current reel and its neighbours loaded — old videos hold decoder + memory and make scrolling heavy */
 function releaseFarVideos(activeSlide){
   const sc = document.getElementById('shortsScroll');
-  const kids = Array.prototype.slice.call(sc.children);
-  const ai = kids.indexOf(activeSlide);
-  if(ai < 0) return;
-  for(let i = 0; i < kids.length; i++){
-    const v = kids[i].querySelector && kids[i].querySelector('video');
-    if(!v) continue;
-    if(Math.abs(i - ai) <= 1){ if(i !== ai && !v.paused) v.pause(); continue; }
-    if(v.getAttribute('src')){ v.pause(); v.removeAttribute('src'); v.load(); }
-  }
+  if(!activeSlide || activeSlide.parentNode !== sc) return;
+  const prev = activeSlide.previousElementSibling, next = activeSlide.nextElementSibling;
+  /* only the videos that actually have a source are visited (before: every slide of the whole feed on every swipe) */
+  sc.querySelectorAll('video[src]').forEach(v=>{
+    const sl = v.closest('.short-slide');
+    if(sl === activeSlide) return;
+    if(sl && (sl === prev || sl === next)){ if(!v.paused) v.pause(); return; }
+    v.pause(); v.removeAttribute('src'); v.load();
+  });
 }
 
 
