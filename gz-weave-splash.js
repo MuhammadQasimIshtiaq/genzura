@@ -17,7 +17,7 @@
       cv.className = 'gzw-canvas';
       cv.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:0';
       host.insertBefore(cv, host.firstChild);
-      var dpr = Math.min(window.devicePixelRatio || 1, 2);
+      var dpr = Math.min(window.devicePixelRatio || 1, 1.5);
       var W = host.clientWidth || innerWidth, H = host.clientHeight || innerHeight;
       cv.width = W * dpr; cv.height = H * dpr;
       var g = cv.getContext('2d'); g.scale(dpr, dpr);
@@ -29,6 +29,15 @@
         return { sx: s[0], sy: s[1], col: colors[i % colors.length], ph: i * Math.PI / 2, pts: [], bend: (i % 2 ? 1 : -1) * 0.22 };
       });
       var sparks = [];
+      /* pre-drawn glow dots (no shadowBlur in the loop = smooth on phones) */
+      var glow = {};
+      function sprite(col){
+        var s = document.createElement('canvas'); s.width = s.height = 48; var c = s.getContext('2d');
+        var gr = c.createRadialGradient(24, 24, 0, 24, 24, 24);
+        gr.addColorStop(0, '#fff'); gr.addColorStop(0.25, col); gr.addColorStop(1, 'rgba(0,0,0,0)');
+        c.fillStyle = gr; c.fillRect(0, 0, 48, 48); return s;
+      }
+      colors.forEach(function(c){ glow[c] = sprite(c); });
       var t0 = performance.now(), burst = false, raf;
 
       function ease(x){ return x < 0 ? 0 : x > 1 ? 1 : x * x * (3 - 2 * x); }
@@ -67,23 +76,26 @@
             var n = th.pts.length;
             if(n < 2) return;
             var fade = t > T_WEAVE ? Math.max(0, 1 - (t - T_WEAVE) / 0.12) : 1;
-            g.lineCap = 'round'; g.lineJoin = 'round';
-            for(var pass = 0; pass < 2; pass++){            /* pass 0 = wide glow, pass 1 = bright core */
-              for(var i = 1; i < n; i++){
-                var k = i / n;
-                g.beginPath(); g.moveTo(th.pts[i - 1][0], th.pts[i - 1][1]); g.lineTo(th.pts[i][0], th.pts[i][1]);
-                g.strokeStyle = pass ? '#fff' : th.col;
-                g.globalAlpha = (pass ? 0.9 : 0.55) * k * fade;
-                g.lineWidth = (pass ? 1.6 : 5.5) * (0.35 + 0.65 * k);
-                g.shadowColor = th.col; g.shadowBlur = pass ? 8 : 18;
-                g.stroke();
+            g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = th.col;
+            var P = th.pts, tail = P[0], hd = P[n - 1];
+            function trace(){                               /* one smooth curve through the points */
+              g.beginPath(); g.moveTo(P[0][0], P[0][1]);
+              for(var i = 1; i < n - 1; i += 2){
+                var m = P[Math.min(i + 1, n - 1)];
+                g.quadraticCurveTo(P[i][0], P[i][1], (P[i][0] + m[0]) / 2, (P[i][1] + m[1]) / 2);
               }
+              g.lineTo(hd[0], hd[1]);
             }
+            var lg = g.createLinearGradient(tail[0], tail[1], hd[0], hd[1]);
+            lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(1, '#fff');
+            var cg = g.createLinearGradient(tail[0], tail[1], hd[0], hd[1]);
+            cg.addColorStop(0, 'rgba(0,0,0,0)'); cg.addColorStop(1, th.col);
+            trace(); g.strokeStyle = cg; g.globalAlpha = 0.45 * fade; g.lineWidth = 9; g.stroke();   /* soft glow */
+            trace(); g.strokeStyle = lg; g.globalAlpha = 0.95 * fade; g.lineWidth = 2; g.stroke();   /* bright core */
             var h = th.pts[n - 1];                           /* bright head */
-            g.globalAlpha = fade; g.shadowBlur = 22; g.shadowColor = th.col; g.fillStyle = '#fff';
-            g.beginPath(); g.arc(h[0], h[1], 3.2, 0, 7); g.fill();
+            g.globalAlpha = fade; g.drawImage(glow[th.col], h[0] - 18, h[1] - 18, 36, 36);
           });
-          g.globalAlpha = 1; g.shadowBlur = 0;
+          g.globalAlpha = 1;
         }
 
         if(t >= T_BURST && !burst) doBurst();
@@ -103,17 +115,15 @@
           var rg = Math.max(0, 1 - b / 0.6);
           if(rg > 0){
             g.strokeStyle = 'rgba(255,255,255,' + (0.7 * rg) + ')'; g.lineWidth = 2.5 * rg + 0.5;
-            g.shadowColor = '#00e5ff'; g.shadowBlur = 14;
-            g.beginPath(); g.arc(cx, cy, R * 0.6 + b * Math.min(W, H) * 0.95, 0, 7); g.stroke(); g.shadowBlur = 0;
+            g.beginPath(); g.arc(cx, cy, R * 0.6 + b * Math.min(W, H) * 0.95, 0, 7); g.stroke();
           }
           /* sparks */
           sparks.forEach(function(s){
             var life = 1 - b / s.l; if(life <= 0) return;
             var x = s.x + s.vx * b, y = s.y + s.vy * b;
-            g.globalAlpha = life; g.fillStyle = s.c; g.shadowColor = s.c; g.shadowBlur = 10;
-            g.beginPath(); g.arc(x, y, 2.2 * life + 0.4, 0, 7); g.fill();
+            g.globalAlpha = life; var z = 14 * life + 4; g.drawImage(glow[s.c], x - z / 2, y - z / 2, z, z);
           });
-          g.globalAlpha = 1; g.shadowBlur = 0;
+          g.globalAlpha = 1;
         }
 
         if(t < T_END && document.body.contains(cv)) raf = requestAnimationFrame(frame);

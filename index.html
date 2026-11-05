@@ -1045,7 +1045,7 @@ html.in-apk #bootLoading::before,html.in-apk #bootLoading::after{display:none}
 @keyframes gzwGlow{0%,100%{filter:drop-shadow(0 0 6px rgba(138,59,255,.55))}50%{filter:drop-shadow(0 0 18px rgba(0,229,255,.7))}}
 html #bootLoading{background:#07050f!important;overflow:hidden}
 html #bootLoading::before,html #bootLoading::after,html.in-apk #bootLoading::before,html.in-apk #bootLoading::after{display:none!important}
-html #bootLoading .boot-logo{position:relative;z-index:1;opacity:0;visibility:visible!important;animation:gzwPop .5s cubic-bezier(.2,.9,.3,1.1) .85s both,gzwGlow 2s ease-in-out 1.4s infinite!important}
+html #bootLoading .boot-logo{position:relative;z-index:1;opacity:0;visibility:visible!important;animation:gzwPop .5s cubic-bezier(.2,.9,.3,1.1) .85s both!important;filter:drop-shadow(0 0 10px rgba(138,59,255,.5))}
 @media (prefers-reduced-motion:reduce){html #bootLoading .boot-logo{animation:none!important;opacity:1}}
 </style>
 </head>
