@@ -7,6 +7,9 @@
   var T_FLY = 0.55, T_WEAVE = 0.85, T_BURST = 0.85, T_END = 1.8;   /* seconds; burst time must match the CSS pop delay */
 
   window.GzWeave = function(target, opt){
+    /* tell the Android app the web animation has started: its dark cover fades away and the weave is revealed */
+    try{ if(window.AndroidAuth && AndroidAuth.bootDone) AndroidAuth.bootDone(); }catch(e){}
+    try{ if(window.AndroidStudio && AndroidStudio.bootDone) AndroidStudio.bootDone(); }catch(e){}
     try{
       var host = typeof target === 'string' ? document.getElementById(target) : target;
       if(!host) return;
