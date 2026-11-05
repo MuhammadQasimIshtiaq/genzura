@@ -309,6 +309,18 @@ button.pro-pop{animation:proPop .4s ease}
 #boot img{opacity:0;animation:spSpinIn .95s cubic-bezier(.2,.9,.3,1.2) .1s forwards,spBreath 1.9s ease-in-out 1.1s infinite!important;animation:spSpinIn .95s cubic-bezier(.2,.9,.3,1.2) .1s forwards,spBreath 1.9s ease-in-out 1.1s infinite}
 
 @media (prefers-reduced-motion:reduce){#boot::before,#boot::after{animation:none;opacity:.6}#boot img{animation:none;opacity:1;transform:none}}
+
+/* ===== SPLASH V3 (smooth, YouTube-style: logo rises in, soft halo ripple, thin loading line, zoom-out exit) ===== */
+@keyframes s3In{0%{opacity:0;transform:scale(.72) translateY(8px)}100%{opacity:1;transform:none}}
+@keyframes s3Float{0%,100%{transform:scale(1)}50%{transform:scale(1.045)}}
+@keyframes s3Halo{0%{opacity:.5;transform:scale(.55)}100%{opacity:0;transform:scale(1.6)}}
+@keyframes s3Line{0%{transform:translateX(-100%)}100%{transform:translateX(260%)}}
+html #boot{transition:opacity .35s ease,transform .35s ease!important}
+html #boot.out{opacity:0;transform:scale(1.07)}
+html #boot::before{width:210px!important;height:210px!important;margin:-105px 0 0 -105px!important;border-radius:50%!important;-webkit-mask:none!important;mask:none!important;background:radial-gradient(circle,rgba(8,102,255,.34),rgba(66,165,255,.12) 55%,transparent 70%)!important;opacity:0;animation:s3Halo 1.9s ease-out .45s infinite!important}
+html #boot::after{left:0!important;top:0!important;width:38%!important;height:3px!important;margin:0!important;border-radius:0 3px 3px 0!important;-webkit-mask:none!important;mask:none!important;background:linear-gradient(90deg,transparent,#0866ff,#42a5ff)!important;animation:s3Line 1.25s ease-in-out infinite!important}
+html #boot img{opacity:0;width:150px!important;animation:s3In .6s cubic-bezier(.2,.8,.2,1) .05s both,s3Float 2.2s ease-in-out .7s infinite!important}
+@media (prefers-reduced-motion:reduce){html #boot::before,html #boot::after,html #boot img{animation:none!important;opacity:1}}
 </style>
 </head>
 <body>
