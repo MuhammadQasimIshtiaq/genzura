@@ -158,111 +158,56 @@
     html:not(.in-apk) #atStudio{grid-template-columns:210px minmax(0,1fr);}
   }
 </style>
+<style id="pro-btn-polish">
+/* ===== PRO BUTTON POLISH ===== */
+button,[role=button],input[type=button],input[type=submit]{-webkit-tap-highlight-color:transparent;touch-action:manipulation;-webkit-user-select:none;user-select:none;font-family:inherit;transition:transform .12s ease,background-color .18s ease,box-shadow .18s ease,filter .18s ease,opacity .18s ease,color .18s ease,border-color .18s ease}
+button:not(:disabled):active,[role=button]:active{transform:scale(.96);filter:brightness(.94)}
+button:focus{outline:none}
+button:focus-visible,[role=button]:focus-visible{outline:2px solid var(--accent,var(--blue,#1a73e8));outline-offset:2px}
+button:disabled,button[disabled]{opacity:.5;cursor:not-allowed;box-shadow:none!important;transform:none!important}
+button:not(:disabled){cursor:pointer}
+button svg{pointer-events:none}
+@media (prefers-reduced-motion:reduce){button,[role=button]{transition:none!important}}
 
-<style>
-/* PROFESSIONAL BUTTONS START */
-/* Studio — professional button system */
-button, [role="button"], .st-btn {
-  font-family: inherit;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  user-select: none;
-  transition: background-color .16s ease, color .16s ease, border-color .16s ease, box-shadow .16s ease, transform .1s ease, filter .16s ease;
-}
-button:disabled, button[disabled] { opacity: .48; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
-button:focus-visible, .st-btn:focus-visible {
-  outline: 2px solid var(--blue, #1a73e8);
-  outline-offset: 2px;
-}
-.st-btn {
-  border-radius: 10px !important;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  border: 1px solid var(--border, #ddd) !important;
-  box-shadow: 0 1px 2px rgba(15,15,15,.05);
-}
-.st-btn:hover { background: var(--surface3, #e8e8e8); transform: translateY(-1px); box-shadow: 0 2px 6px rgba(15,15,15,.08); }
-.st-btn:active { transform: translateY(0) scale(.985); }
-#stGoogle {
-  border-radius: 10px !important;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  border: 1px solid #dadce0 !important;
-  box-shadow: 0 1px 2px rgba(15,15,15,.06);
-}
-#stGoogle:hover { background: #f8f9fa; transform: translateY(-1px); }
-#stGoogle:active { transform: scale(.985); }
-.st-nav button { border-radius: 10px; font-weight: 560; }
-.st-nav button:hover { background: var(--surface2, #f1f1f1); }
-.st-nav button.on { font-weight: 700; }
-.st-nav button:active { transform: scale(.98); }
-.st-tabs button { font-weight: 600; }
-.st-tabs button:hover { background: rgba(15,15,15,.04); }
-#stSheet button {
-  border-radius: 8px;
-  margin: 1px 8px;
-  width: calc(100% - 16px);
-  font-weight: 560;
-}
-#stSheet button:hover { background: var(--surface2, #f1f1f1); }
-#stSheet button:active { background: var(--surface3, #e6e6e6); }
-#stSheet button.red { color: #dc2626; font-weight: 650; }
-#stSheet button.red:hover { background: #fef2f2; }
-.st-cm .acts button { border-radius: 8px; }
-.st-cm .acts button:hover { background: rgba(15,15,15,.06); }
-#stPlus, #stAvBtn, .st-dots, .st-x {
-  border-radius: 50%;
-}
-#stPlus:hover, #stAvBtn:hover, .st-dots:hover, .st-x:hover { background: rgba(15,15,15,.08); }
-#stPlus:active, #stAvBtn:active, .st-dots:active { transform: scale(.94); }
+.st-btn{box-shadow:0 1px 2px rgba(0,0,0,.08);letter-spacing:.2px}
+.st-btn:not(:disabled):hover{background:var(--surface3)}
+.st-btn.pri{box-shadow:0 2px 8px rgba(26,115,232,.3)}
+.st-btn.pri:not(:disabled):hover{background:#1765cc;filter:none;box-shadow:0 4px 14px rgba(26,115,232,.4)}
+.st-btn.grn{box-shadow:0 2px 8px rgba(24,128,56,.3)}
+.st-btn.grn:not(:disabled):hover{background:#137333;filter:none}
+.mini{box-shadow:0 1px 4px rgba(26,115,232,.3)}
+.mini:not(:disabled):hover{background:#1765cc}
+.st-x,.st-dots{border-radius:50%;transition:background-color .18s,transform .12s}
+.st-x:hover,.st-dots:hover{background:var(--surface2)}
+.st-btn.red,button.red{font-weight:700}
 
-/* PROFESSIONAL BUTTONS END */
-</style>
+/* ===== PRO BUTTON ANIM V2 ===== */
+@keyframes proSpin{0%{transform:rotate(0) scale(1)}50%{transform:rotate(200deg) scale(1.25)}100%{transform:rotate(360deg) scale(1)}}
+@keyframes proRipple{from{transform:scale(0);opacity:.5}to{transform:scale(4);opacity:0}}
+@keyframes proRing{0%{box-shadow:0 0 0 0 var(--pro-ring,rgba(120,120,255,.45))}100%{box-shadow:0 0 0 14px rgba(120,120,255,0)}}
+@keyframes proShine{from{transform:translateX(-120%) skewX(-20deg)}to{transform:translateX(320%) skewX(-20deg)}}
+@keyframes proPop{0%{transform:scale(1)}40%{transform:scale(.9)}70%{transform:scale(1.08) rotate(-2deg)}100%{transform:scale(1)}}
+button.pro-spin svg{animation:proSpin .6s cubic-bezier(.34,1.56,.64,1)}
+button.pro-ring{animation:proRing .55s ease-out}
+button.pro-pop{animation:proPop .4s ease}
+.pro-rip{overflow:hidden}
+.pro-rip>.pro-ripple{position:absolute;border-radius:50%;pointer-events:none;background:rgba(255,255,255,.55);animation:proRipple .65s ease-out forwards;z-index:0}
+.pro-rip.light>.pro-ripple{background:rgba(0,0,0,.14)}
+.pro-rip::after{content:"";position:absolute;top:0;left:0;width:35%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.4),transparent);transform:translateX(-120%) skewX(-20deg);pointer-events:none}
+.pro-rip:not(:disabled):hover::after{animation:proShine .8s ease}
+@media (prefers-reduced-motion:reduce){button.pro-spin svg,button.pro-ring,button.pro-pop{animation:none!important}.pro-ripple,.pro-rip::after{display:none}}
 
-<style>
-
-/* PROFESSIONAL OPEN ANIMATION */
-#stBoot{
-  background:
-    radial-gradient(ellipse 70% 48% at 50% 42%, rgba(26,115,232,.08), transparent 60%),
-    #ffffff !important;
-}
-#stBoot::before{
-  content:"";
-  position:absolute;
-  width:240px;height:240px;
-  border-radius:50%;
-  background:conic-gradient(from 0deg, transparent 0%, #1a73e8 26%, #188038 55%, transparent 78%);
-  -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
-  mask:radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
-  animation:stRing 1.1s linear infinite;
-  opacity:.85;
-}
-#stBoot::after{
-  content:"";
-  position:absolute;
-  bottom:15%;
-  width:96px;height:3px;
-  border-radius:99px;
-  background:linear-gradient(90deg,#1a73e8,#188038);
-  transform-origin:center;
-  animation:stBar 1.2s ease-in-out infinite;
-}
-#stBoot .bt{
-  opacity:0;
-  position:relative;
-  z-index:1;
-  animation:stIn .85s cubic-bezier(.16,1,.3,1) .04s forwards, stFloat 2.6s ease-in-out .9s infinite !important;
-  filter:drop-shadow(0 12px 24px rgba(15,15,15,.08));
-}
-#stBoot .bt img{width:188px !important;height:auto;display:block}
-@keyframes stIn{from{opacity:0;transform:scale(.9) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
-@keyframes stFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
-@keyframes stRing{to{transform:rotate(360deg)}}
-@keyframes stBar{0%{transform:scaleX(.28);opacity:.35}50%{transform:scaleX(1);opacity:1}100%{transform:scaleX(.28);opacity:.35}}
-html.in-apk #stBoot .bt{visibility:hidden}
-html.in-apk #stBoot::before, html.in-apk #stBoot::after{display:none}
-
+/* ===== PRO SPLASH V2 ===== */
+@keyframes spSpinIn{0%{opacity:0;transform:rotate(-300deg) scale(.2)}55%{opacity:1;transform:rotate(18deg) scale(1.12)}80%{transform:rotate(-6deg) scale(.97)}100%{opacity:1;transform:rotate(0) scale(1)}}
+@keyframes spBreath{0%,100%{transform:scale(1);filter:drop-shadow(0 0 0 #8a3bff00)}50%{transform:scale(1.05);filter:drop-shadow(0 0 22px #8a3bff66)}}
+@keyframes spRing{to{transform:rotate(360deg)}}
+@keyframes spRingIn{from{opacity:0;scale:.4}to{opacity:1;scale:1}}
+@keyframes spBar{0%{transform:translateX(-110%)}100%{transform:translateX(260%)}}
+#stBoot::before{content:"";position:absolute;left:50%;top:50%;width:270px;height:270px;margin:-135px 0 0 -135px;border-radius:50%;background:conic-gradient(#8a3bff,#4a5cff,transparent 65%,#8a3bff);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 4px),#000 calc(100% - 3px));mask:radial-gradient(farthest-side,transparent calc(100% - 4px),#000 calc(100% - 3px));opacity:0;animation:spRingIn .5s ease .25s forwards,spRing 1.3s linear .25s infinite;pointer-events:none}
+#stBoot::after{content:"";position:absolute;left:50%;top:50%;width:90px;height:4px;margin:157px 0 0 -45px;border-radius:4px;background:linear-gradient(90deg,transparent,#8a3bff,#4a5cff,transparent);background-size:100% 100%;animation:spBar 1.2s ease-in-out infinite;pointer-events:none;-webkit-mask:linear-gradient(90deg,#000,#000);overflow:hidden}
+#stBoot .bt{opacity:0;animation:spSpinIn .95s cubic-bezier(.2,.9,.3,1.2) .1s forwards,spBreath 1.9s ease-in-out 1.1s infinite!important;animation:spSpinIn .95s cubic-bezier(.2,.9,.3,1.2) .1s forwards,spBreath 1.9s ease-in-out 1.1s infinite}
+html.in-apk #stBoot::before,html.in-apk #stBoot::after{display:none}
+@media (prefers-reduced-motion:reduce){#stBoot::before,#stBoot::after{animation:none;opacity:.6}#stBoot .bt{animation:none;opacity:1;transform:none}}
 </style>
 </head>
 <body>
@@ -856,4 +801,24 @@ auth.onAuthStateChanged(async user=>{
 window.addEventListener('hashchange',()=>{ const h=(location.hash||'').replace('#',''); if(S.loaded && ['dash','content','analytics','community','earn'].includes(h)){ S.tab=h; render(); } });
 
 </script>
+
+<script id="pro-btn-anim">(function(){
+var RIP='.primary-btn,.btn,.st-btn,.mini,.join-btn-small,.gz-btn,.ld-btn,.gr-btn,.wp-btn,.sb-btn,.sq-btn,.rm-btn,.cp-btn,.an-btn,.lm-btn,.alb-btn,.sv-btn,.cv-btn,.chip,.pf-pill,.pl-action-btn,button.alt,.go,.ig-go';
+var SPIN='.nav-btn,.iconbtn,.pf-icon-btn,.ig-x,.an-x,.alb-x,.st-x,.st-dots,.svb,.x,.gcb,.cl-hide,.st-hide';
+function once(el,cls,ms){el.classList.remove(cls);void el.offsetWidth;el.classList.add(cls);setTimeout(function(){el.classList.remove(cls)},ms)}
+document.addEventListener('pointerdown',function(e){
+ var b=e.target.closest&&e.target.closest('button');if(!b||b.disabled)return;
+ try{
+  if(b.matches(RIP)){
+   if(!b.classList.contains('pro-rip')){b.classList.add('pro-rip');if(getComputedStyle(b).position==='static')b.style.position='relative';var bg=getComputedStyle(b).backgroundColor;if(/rgba?\(0, 0, 0, 0\)|transparent/.test(bg)||b.matches('.chip:not(.on),.btn.gray,.st-btn:not(.pri):not(.grn),.join-btn-small,button.alt'))b.classList.add('light')}
+   var r=b.getBoundingClientRect(),d=Math.max(r.width,r.height),s=document.createElement('span');
+   s.className='pro-ripple';s.style.width=s.style.height=d+'px';s.style.left=(e.clientX-r.left-d/2)+'px';s.style.top=(e.clientY-r.top-d/2)+'px';
+   b.appendChild(s);setTimeout(function(){s.remove()},700);
+   once(b,'pro-pop',420);
+  }else if(b.matches(SPIN)){
+   if(b.querySelector('svg'))once(b,'pro-spin',650);else once(b,'pro-ring',560);
+  }else{once(b,'pro-ring',560)}
+ }catch(_){}
+},{passive:true});
+})();</script>
 </body></html>
