@@ -1040,12 +1040,20 @@ button.pro-pop{animation:proPop .4s ease}
 #bootLoading .boot-logo{opacity:0;animation:spSpinIn .95s cubic-bezier(.2,.9,.3,1.2) .1s forwards,spBreath 1.9s ease-in-out 1.1s infinite!important;animation:spSpinIn .95s cubic-bezier(.2,.9,.3,1.2) .1s forwards,spBreath 1.9s ease-in-out 1.1s infinite}
 html.in-apk #bootLoading::before,html.in-apk #bootLoading::after{display:none}
 @media (prefers-reduced-motion:reduce){#bootLoading::before,#bootLoading::after{animation:none;opacity:.6}#bootLoading .boot-logo{animation:none;opacity:1;transform:none}}
+/* ===== SPLASH WEAVE: neon threads from the corners weave in the middle, glow burst, logo pops (see /gz-weave-splash.js) ===== */
+@keyframes gzwPop{0%{opacity:0;transform:scale(.25)}55%{opacity:1;transform:scale(1.16)}78%{transform:scale(.96)}100%{opacity:1;transform:scale(1)}}
+@keyframes gzwGlow{0%,100%{filter:drop-shadow(0 0 6px rgba(138,59,255,.55))}50%{filter:drop-shadow(0 0 18px rgba(0,229,255,.7))}}
+html #bootLoading{background:#07050f!important;overflow:hidden}
+html #bootLoading::before,html #bootLoading::after,html.in-apk #bootLoading::before,html.in-apk #bootLoading::after{display:none!important}
+html #bootLoading .boot-logo{position:relative;z-index:1;opacity:0;visibility:visible!important;animation:gzwPop .5s cubic-bezier(.2,.9,.3,1.1) .85s both,gzwGlow 2s ease-in-out 1.4s infinite!important}
+@media (prefers-reduced-motion:reduce){html #bootLoading .boot-logo{animation:none!important;opacity:1}}
 </style>
 </head>
 <body>
 <div id="root">
 
   <div id="bootLoading"><img class="boot-logo" alt="Gupzy" src="genzura-logo.png"></div>
+  <script src="/gz-weave-splash.js"></script><script>try{GzWeave("bootLoading")}catch(e){}</script>
   <script>
   /* Boot splash: stays up until the app screen is really on screen AND the first reel has a picture
      (no more white flash, no "Loading..." text, no black gap before the app appears). */
@@ -1072,11 +1080,11 @@ html.in-apk #bootLoading::before,html.in-apk #bootLoading::after{display:none}
     });
     var iv = setInterval(function(){
       if(B.done){ clearInterval(iv); return; }
-      if(Date.now() - B.t0 >= 2000){ finish(); return; } /* splash never stays longer than 2 s */
+      if(Date.now() - B.t0 >= 2600){ finish(); return; } /* splash never stays longer than 2.6 s */
       if(!B.authAt) return;
       var now = Date.now(), scr = shownScreen();
       if(scr && !B.shownAt) B.shownAt = now;
-      if(now - B.t0 < 1000) return;                       /* let the logo animation play (1 s minimum) */
+      if(now - B.t0 < 1500) return;                       /* let the weave animation play (1.5 s minimum) */
       if(!scr){ if(now - B.authAt > 6000) finish(); return; }
       var sc = document.getElementById('shortsScroll');
       var waitMedia = (scr === 'app') && sc && sc.offsetParent !== null;
