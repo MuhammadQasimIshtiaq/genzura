@@ -2772,5 +2772,138 @@ document.addEventListener('pointerdown',function(e){
  }catch(_){}
 },{passive:true});
 })();</script>
+<!-- ===== Gupzy-style profile page ===== -->
+<style>
+#gcProf{position:fixed;inset:0;z-index:80;background:var(--bg);color:var(--text);display:none;flex-direction:column;overflow-y:auto}
+#gcProf.show{display:flex}
+#gcProf .pf-top{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border-bottom:1px solid var(--border)}
+#gcProf .pf-top b{font-size:17px}
+#gcProf .pf-ban{height:130px;background:linear-gradient(135deg,#0866ff,#8a3ffc);overflow:hidden}
+#gcProf .pf-ban img{width:100%;height:100%;object-fit:cover}
+#gcProf .pf-av{width:92px;height:92px;border-radius:50%;margin:-46px 0 0 16px;border:4px solid var(--bg);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:700;color:#fff;background:#888}
+#gcProf .pf-av img{width:100%;height:100%;object-fit:cover}
+#gcProf .pf-in{padding:8px 16px 0}
+#gcProf h2{margin:6px 0 0;font-size:21px}
+#gcProf .pf-h{color:var(--dim);font-size:14px}
+#gcProf .pf-st{display:flex;gap:22px;margin:12px 0}
+#gcProf .pf-st div{font-size:13px;color:var(--dim)}#gcProf .pf-st b{display:block;font-size:17px;color:var(--text)}
+#gcProf .pf-bio{white-space:pre-wrap;font-size:14.5px;margin:6px 0}
+#gcProf .pf-meta{color:var(--dim);font-size:13px;margin:4px 0}
+#gcProf .pf-btns{display:flex;gap:8px;margin:12px 0}
+#gcProf .pf-btns button{flex:1;padding:10px;border-radius:10px;border:0;font-weight:700;font-size:14px;background:var(--surface);color:var(--text);cursor:pointer}
+#gcProf .pf-btns button.pri{background:var(--blue);color:#fff}
+#gcProf .pf-sec{padding:10px 16px;font-weight:700;border-top:1px solid var(--border);margin-top:8px}
+#gcProf .pf-ov{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center}#gcProf .pf-ov>div{background:var(--bg);width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:18px;max-height:85vh;overflow:auto}#gcProf .pf-ov label{display:block;padding:8px 0;font-size:15px}#gcProf .pf-ov textarea{width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--bg);color:var(--text)}#gcProf .pf-ov .row{display:flex;gap:8px;margin-top:12px}#gcProf .pf-ov .row button,#gcProf .pf-pay button{flex:1;padding:10px;border:0;border-radius:10px;font-weight:700;background:var(--surface);color:var(--text)}#gcProf .pf-ov .go{background:#e5484d!important;color:#fff!important}#gcProf .pf-pay{display:flex;gap:6px;align-items:center;padding:8px 0}#gcProf .pf-pay div{flex:2}#gcProf .pf-pay span{display:block;color:var(--dim);font-size:13px}#gcProf .pf-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px}
+#gcProf .pf-grid a{position:relative;aspect-ratio:9/12;background:#222;display:block;overflow:hidden;color:#fff;text-decoration:none}
+#gcProf .pf-grid img,#gcProf .pf-grid video{width:100%;height:100%;object-fit:cover}
+#gcProf .pf-grid span{position:absolute;left:5px;bottom:4px;font-size:12px;text-shadow:0 1px 3px #000}
+#gcProf .pf-empty{padding:24px;text-align:center;color:var(--dim)}
+</style>
+<div id="gcProf"><div class="pf-top"><button class="iconbtn" id="gcpBack" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><b id="gcpTop">Profile</b></div>
+<div class="pf-ban" id="gcpBan"></div><div class="pf-av" id="gcpAv"></div>
+<div class="pf-in"><h2 id="gcpName"></h2><div class="pf-h" id="gcpHandle"></div>
+<div class="pf-st"><div><b id="gcpFing">0</b>Following</div><div><b id="gcpFers">0</b>Followers</div><div><b id="gcpLikes">0</b>Likes</div></div>
+<div class="pf-h" id="gcpMood" style="display:none;margin-top:4px"></div><div class="pf-btns" id="gcpBtns"></div><div class="pf-btns" id="gcpBtns2"></div>
+<div class="pf-bio" id="gcpBio"></div><div class="pf-meta" id="gcpCat"></div><div class="pf-meta" id="gcpJoin"></div><div class="pf-meta" id="gcpViews"></div></div>
+<div id="gcpPostsW"></div><div class="pf-sec">Videos</div><div id="gcpVids"></div></div>
+<script>
+(function(){
+var cid=null;
+function $$(i){return document.getElementById(i)}
+function fc(n){n=n||0;return n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(1)+'K':''+n}
+function tm(t){return t&&t.toMillis?t.toMillis():0}
+function closeP(){$$('gcProf').classList.remove('show');cid=null}
+window.gcOpenProfile=async function(uid,name,logo){
+ if(!uid||!window.db||!me)return;
+ cid=uid;var my=uid,mine=uid===me.uid,P=$$('gcProf');P.classList.add('show');P.scrollTop=0;
+ $$('gcpName').textContent=name||'';$$('gcpTop').textContent=name||'Profile';
+ $$('gcpAv').innerHTML=logo?'<img src="'+esc(logo)+'">':esc(initials(name));
+ ['gcpBio','gcpCat','gcpJoin','gcpViews','gcpHandle'].forEach(function(i){$$(i).textContent=''});
+ $$('gcpBan').innerHTML='';$$('gcpPostsW').innerHTML='';$$('gcpVids').innerHTML='<div class="pf-empty">Loading...</div>';
+ ['gcpFing','gcpFers','gcpLikes'].forEach(function(i){$$(i).textContent='0'});
+ db.collection('subscriptions').where('subscriberId','==',uid).get().then(function(s){if(cid===my)$$('gcpFing').textContent=fc(s.size)}).catch(function(){});
+ var ch={name:name,logoURL:logo},following=false;
+ try{var d=await db.collection('channels').doc(uid).get();if(d.exists)ch=d.data()}catch(e){}
+ if(cid!==my)return;
+ if((ch.blockedUids||[]).indexOf(me.uid)>=0){closeP();toast('This profile is not available');return}
+ $$('gcpName').textContent=ch.name||name||'';
+ $$('gcpHandle').textContent='@'+String(ch.name||name||'').toLowerCase().replace(/[^a-z0-9]+/g,'');
+ $$('gcpBio').textContent=ch.desc||'';
+ var ex=[];if(ch.countryPublic&&ch.country)ex.push(ch.country);if(ch.genderPublic&&ch.gender)ex.push(ch.gender);
+ $$('gcpCat').textContent=[ch.category].concat(ex).filter(Boolean).join(' · ');
+ $$('gcpJoin').textContent=(ch.createdAt&&ch.createdAt.toDate?'Joined '+ch.createdAt.toDate().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}):'')+(ch.monetized?' · ✓ Monetized channel':'');
+ $$('gcpFers').textContent=fc(ch.subscriberCount||0);
+ if(ch.bannerURL)$$('gcpBan').innerHTML='<img src="'+esc(ch.bannerURL)+'">';
+ if(ch.logoURL)$$('gcpAv').innerHTML='<img src="'+esc(ch.logoURL)+'">';
+ var B=$$('gcpBtns');B.innerHTML='';
+ var isBl=(myBlocked||[]).indexOf(uid)>=0;
+ if(!mine){
+  try{var sd=await db.collection('subscriptions').doc(me.uid+'_'+uid).get();following=sd.exists}catch(e){}
+  var f=document.createElement('button');f.className='pri';var m=document.createElement('button');m.textContent='Message';var b=document.createElement('button');
+  var paint=function(){f.textContent=following?'Following ✓':'Follow';f.style.display=isBl?'none':'';b.textContent=isBl?'Unblock':'Block'};paint();
+  f.onclick=async function(){
+   var ref=db.collection('subscriptions').doc(me.uid+'_'+uid),cr=db.collection('channels').doc(uid),FV=firebase.firestore.FieldValue;
+   following=!following;paint();
+   try{await db.runTransaction(async function(tx){var x=await tx.get(ref);if(x.exists){tx.delete(ref);tx.update(cr,{subscriberCount:FV.increment(-1)});}else{tx.set(ref,{subscriberId:me.uid,channelId:uid,channelName:ch.name||name,channelLogo:ch.logoURL||logo||null,joinedAt:FV.serverTimestamp()});tx.update(cr,{subscriberCount:FV.increment(1)});}});
+    var d2=await cr.get();if(d2.exists&&cid===my)$$('gcpFers').textContent=fc(d2.data().subscriberCount||0);}
+   catch(e){following=!following;paint();toast('Failed: '+e.message)}};
+  m.onclick=function(){closeP();openChat(uid)};
+  b.onclick=async function(){try{var cr=db.collection('channels').doc(me.uid),FV=firebase.firestore.FieldValue;
+    if(isBl){await cr.update({blockedUids:FV.arrayRemove(uid)});myBlocked=(myBlocked||[]).filter(function(x){return x!==uid});isBl=false;toast('Unblocked')}
+    else{await cr.update({blockedUids:FV.arrayUnion(uid)});myBlocked=(myBlocked||[]).concat([uid]);isBl=true;toast('Blocked')}paint()}catch(e){toast('Failed: '+e.message)}};
+  B.appendChild(f);B.appendChild(m);B.appendChild(b);
+ }
+
+ /* ---- extra: mood, call, tip, report ---- */
+ var MO={free:['🟢','Free to call'],busy:['🔴','Busy'],sleeping:['😴','Sleeping'],driving:['🚗','Driving'],studying:['📚','Studying'],custom:['💬','']};
+ db.collection('presence').doc(uid).get().then(function(x){
+  var pr=x.exists?x.data():null;if(!pr||!pr.mood||!MO[pr.mood]||cid!==my)return;
+  var un=Number(pr.moodUntil)||0;if(un&&un<Date.now())return;
+  var t=pr.mood==='custom'?(pr.moodText||''):(MO[pr.mood][1]+(pr.moodText?' · '+pr.moodText:''));
+  var el=$$('gcpMood');el.textContent=MO[pr.mood][0]+' '+t;el.style.display='';
+ }).catch(function(){});
+ var B2=$$('gcpBtns2');B2.innerHTML='';
+ if(!mine){
+  function mk(t,fn){var b=document.createElement('button');b.textContent=t;b.onclick=fn;B2.appendChild(b);return b}
+  mk('📞 Voice',function(){closeP();openChat(uid).then(function(){try{startCall({uid:uid,name:ch.name||name,logo:ch.logoURL||logo},'voice')}catch(e){}})});
+  mk('🎥 Video',function(){closeP();openChat(uid).then(function(){try{startCall({uid:uid,name:ch.name||name,logo:ch.logoURL||logo},'video')}catch(e){}})});
+  var tipB=mk('💝 Tip',null);tipB.style.display='none';
+  db.collection('tipJars').doc(uid).get().then(function(x){var j=x.exists?x.data():null;if(!j||!j.enabled||!(j.easypaisa||j.jazzcash))return;tipB.style.display='';
+   tipB.onclick=function(){var row=function(l,n){return n?'<div class="pf-pay"><div><b>'+l+'</b><span>'+esc(n)+'</span></div><button data-c="'+esc(n)+'">Copy</button></div>':''};
+    var o=document.createElement('div');o.className='pf-ov';o.innerHTML='<div><h3>💝 Tip '+esc(ch.name||name)+'</h3>'+(j.message?'<p>“'+esc(j.message)+'”</p>':'')+row('EasyPaisa',j.easypaisa)+row('JazzCash',j.jazzcash)+(j.title?'<p class="pf-meta">Account title: <b>'+esc(j.title)+'</b></p>':'')+'<p class="pf-meta">Tips go directly to the creator. Gupzy does not process or refund them, and never asks for your PIN.</p><div class="row"><button id="gcpTc">Close</button></div></div>';
+    o.onclick=function(e){if(e.target===o||e.target.id==='gcpTc')o.remove();var c=e.target.getAttribute&&e.target.getAttribute('data-c');if(c){try{navigator.clipboard.writeText(c)}catch(_){}toast('Copied')}};P.appendChild(o)}}).catch(function(){});
+  mk('🚩 Report',function(){
+   var R=['Spam or scam','Nudity or sexual content','Violence or dangerous content','Harassment or bullying','Hate speech','Copyright or stolen content','Child safety (under 18)','Fake account or impersonation','Something else'];
+   var o=document.createElement('div');o.className='pf-ov';o.innerHTML='<div><h3>Report this channel</h3><p class="pf-meta">Pick the closest reason. The other person is not told who reported.</p>'+R.map(function(r,i){return '<label><input type="radio" name="gcpR" value="'+esc(r)+'"'+(i?'':' checked')+'> '+esc(r)+'</label>'}).join('')+'<textarea id="gcpRd" rows="2" maxlength="200" placeholder="Add details (optional)"></textarea><div class="row"><button id="gcpRn">Cancel</button><button class="go" id="gcpRg">Send report</button></div></div>';
+   o.onclick=async function(e){if(e.target===o||e.target.id==='gcpRn')return o.remove();if(e.target.id!=='gcpRg')return;e.target.disabled=true;
+    try{var reason=(o.querySelector('input[name=gcpR]:checked')||{}).value||'Something else',nm=String(ch.name||name||'');
+     var rid=('channel-'+uid).replace(/[^A-Za-z0-9_\-:.]/g,'').slice(0,140)+'_'+me.uid,ref=db.collection('reports').doc(rid),ex=await ref.get();
+     if(ex.exists){toast('You already reported this');return o.remove()}
+     await ref.set({videoId:'channel:'+uid,videoTitle:('[Channel] '+nm).slice(0,120),videoThumb:'',channelId:uid,channelName:nm.slice(0,60),reporterId:me.uid,reporterName:String(me.name||'Someone').slice(0,60),reason:reason,details:(o.querySelector('#gcpRd').value||'').trim().slice(0,200),targetType:'channel',targetId:uid,status:'pending',createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+     toast('Reported. Thank you, our team will review it');o.remove()}catch(er){e.target.disabled=false;toast('Could not send report: '+er.message)}};
+   P.appendChild(o)});
+ }
+ db.collection('posts').where('uid','==',uid).get().then(function(s){
+  if(cid!==my)return;var l=s.docs.map(function(x){return Object.assign({id:x.id},x.data())}).filter(function(p){return p.media&&p.media[0]}).sort(function(a,b){return tm(b.createdAt)-tm(a.createdAt)});
+  if(!l.length)return;
+  $$('gcpPostsW').innerHTML='<div class="pf-sec">Posts</div><div class="pf-grid">'+l.map(function(p){var mm=p.media[0];return '<a>'+(mm.type==='video'?'<video src="'+esc(mm.url)+'#t=0.1" preload="metadata" muted playsinline></video>':'<img loading="lazy" src="'+esc(mm.url)+'">')+'</a>'}).join('')+'</div>';
+ }).catch(function(){});
+ try{
+  var vs=await db.collection('videos').where('channelId','==',uid).get();if(cid!==my)return;
+  var l2=vs.docs.map(function(x){return Object.assign({id:x.id},x.data())}).sort(function(a,b){return tm(b.createdAt)-tm(a.createdAt)});
+  var views=0,likes=0;l2.forEach(function(v){views+=v.views||0;likes+=v.likesCount||0});
+  $$('gcpLikes').textContent=fc(likes);$$('gcpViews').textContent=views.toLocaleString()+' total views · '+likes.toLocaleString()+' total likes';
+  var sh=l2.filter(function(v){return mine||(v.visibility||'Public')==='Public'});
+  $$('gcpVids').innerHTML=sh.length?'<div class="pf-grid">'+sh.map(function(v){return '<a href="https://gupzy.com/?v='+encodeURIComponent(v.id)+'" target="_blank" rel="noopener">'+(v.thumbnailURL||v.thumbnail?'<img loading="lazy" src="'+esc(v.thumbnailURL||v.thumbnail)+'">':'<video src="'+esc(v.videoURL||v.url||'')+'#t=0.1" preload="metadata" muted playsinline></video>')+'<span>▶ '+fc(v.views||0)+'</span></a>'}).join('')+'</div>':'<div class="pf-empty">No videos yet.</div>';
+ }catch(e){$$('gcpVids').innerHTML='<div class="pf-empty">Could not load videos.</div>'}
+};
+$$('gcpBack').onclick=closeP;
+document.addEventListener('click',function(e){
+ var h=e.target.closest&&e.target.closest('#chat .top #cAv, #chat .top #cName');
+ if(h&&cur&&!cur.group&&cur.peer){e.stopPropagation();gcOpenProfile(cur.peer.uid,cur.peer.name,cur.peer.logo)}
+},true);
+var t=document.querySelector('#chat .top');if(t){t.style.cursor='pointer'}
+})();
+</script>
 </body>
 </html>

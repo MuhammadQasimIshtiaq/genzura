@@ -1015,7 +1015,7 @@ async function ctHandle(request, env) {
 export default {
   async fetch(request, env, ctx) {
     const p = new URL(request.url).pathname.replace(/\/+$/, "");
-    if (p === "/anon-send") return anHandle(request, env); /* handles its own OPTIONS preflight */
+    if (p === "/anon-send") return new Response(JSON.stringify({error:"disabled"}), {status:410, headers:{"Content-Type":"application/json","Access-Control-Allow-Origin":"*"}}); /* anonymous inbox removed */
     if (request.method === "POST" && p === "/ring-ack") return rkHandle(request, env);
     if (request.method === "GET" && p === "/sitemap-videos.xml") return smHandle(request, env, ctx);
     if (p === "/contacts" || p === "/translate") return ctHandle(request, env); /* handles its own OPTIONS preflight */

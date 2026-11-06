@@ -617,9 +617,14 @@ function earn(){
   h += '<button class="st-btn" id="stShareRef">Share your referral link</button>';
   return h + '<div style="height:14px"></div>' + howCard();
 }
+/* Referral now shares the GOOGLE PLAY link of the Gupzy app. While it is not on Google Play yet, keep this empty -> "coming soon".
+   When live, paste e.g. 'https://play.google.com/store/apps/details?id=com.gupzy.app' */
+const GUPZY_PLAY_URL = '';
 function shareRef(){
-  const id = currentChannel && currentChannel.channelId, link = MAIN_APP + (id ? '?ref=' + id : '');
-  if(navigator.share){ navigator.share({ title:'Gupzy', text:'Check out Gupzy!', url:link }).catch(()=>{}); }
+  if(!GUPZY_PLAY_URL){ toast('Gupzy app is coming soon on Google Play'); return; }
+  const id = currentChannel && currentChannel.channelId;
+  const link = GUPZY_PLAY_URL + (id ? (GUPZY_PLAY_URL.indexOf('?') > -1 ? '&' : '?') + 'referrer=' + encodeURIComponent('ref=' + id) : '');
+  if(navigator.share){ navigator.share({ title:'Gupzy', text:'Check out Gupzy on Google Play!', url:link }).catch(()=>{}); }
   else { try{ navigator.clipboard.writeText(link); toast('Referral link copied'); }catch(e){ toast(link); } }
 }
 

@@ -268,10 +268,11 @@
   .empty-state{padding:60px 30px;text-align:center;color:var(--text-faint);font-size:13px;line-height:1.6;}
 
   #shortsView{height:100%;}
-  .shorts-scroll{height:100%;overflow-y:hidden;overscroll-behavior:none;touch-action:none;scroll-behavior:auto;scrollbar-width:none;} /* paging is done in JS (see 'ONE REEL PER SWIPE') so a hard/fast swipe can never skip 2-3 reels */
+  .shorts-scroll{height:100%;overflow-y:scroll;overscroll-behavior-y:contain;touch-action:pan-y;scroll-snap-type:y mandatory;scroll-behavior:auto;scrollbar-width:none;} /* paging is done in JS (see 'ONE REEL PER SWIPE') so a hard/fast swipe can never skip 2-3 reels */
   .shorts-scroll::-webkit-scrollbar{display:none;}
   #shortsView{position:relative;}
   .short-slide{height:100%;scroll-snap-align:start;scroll-snap-stop:always;position:relative;display:flex;background:#000;contain:layout paint style;}
+  .short-bg video{transform:translateZ(0);backface-visibility:hidden;}
   .shorts-scroll{will-change:scroll-position;-webkit-overflow-scrolling:touch;}
   .short-bg video::-webkit-media-controls,.short-bg video::-webkit-media-controls-start-playback-button{display:none !important;-webkit-appearance:none;}
   .short-video-box{position:absolute;inset:0;display:flex;align-items:flex-end;}
@@ -1350,6 +1351,12 @@ html #bootLoading .boot-logo{position:relative;z-index:1;opacity:0;visibility:vi
         <div id="yourVideosContainer"></div>
         <div id="yourCommentsContainer" class="hidden"></div>
         <div>
+          <div class="menu-item danger" id="deleteAccountBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+            Delete my account
+          </div>
+        </div>
+        <div>
           <div class="menu-item danger" id="signOutBtn">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             Sign out
@@ -1453,7 +1460,6 @@ html #bootLoading .boot-logo{position:relative;z-index:1;opacity:0;visibility:vi
       <div class="sheet-item" data-proxy="albumsBtn"><div class="icon-circle">🖼️</div><div class="label">Shared Albums</div></div>
       <div class="sheet-item" id="hmAlgo"><div class="icon-circle">🕒</div><div class="label" style="flex:1;min-width:0">No-Algorithm mode<div style="font-size:11.5px;font-weight:400;color:var(--text-dim);margin-top:2px;line-height:1.3">Only people you follow, newest first</div></div><button type="button" class="gc-sw" id="hmAlgoSw" role="switch" aria-label="No-Algorithm mode"></button></div>
       <div class="hm-sep"></div>
-      <div class="sheet-item" data-proxy="anonInboxBtn"><div class="icon-circle">🤫</div><div class="label">Anonymous Inbox</div></div>
       <div class="sheet-item" data-proxy="realMomentBtn"><div class="icon-circle">📸</div><div class="label">Real Moments</div></div>
       <div class="sheet-item" data-proxy="shareAppBtn"><div class="icon-circle"><img src="icon-192.png" alt="" style="width:26px;height:26px;border-radius:7px;object-fit:cover;"></div><div class="label">Share Gupzy</div></div>
       <div class="sheet-item" data-proxy="e2eeBackupBtn"><div class="icon-circle">🔐</div><div class="label">Chat backup</div></div>
@@ -1993,7 +1999,9 @@ if(urlRefParam && isNewDevice){
   localStorage.setItem('arainTubePendingReferral', urlRefParam);
 }
 async function processPendingReferral(newChannelId){
-  const ref = localStorage.getItem('arainTubePendingReferral');
+  let ref = localStorage.getItem('arainTubePendingReferral');
+  /* Installed from a Google Play referral link? The Android app reads it from Play's Install Referrer. */
+  if(!ref){ try{ if(window.AndroidAuth && typeof window.AndroidAuth.consumeInstallReferrer === 'function') ref = window.AndroidAuth.consumeInstallReferrer() || ''; }catch(e){} }
   if(!ref) return;
   localStorage.removeItem('arainTubePendingReferral');
   if(ref === newChannelId) return;
@@ -2262,9 +2270,21 @@ function atShareSheet(url, text, title){
   document.body.appendChild(ov);
 }
 
+/* Referral / "Share app" now shares the GOOGLE PLAY link, not the website.
+   While Gupzy is NOT on Google Play yet, leave GUPZY_PLAY_URL empty -> a "coming soon" message is shown instead.
+   When it goes live, paste the Play Store link here, e.g. 'https://play.google.com/store/apps/details?id=com.gupzy.app' */
+const GUPZY_PLAY_URL = '';
+function buildPlayShareLink(){
+  if(!GUPZY_PLAY_URL) return '';
+  const id = (currentChannel && currentChannel.channelId) ? currentChannel.channelId : '';
+  if(!id) return GUPZY_PLAY_URL;
+  /* Play Store "referrer" param carries the referring channel id through the install */
+  return GUPZY_PLAY_URL + (GUPZY_PLAY_URL.indexOf('?') > -1 ? '&' : '?') + 'referrer=' + encodeURIComponent('ref=' + id);
+}
 async function shareArainTube(){
-  const link = buildAppShareLink();
-  const shareData = { title: 'Gupzy', text: 'Check out Gupzy!', url: link };
+  const link = buildPlayShareLink();
+  if(!link){ toast('Gupzy app is coming soon on Google Play'); return; }
+  const shareData = { title: 'Gupzy', text: 'Check out Gupzy on Google Play!', url: link };
   await atShare(shareData);
 }
 document.getElementById('shareAppBtn').addEventListener('click', ()=>{ profileMenuSheet.classList.remove('show'); shareArainTube(); });
@@ -3385,8 +3405,11 @@ function appendShortsBatch(scroll){
             if(nextVid){
               if(!nextVid.src && nextVid.dataset.src){ nextVid.preload = 'metadata'; nextVid.src = optimizedVideoUrl(nextVid.dataset.src); }
               /* only start buffering the next reel fully AFTER the current one has buffered enough, so the two never fight over bandwidth (that caused play 2s / stall / play) */
-              const up = ()=>{ try{ nextVid.preload = 'auto'; }catch(e){} };
-              if(vidEl.readyState >= 4) up(); else vidEl.addEventListener('canplaythrough', up, {once:true});
+              const up = ()=>{ try{ nextVid.preload = 'auto'; }catch(e){}
+                /* also warm the reel AFTER next (first bytes only) so fast swipers don't hit an empty video */
+                try{ let n2 = nx.nextElementSibling; if(n2 && n2.classList.contains('sponsored-slide')) n2 = n2.nextElementSibling;
+                  const v2 = n2 && n2.querySelector('video'); if(v2 && !v2.src && v2.dataset.src){ v2.preload='metadata'; v2.src = optimizedVideoUrl(v2.dataset.src); } }catch(e){} };
+              if(vidEl.readyState >= 3) up(); else vidEl.addEventListener('canplay', up, {once:true});
             }
           }
         }
@@ -3577,12 +3600,15 @@ function releaseFarVideos(activeSlide){
   if(!activeSlide || activeSlide.parentNode !== sc) return;
   const prev = activeSlide.previousElementSibling, next = activeSlide.nextElementSibling;
   /* only the videos that actually have a source are visited (before: every slide of the whole feed on every swipe) */
-  sc.querySelectorAll('video[src]').forEach(v=>{
+  const _run = ()=>{ sc.querySelectorAll('video[src]').forEach(v=>{
     const sl = v.closest('.short-slide');
     if(sl === activeSlide) return;
     if(sl && (sl === prev || sl === next)){ if(!v.paused) v.pause(); return; }
     v.pause(); v.removeAttribute('src'); v.load();
-  });
+  }); };
+  /* run after the swipe animation has finished, not in the middle of it (v.load() is heavy and made swipes stutter) */
+  clearTimeout(releaseFarVideos._t);
+  releaseFarVideos._t = setTimeout(()=>{ if(window.requestIdleCallback) requestIdleCallback(_run,{timeout:1500}); else _run(); }, 450);
 }
 
 
@@ -3726,140 +3752,23 @@ function reelPPIcon(slide, kind){
 document.addEventListener('play', ev=>{ try{ const sl = ev.target && ev.target.closest && ev.target.closest('.short-slide'); const p = sl && sl.querySelector('.gz-pp'); if(p && p.dataset.k === 'pause'){ p.className = 'gz-pp'; p.dataset.k = ''; } }catch(e){} }, true);
 
 /* ================================================================
-   ONE REEL PER SWIPE — however hard/fast the swipe (or however long a
-   trackpad keeps coasting), the feed moves exactly one reel up or down.
-   The finger is followed while dragging, but never more than one reel
-   away from where the drag began; on release we settle on the next /
-   previous / same reel.
+   REELS SCROLL — native scroll-snap (runs on the browser's compositor thread, so it is smooth like Instagram / YouTube).
+   scroll-snap-stop:always on every slide means a hard/fast swipe still moves exactly ONE reel, so no JS touch handling is needed.
 ================================================================ */
 (function(){
   const sc = document.getElementById('shortsScroll');
-  let animating = false;
-  let dragging = false;
-  let lastH = 0;
-  let settledIdx = 0, natStart = null, settleTimer = null;
-
-  function maxIndex(){ const h = sc.clientHeight; return h ? Math.max(0, Math.round((sc.scrollHeight - h) / h)) : 0; }
-  function clamp(n, lo, hi){ return Math.max(lo, Math.min(hi, n)); }
-
-  /* On an ad slide the feed is switched to normal (native) scrolling: the browser then lets a swipe that starts on the
-     ad's iframe scroll the page, which JS could never intercept. Everywhere else the feed is JS-paged (hidden overflow). */
-  function isAdIndex(i){ const el = sc.children[i]; return !!(el && el.classList.contains('sponsored-slide')); }
-  function setNative(on){ sc.style.overflowY = on ? 'auto' : ''; sc.style.touchAction = on ? 'pan-y' : ''; }
-  function settle(){
-    const h = sc.clientHeight; if(!h) return;
-    settledIdx = Math.round(sc.scrollTop / h);
-    setNative(isAdIndex(settledIdx));
-  }
-
-  function animateTo(target, done){
-    const from = sc.scrollTop, delta = target - from;
-    if(Math.abs(delta) < 1){ sc.scrollTop = target; settle(); if(done) done(); return; }
-    animating = true;
-    const dur = 240, t0 = performance.now();
-    (function frame(now){
-      const p = Math.min(1, (now - t0) / dur);
-      sc.scrollTop = from + delta * (1 - Math.pow(1 - p, 3)); /* ease-out */
-      if(p < 1){ requestAnimationFrame(frame); }
-      else{ sc.scrollTop = target; animating = false; settle(); if(done) done(); }
-    })(t0);
-  }
-
-  function stepReel(dir){
-    if(animating) return;
+  let lastStep = 0;
+  function step(dir){
+    const now = Date.now(); if(now - lastStep < 380) return; /* ad-overlay swipe / button double-fire must not skip two reels */
+    lastStep = now;
     const h = sc.clientHeight; if(!h) return;
     const cur = Math.round(sc.scrollTop / h);
-    animateTo(clamp(cur + dir, 0, maxIndex()) * h);
+    const max = Math.max(0, Math.round((sc.scrollHeight - h) / h));
+    const t = Math.max(0, Math.min(max, cur + dir)) * h;
+    try{ sc.scrollTo({top:t, behavior:'smooth'}); }catch(e){ sc.scrollTop = t; }
   }
-
-  /* used by the 'Next reel' button on ad slides (AdSense ads live in an iframe, and touches/wheel on an iframe
-     never reach the page — so the ad slide needs its own way to move on besides swiping in the empty space) */
-  window.__reelNext = function(){ if(dragging) return; stepReel(1); };
-  window.__reelPrev = function(){ if(dragging) return; stepReel(-1); };
-
-  /* --- mouse wheel / trackpad: one gesture = one reel. A gesture ends when the wheel
-         has been quiet for 140 ms, so trackpad momentum can't trigger a second reel. --- */
-  let wheelGate = false, wheelIdle = null;
-  sc.addEventListener('wheel', e=>{
-    e.preventDefault();
-    if(Math.abs(e.deltaY) < 2) return;
-    clearTimeout(wheelIdle);
-    wheelIdle = setTimeout(()=>{ wheelGate = false; }, 140);
-    if(wheelGate) return;
-    wheelGate = true;
-    stepReel(e.deltaY > 0 ? 1 : -1);
-  }, {passive:false});
-
-  /* --- touch --- */
-  let dragMoved = false, y0 = 0, t0 = 0, startTop = 0, startIdx = 0, pendingTop = null, rafMove = 0;
-  sc.addEventListener('touchstart', e=>{
-    if(animating || e.touches.length !== 1){ dragging = false; return; }
-    const h = sc.clientHeight; if(!h){ dragging = false; return; }
-    dragging = true; dragMoved = false;
-    y0 = e.touches[0].clientY; t0 = performance.now();
-    startTop = sc.scrollTop; startIdx = Math.round(startTop / h);
-  }, {passive:true});
-
-  sc.addEventListener('touchmove', e=>{
-    if(!dragging) return;
-    const h = sc.clientHeight;
-    const dy = e.touches[0].clientY - y0;
-    if(Math.abs(dy) > 6) dragMoved = true;
-    if(e.cancelable) e.preventDefault();
-    const limited = clamp(dy, -h, h); /* never more than one reel away from the start */
-    pendingTop = clamp(startTop - limited, 0, sc.scrollHeight - h);
-    if(!rafMove){ rafMove = requestAnimationFrame(()=>{ rafMove = 0; if(dragging && pendingTop !== null) sc.scrollTop = pendingTop; }); }
-  }, {passive:false});
-
-  function finishDrag(e){
-    if(!dragging) return;
-    dragging = false;
-    if(rafMove){ cancelAnimationFrame(rafMove); rafMove = 0; }
-    const h = sc.clientHeight; if(!h) return;
-    const endY = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0].clientY : y0;
-    const dy = endY - y0;
-    const speed = Math.abs(dy) / Math.max(1, performance.now() - t0); /* px per ms */
-    let dir = 0;
-    if(Math.abs(dy) > h * 0.15 || (Math.abs(dy) > 30 && speed > 0.35)){ dir = dy < 0 ? 1 : -1; }
-    animateTo(clamp(startIdx + dir, 0, maxIndex()) * h);
-  }
-  sc.addEventListener('touchend', finishDrag, {passive:true});
-  sc.addEventListener('touchcancel', finishDrag, {passive:true});
-
-  /* fallback for scrolling the browser did by itself (swipe/wheel that started on the ad iframe, or a jump such as a
-     shared-link scroll): once it stops, land on a reel — and while on an ad slide never move more than ONE reel */
-  sc.addEventListener('scroll', ()=>{
-    if(animating || dragging) return;
-    const native = sc.style.overflowY === 'auto';
-    if(native && natStart === null) natStart = settledIdx;
-    clearTimeout(settleTimer);
-    settleTimer = setTimeout(()=>{
-      const h = sc.clientHeight; if(!h) return;
-      if(native && natStart !== null){
-        /* same rule as a normal swipe: a real drag (> 12% of a reel) moves ONE reel that way, a tiny one stays put */
-        const delta = sc.scrollTop - natStart * h;
-        const dir = delta > h * 0.12 ? 1 : (delta < -h * 0.12 ? -1 : 0);
-        const target = clamp(natStart + dir, 0, maxIndex());
-        natStart = null;
-        if(Math.abs(sc.scrollTop - target * h) > 1){ animateTo(target * h); return; }
-      }
-      natStart = null; settle();
-    }, 140);
-  }, {passive:true});
-
-  /* a drag isn't a tap — don't let the play/pause tap handler fire after a swipe */
-  sc.addEventListener('click', e=>{ if(dragMoved){ e.stopPropagation(); e.preventDefault(); dragMoved = false; } }, true);
-
-  /* keep the feed locked exactly on a reel when the viewport height changes
-     (mobile address-bar show/hide, rotation, desktop resize) */
-  if('ResizeObserver' in window){
-    lastH = sc.clientHeight;
-    new ResizeObserver(()=>{
-      const h = sc.clientHeight;
-      if(h && lastH && h !== lastH && !animating && !dragging){ sc.scrollTop = settledIdx * h; }
-      if(h) lastH = h;
-    }).observe(sc);
-  }
+  window.__reelNext = function(){ step(1); };
+  window.__reelPrev = function(){ step(-1); };
 })();
 
 document.getElementById('shortsScroll').addEventListener('contextmenu', e=> e.preventDefault());
@@ -4803,8 +4712,8 @@ videoFileInput.addEventListener('change', e=>{
   const proceedWithDuration = (duration)=>{
     if(settled) return;
     settled = true;
-    if(isFinite(duration) && duration >= 90){
-      alert(`Reels must be under 1 minute 30 seconds (90s). This video is ${duration.toFixed(2)} seconds. Please select a different video.`);
+    if(isFinite(duration) && duration > 300){
+      alert(`Videos can be up to 5 minutes (300s). This video is ${duration.toFixed(2)} seconds. Please select a different video.`);
       URL.revokeObjectURL(url);
       videoFileInput.value = '';
       return;
@@ -9937,12 +9846,22 @@ $('dmMsgs')&&$('dmMsgs').addEventListener('click',async e=>{const m=e.target.clo
   if(!/Android/i.test(ua)) return;
   if(window.AndroidAuth) return;
   try{ if(window.matchMedia('(display-mode: standalone)').matches) return; }catch(e){}
-  /* The APK is no longer hosted on this site (saves Netlify credits).
-     Put a direct download link here (Google Drive / GitHub Releases ...). While empty, the banner stays hidden. */
-  var APK_URL = 'https://drive.google.com/uc?export=download&id=1JFOPyR1BybyOzqaHoCjssheWi-FEf7Ix';
+  /* The banner now points to GOOGLE PLAY (GUPZY_PLAY_URL is set once, near shareArainTube).
+     While Gupzy is not on Google Play yet (URL empty) the Download button shows a "coming soon" message. */
+  var PLAY_URL = (typeof GUPZY_PLAY_URL !== 'undefined') ? GUPZY_PLAY_URL : '';
   var el = document.getElementById('apkBanner');
-  if(!el || !APK_URL) return;
-  document.getElementById('apkDownload').setAttribute('href', APK_URL);
+  if(!el) return;
+  var dl = document.getElementById('apkDownload');
+  if(PLAY_URL){
+    var link = PLAY_URL;
+    /* visitor came through an old ?ref= link -> carry the referral into the Play install */
+    try{ var pr = localStorage.getItem('arainTubePendingReferral'); if(pr) link += (link.indexOf('?')>-1?'&':'?') + 'referrer=' + encodeURIComponent('ref=' + pr); }catch(e){}
+    dl.setAttribute('href', link);
+  } else {
+    dl.setAttribute('href', '#');
+    dl.removeAttribute('target');
+    dl.addEventListener('click', function(ev){ ev.preventDefault(); try{ toast('Gupzy app is coming soon on Google Play'); }catch(e){} });
+  }
   var KEY = 'apkBannerNextShow', RE_SHOW = 2*60*1000, AFTER_DL = 24*60*60*1000, timer = null;
   function getNext(){ try{ return parseInt(localStorage.getItem(KEY)||'0',10)||0; }catch(e){ return 0; } }
   function setNext(ms){ try{ localStorage.setItem(KEY, String(Date.now()+ms)); }catch(e){} }
@@ -9968,7 +9887,7 @@ $('dmMsgs')&&$('dmMsgs').addEventListener('click',async e=>{const m=e.target.clo
 
 <script>
 /* ===== Gupzy Studio launcher: the Earn / monetization page lives in Gupzy Studio now ===== */
-const AT_STUDIO_APK_URL = 'https://drive.google.com/uc?export=download&id=1Vd-iHIej9R-_s_wmee1-M9AZIfeu8F1W';   /* Gupzy Studio APK (Google Drive direct download) */
+const AT_STUDIO_PLAY_URL = '';   /* Gupzy Studio on GOOGLE PLAY. Empty while it is not live yet -> "coming soon" message. When live: 'https://play.google.com/store/apps/details?id=<studio package>' */
 function showStudioDownload(){
   let o = document.getElementById('studioDlOv'); if(o) o.remove();
   o = document.createElement('div'); o.id = 'studioDlOv';
@@ -9981,9 +9900,9 @@ function showStudioDownload(){
   document.body.appendChild(o);
   o.addEventListener('click', e=>{ if(e.target === o || e.target.id === 'studioDlNo') o.remove(); });
   document.getElementById('studioDlGo').onclick = ()=>{
-    if(!AT_STUDIO_APK_URL){ toast('Download link is coming soon'); return; }
-    try{ if(window.AndroidAuth && window.AndroidAuth.openExternal){ window.AndroidAuth.openExternal(AT_STUDIO_APK_URL); o.remove(); return; } }catch(e){}
-    window.open(AT_STUDIO_APK_URL, '_blank'); o.remove();
+    if(!AT_STUDIO_PLAY_URL){ toast('Gupzy Studio is coming soon on Google Play'); return; }
+    try{ if(window.AndroidAuth && window.AndroidAuth.openExternal){ window.AndroidAuth.openExternal(AT_STUDIO_PLAY_URL); o.remove(); return; } }catch(e){}
+    window.open(AT_STUDIO_PLAY_URL, '_blank'); o.remove();
   };
 }
 /* ===== Earn (light) — a limited overview INSIDE the app, like YouTube's app; the full analytics stay in Gupzy Studio ===== */
@@ -10125,195 +10044,66 @@ function openATStudioApp(tab){
   },250);
 })();
 </script>
-<!-- ===================== ANONYMOUS INBOX (NGL-style) =====================
-     Every channel gets a link:  ?ask=<channel uid or @id>
-     Anyone (even without an account) can send that channel an anonymous message.
-     The owner reads / deletes them from  Profile menu -> Anonymous Inbox.
-     Firestore collection: anonMessages {toUid, text, createdAt, read}  (rules: see ANON_INBOX_SETUP.txt) -->
-<style id="anonCss">
-  .an-ov{position:fixed;inset:0;z-index:99998;background:var(--bg);color:var(--text);display:flex;flex-direction:column;max-width:560px;margin:0 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;}
-  .an-top{display:flex;align-items:center;gap:10px;padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top,0px));border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:2;}
-  .an-top b{font-size:18px;flex:1;}
-  .an-x{width:38px;height:38px;border-radius:50%;border:0;background:var(--surface2);color:var(--text);font-size:20px;cursor:pointer;line-height:1;}
-  .an-body{padding:18px 16px calc(24px + env(safe-area-inset-bottom,0px));}
-  .an-hero{border-radius:20px;padding:22px 18px;color:#fff;background:linear-gradient(135deg,#ec2b8e,#4a5cff);margin-bottom:16px;text-align:center;}
-  .an-hero .an-av{width:64px;height:64px;border-radius:50%;object-fit:cover;background:rgba(255,255,255,.25);margin:0 auto 10px;display:flex;align-items:center;justify-content:center;font-size:28px;overflow:hidden;}
-  .an-hero .an-av img{width:100%;height:100%;object-fit:cover;}
-  .an-hero h2{margin:0 0 4px;font-size:19px;}
-  .an-hero p{margin:0;opacity:.92;font-size:14px;}
-  .an-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;}
-  .an-chip{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:999px;padding:7px 13px;font-size:13px;cursor:pointer;}
-  .an-ta{width:100%;min-height:130px;resize:none;border-radius:16px;border:1px solid var(--border);background:var(--surface);color:var(--text);padding:14px;font-size:16px;outline:none;}
-  .an-ta:focus{border-color:var(--accent);}
-  .an-row{display:flex;justify-content:space-between;align-items:center;margin:8px 2px 14px;font-size:12px;color:var(--text-faint);}
-  .an-btn{width:100%;border:0;border-radius:14px;padding:14px;font-size:16px;font-weight:700;color:#fff;background:linear-gradient(135deg,#ec2b8e,#4a5cff);cursor:pointer;}
-  .an-btn[disabled]{opacity:.5;cursor:default;}
-  .an-btn.alt{background:var(--surface2);color:var(--text);margin-top:10px;}
-  .an-note{font-size:12px;color:var(--text-faint);text-align:center;margin-top:12px;line-height:1.5;}
-  .an-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:10px;}
-  .an-card.unread{border-color:var(--accent);}
-  .an-card p{margin:0 0 10px;font-size:16px;line-height:1.45;white-space:pre-wrap;word-break:break-word;}
-  .an-meta{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--text-faint);}
-  .an-del{border:0;background:transparent;color:var(--text-faint);font-size:13px;cursor:pointer;padding:4px 8px;}
-  .an-empty{text-align:center;color:var(--text-faint);padding:34px 10px;font-size:14px;line-height:1.6;}
-  .an-empty .big{font-size:42px;margin-bottom:6px;}
-  .an-badge{display:inline-block;min-width:18px;padding:1px 6px;margin-left:6px;border-radius:999px;background:var(--accent);color:#fff;font-size:11px;font-weight:700;text-align:center;vertical-align:middle;}
-  #profileMenuBtn.an-has-unread{position:relative;}
-  #profileMenuBtn.an-has-unread::after{content:"";position:absolute;top:4px;right:4px;width:9px;height:9px;border-radius:50%;background:var(--accent);border:2px solid var(--bg);}
-  .an-ok{text-align:center;padding:40px 10px;}
-  .an-ok .big{font-size:56px;}
-</style>
+
 <script>
+/* ===== DELETE MY ACCOUNT (Play Store + GDPR/CCPA): removes the person's content and then the login itself ===== */
 (function(){
-  var COL='anonMessages', MAX=300, COOLDOWN_MS=30000;
-  var PROMPTS=['Send me a compliment 💌','Confess something 🤫','Ask me anything ❓','What do you really think of me? 👀'];
-  var ov=null, unsub=null, msgs=[], inboxOpen=false;
-
-  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
-  function say(m){ try{ toast(m); }catch(e){ alert(m); } }
-  function askLink(uid){ return location.origin+location.pathname+'?ask='+encodeURIComponent(uid); }
-  function ago(ts){
+  var btn=document.getElementById('deleteAccountBtn'); if(!btn) return;
+  btn.addEventListener('click', async function(){
+    var u=auth.currentUser; if(!u){ toast('Please sign in first'); return; }
+    var ok=await (typeof gzConfirm==='function'?gzConfirm('Delete your account permanently? Your channel, videos, posts, stories and chat keys will be removed. This cannot be undone.','Delete'):Promise.resolve(confirm('Delete your account permanently? This cannot be undone.')));
+    if(!ok) return;
     try{
-      var d = ts && ts.toDate ? ts.toDate() : null; if(!d) return 'just now';
-      var s=Math.floor((Date.now()-d.getTime())/1000);
-      if(s<60) return 'just now'; if(s<3600) return Math.floor(s/60)+'m ago';
-      if(s<86400) return Math.floor(s/3600)+'h ago'; return Math.floor(s/86400)+'d ago';
-    }catch(e){ return ''; }
-  }
-  function box(){
-    if(ov) return ov;
-    ov=document.createElement('div'); ov.id='anOv'; ov.className='an-ov hidden';
-    document.body.appendChild(ov); return ov;
-  }
-  function closeOv(){ if(ov) ov.classList.add('hidden'); inboxOpen=false; }
-  function show(html){ var o=box(); o.innerHTML=html; o.classList.remove('hidden'); o.scrollTop=0; var x=o.querySelector('.an-x'); if(x) x.onclick=closeOv; return o; }
-
-  /* ---------- 1) SEND side: opened from ?ask=<uid> ---------- */
-  async function resolveChannel(idOrUid){
-    var uid=idOrUid, doc=await db.collection('channels').doc(idOrUid).get();
-    if(!doc.exists){
-      var idDoc=await db.collection('channelIds').doc(idOrUid).get();
-      if(idDoc.exists){ uid=idDoc.data().ownerUid; doc=await db.collection('channels').doc(uid).get(); }
+      /* fresh login first (Firebase needs it for deleting an account) */
+      try{ await u.reauthenticateWithPopup(new firebase.auth.GoogleAuthProvider()); }catch(e){ if(e&&e.code&&e.code!=='auth/operation-not-supported-in-this-environment'&&e.code!=='auth/popup-blocked'){ toast('Could not verify it is you. Sign out, sign in again and retry.'); return; } }
+      toast('Deleting your account...');
+      var uid=u.uid;
+      async function wipe(q){ try{ var sn=await q.get(); for(var i=0;i<sn.docs.length;i+=400){ var b=db.batch(); sn.docs.slice(i,i+400).forEach(function(d){ b.delete(d.ref); }); await b.commit(); } }catch(e){ console.warn('wipe',e&&e.code); } }
+      async function one(c,id){ try{ await db.collection(c).doc(id).delete(); }catch(e){ console.warn('del',c,e&&e.code); } }
+      await wipe(db.collection('videos').where('channelId','==',uid));
+      await wipe(db.collection('posts').where('uid','==',uid));
+      await wipe(db.collection('stories').where('uid','==',uid));
+      await wipe(db.collection('localPosts').where('uid','==',uid));
+      await wipe(db.collection('subscriptions').where('subscriberId','==',uid));
+      await wipe(db.collection('channelIds').where('ownerUid','==',uid));
+      await wipe(db.collection('fcmTokens').where('uid','==',uid));
+      await wipe(db.collection('saves').where('uid','==',uid));
+      await wipe(db.collection('notifications').where('toUid','==',uid));
+      var ids=['userKeys','keyBackups','gcKeys','gcKeyBackups','gcPresence','presence','closeFriends','crushOpen','auras','tipJars'];
+      for(var k=0;k<ids.length;k++){ await one(ids[k],uid); }
+      await one('channels',uid);
+      await u.delete();
+      try{ Object.keys(localStorage).forEach(function(k){ localStorage.removeItem(k); }); }catch(e){}
+      toast('Your account was deleted'); setTimeout(function(){ location.href='/'; },1200);
+    }catch(e){
+      console.warn('delete account',e);
+      toast(e&&e.code==='auth/requires-recent-login'?'Please sign out, sign in again and retry':'Delete failed: '+((e&&e.message)||'try again'));
     }
-    return doc.exists ? {uid:uid, data:doc.data()} : null;
-  }
-  window.__anonSend=function(x){ return openSend(x); };
-  async function openSend(idOrUid){
-    show('<div class="an-top"><b>Anonymous message</b><button class="an-x" aria-label="Close">×</button></div><div class="an-body"><div class="an-empty">Loading…</div></div>');
-    var ch=null;
-    try{ ch=await resolveChannel(idOrUid); }catch(e){ console.warn('anon resolve', e); }
-    if(!ch){ show('<div class="an-top"><b>Anonymous message</b><button class="an-x">×</button></div><div class="an-body"><div class="an-empty"><div class="big">😕</div>This link isn\'t available anymore.</div></div>'); return; }
-    var name=esc(ch.data.name||'this creator');
-    var av=ch.data.logoURL ? '<img src="'+esc(ch.data.logoURL)+'" alt="">' : '🤫';
-    var chips=PROMPTS.map(function(p){return '<button type="button" class="an-chip">'+esc(p)+'</button>';}).join('');
-    var o=show('<div class="an-top"><b>Anonymous message</b><button class="an-x" aria-label="Close">×</button></div>'
-      +'<div class="an-body">'
-      +'<div class="an-hero"><div class="an-av">'+av+'</div><h2>Send '+name+' an anonymous message</h2><p>They will never know it was you 🤫</p></div>'
-      +'<div class="an-chips">'+chips+'</div>'
-      +'<textarea class="an-ta" maxlength="'+MAX+'" placeholder="Write something nice, honest or funny…"></textarea>'
-      +'<div class="an-row"><span>No name, no account needed</span><span class="an-cnt">0 / '+MAX+'</span></div>'
-      +'<button class="an-btn" disabled>Send anonymously</button>'
-      +'<div class="an-note">Be kind. Hateful, threatening or harassing messages are not allowed and can be reported and deleted.</div>'
-      +'</div>');
-    var ta=o.querySelector('.an-ta'), btn=o.querySelector('.an-btn'), cnt=o.querySelector('.an-cnt');
-    function upd(){ var n=ta.value.trim().length; cnt.textContent=ta.value.length+' / '+MAX; btn.disabled=n<1; }
-    ta.addEventListener('input',upd);
-    o.querySelectorAll('.an-chip').forEach(function(c){ c.addEventListener('click',function(){ ta.placeholder=c.textContent; ta.focus(); }); });
-    btn.addEventListener('click', async function(){
-      var text=ta.value.trim().slice(0,MAX); if(!text) return;
-      var last=0; try{ last=+localStorage.getItem('an_last')||0; }catch(e){}
-      if(Date.now()-last<COOLDOWN_MS){ say('Please wait a few seconds before sending another one'); return; }
-      btn.disabled=true; btn.textContent='Sending…';
-      try{
-        /* the server (Cloudflare worker /anon-send) saves it: cooldown + rate limit + push live there */
-        var resp=await fetch(atFn('anon-send'), { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ toUid: ch.uid, text: text }) });
-        if(!resp.ok){ var er=new Error('anon-send '+resp.status); er.status=resp.status; throw er; }
-        try{ localStorage.setItem('an_last', String(Date.now())); }catch(e){}
-        show('<div class="an-top"><b>Sent</b><button class="an-x">×</button></div><div class="an-body"><div class="an-ok"><div class="big">🎉</div><h2>Sent anonymously!</h2><p style="color:var(--text-dim)">'+name+' will see your message in their inbox.</p></div>'
-          +'<button class="an-btn" id="anAgain">Send another</button><button class="an-btn alt" id="anOwn">Get your own anonymous link</button></div>');
-        document.getElementById('anAgain').onclick=function(){ openSend(ch.uid); };
-        document.getElementById('anOwn').onclick=function(){ closeOv(); try{ var u=document.getElementById('profileMenuBtn'); }catch(e){} say('Sign in, then open Profile menu → Anonymous Inbox'); };
-      }catch(e){
-        console.warn('anon send failed', e);
-        btn.disabled=false; btn.textContent='Send anonymously';
-        say((e&&e.status===429) ? 'Please wait a bit before sending another one' : (e&&e.status===404) ? 'This link isn\'t available anymore' : "Couldn't send. Check your internet and try again");
-      }
-    });
-  }
-
-  /* ---------- 2) OWNER side: Profile menu -> Anonymous Inbox ---------- */
-  function unreadCount(){ return msgs.filter(function(m){return !m.read;}).length; }
-  function paintBadge(){
-    var n=unreadCount(), b=document.getElementById('anonBadge'), mb=document.getElementById('profileMenuBtn');
-    if(b){ b.textContent=n>99?'99+':String(n); b.classList.toggle('hidden', n===0); }
-    if(mb) mb.classList.toggle('an-has-unread', n>0);
-  }
-  function renderInbox(){
-    if(!inboxOpen) return;
-    var u=auth.currentUser; if(!u) return;
-    var list=msgs.length ? msgs.map(function(m){
-      return '<div class="an-card'+(m.read?'':' unread')+'"><p>'+esc(m.text)+'</p><div class="an-meta"><span>🤫 Anonymous · '+esc(ago(m.createdAt))+'</span><button class="an-del" data-id="'+esc(m.id)+'">Delete</button> <button class="an-del an-pub" style="color:var(--accent2,#4a5cff)" data-id="'+esc(m.id)+'">Answer publicly</button></div></div>';
-    }).join('') : '<div class="an-empty"><div class="big">📭</div>No messages yet.<br>Share your link on your WhatsApp status or Instagram story<br>and let people send you anonymous messages.</div>';
-    var o=show('<div class="an-top"><b>Anonymous Inbox</b><button class="an-x" aria-label="Close">×</button></div>'
-      +'<div class="an-body">'
-      +'<div class="an-hero"><div class="an-av">🤫</div><h2>Your anonymous link</h2><p>Anyone can message you without showing their name</p></div>'
-      +'<button class="an-btn" id="anShare">Share my link</button><button class="an-btn alt" id="anCopy">Copy link</button><button class="an-btn alt" id="anQa">🌐 My public Q&amp;A page</button>'
-      +'<div style="height:18px"></div>'+list+'</div>');
-    var link=askLink(u.uid);
-    document.getElementById('anShare').onclick=function(){ atShare({title:'Gupzy', text:'Send me anonymous messages on Gupzy! 🤫', url:link}); };
-    document.getElementById('anCopy').onclick=function(){
-      if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(link).then(function(){say('Link copied');}, function(){ prompt('Copy your link:', link); }); }
-      else prompt('Copy your link:', link);
-    };
-    document.getElementById('anQa').onclick=function(){ if(window.__gz2) window.__gz2.qaPage(u.uid); };
-    o.querySelectorAll('.an-pub').forEach(function(b){ b.onclick=function(){ var mm=msgs.filter(function(x){return x.id===b.getAttribute('data-id');})[0]; if(mm&&window.__gz2) window.__gz2.answer(mm); }; });
-    o.querySelectorAll('.an-del:not(.an-pub)').forEach(function(b){ b.onclick=function(){ db.collection(COL).doc(b.getAttribute('data-id')).delete().catch(function(){ say("Couldn't delete"); }); }; });
-  }
-  async function markAllRead(){
-    var un=msgs.filter(function(m){return !m.read;}); if(!un.length) return;
-    try{ var batch=db.batch(); un.slice(0,400).forEach(function(m){ batch.update(db.collection(COL).doc(m.id),{read:true}); }); await batch.commit(); }catch(e){ console.warn('anon markRead', e); }
-  }
-  function openInbox(){
-    try{ if(typeof requireAuth==='function' && !requireAuth()) return; }catch(e){}
-    if(!auth.currentUser){ say('Please sign in first'); return; }
-    inboxOpen=true; renderInbox();
-    setTimeout(markAllRead, 1200); /* keep the "new" highlight visible for a moment */
-  }
-  function listen(u){
-    if(unsub){ try{unsub();}catch(e){} unsub=null; }
-    msgs=[]; paintBadge();
-    if(!u) return;
-    unsub=db.collection(COL).where('toUid','==',u.uid).limit(200).onSnapshot(function(snap){
-      msgs=snap.docs.map(function(d){ var x=d.data(); x.id=d.id; return x; })
-        .sort(function(a,b){ var A=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():Date.now(), B=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():Date.now(); return B-A; });
-      paintBadge(); renderInbox();
-    }, function(e){ console.warn('anon inbox listener', e&&e.code); });
-  }
-  function addMenuItem(){
-    if(document.getElementById('anonInboxBtn')) return;
-    var anchor=document.getElementById('shareChannelBtn'); if(!anchor||!anchor.parentNode) return;
-    var it=document.createElement('div'); it.className='sheet-item'; it.id='anonInboxBtn';
-    it.innerHTML='<div class="icon-circle" style="font-size:18px">🤫</div><div class="label">Anonymous Inbox<span class="an-badge hidden" id="anonBadge"></span></div>';
-    anchor.parentNode.insertBefore(it, anchor.nextSibling);
-    it.addEventListener('click', function(){ var s=document.getElementById('profileMenuSheet'); if(s) s.classList.remove('show'); openInbox(); });
-    paintBadge();
-  }
-
-  addMenuItem();
-  auth.onAuthStateChanged(listen);
-
-  /* ---------- 3) deep link ?ask=... ---------- */
-  try{
-    var q=new URLSearchParams(location.search), ask=q.get('ask');
-    if(ask){
-      var u=new URL(location.href); u.searchParams.delete('ask');
-      history.replaceState(null,'',u.pathname+u.search+u.hash);
-      openSend(ask);
-    }
-  }catch(e){ console.warn('anon deeplink', e); }
+  });
 })();
 </script>
 
+<script>
+/* ===== AGE GATE: sign-in is only possible after the person confirms they are 13+ and accepts Terms/Privacy ===== */
+(function(){
+  var b=document.getElementById('googleLoginBtn'); if(!b) return;
+  function ok(){ try{ return localStorage.getItem('gzAgeOk')==='1'; }catch(e){ return false; } }
+  b.addEventListener('click', function(e){
+    if(ok()) return;
+    e.stopImmediatePropagation(); e.preventDefault();
+    var o=document.createElement('div');
+    o.style.cssText='position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:20px;font-family:inherit';
+    o.innerHTML='<div style="background:#16161d;color:#fff;border-radius:16px;max-width:340px;width:100%;padding:22px;text-align:center">'
+      +'<h3 style="margin:0 0 8px;font-size:18px">Before you continue</h3>'
+      +'<p id="gzAgeTxt" style="margin:0 0 16px;font-size:14px;line-height:1.5;opacity:.85">Gupzy is for people aged 13 or older. By continuing you agree to our <a href="/terms.html" target="_blank" style="color:#6cf">Terms</a> and <a href="/privacy.html" target="_blank" style="color:#6cf">Privacy Policy</a>.</p>'
+      +'<button id="gzAgeYes" style="width:100%;padding:12px;border:0;border-radius:12px;background:#e33;color:#fff;font-weight:700;font-size:15px;margin-bottom:8px">I am 13 or older</button>'
+      +'<button id="gzAgeNo" style="width:100%;padding:12px;border:0;border-radius:12px;background:#2a2a33;color:#fff;font-size:15px">I am under 13</button></div>';
+    document.body.appendChild(o);
+    o.querySelector('#gzAgeYes').onclick=function(){ try{ localStorage.setItem('gzAgeOk','1'); }catch(er){} o.remove(); b.click(); };
+    o.querySelector('#gzAgeNo').onclick=function(){ o.querySelector('#gzAgeTxt').textContent='Sorry, you need to be at least 13 years old to use Gupzy.'; o.querySelector('#gzAgeYes').remove(); o.querySelector('#gzAgeNo').textContent='Close'; o.querySelector('#gzAgeNo').onclick=function(){ o.remove(); }; };
+  }, true);
+})();
+</script>
 <!-- ===================== WATCH PARTY (Co-Reels) =====================
      "Scroll with Friends": host starts a party, shares  ?party=<code>  with one friend.
      Both phones stay on the SAME reel - whoever swipes, the other one follows (matched by video id).
@@ -11833,12 +11623,11 @@ function openATStudioApp(tab){
     var rows=[];
     try{ var sn=await db.collection('qa').where('uid','==',ch.uid).limit(100).get(); rows=sn.docs.map(function(d){ return Object.assign({id:d.id},d.data()); }); }catch(e){ console.warn('qa',e); }
     rows.sort(function(a,b){ return ms(b.createdAt)-ms(a.createdAt); });
-    var h='<button class="gz-btn" id="gzAsk">🤫 Ask '+esc(name)+' anything (anonymous)</button><div style="height:16px"></div>';
+    var h='';
     h+=rows.length?rows.map(function(r){
       return '<div class="gz-qa" data-id="'+esc(r.id)+'"><div class="q">🤫 '+esc(r.question)+'</div><div class="a">'+esc(r.answer)+'</div><div class="m">'+esc(agoTxt(ms(r.createdAt)))+(mine?'<a data-del="'+esc(r.id)+'">Delete</a>':'')+'</div></div>';
-    }).join(''):'<p class="gz-note" style="text-align:center">'+(mine?'No answers yet. Open your Anonymous Inbox and tap “Answer publicly” on a question.':'No answers yet — be the first to ask!')+'</p>';
+    }).join(''):'<p class="gz-note" style="text-align:center">'+(mine?'No answers yet.':'No answers yet.')+'</p>';
     $('gzQb').innerHTML=h;
-    $('gzAsk').onclick=function(){ closePage(); if(window.__anonSend) window.__anonSend(ch.uid); };
     $('gzQb').addEventListener('click',function(e){
       var d=e.target.closest('[data-del]'); if(!d) return;
       db.collection('qa').doc(d.dataset.del).delete().then(function(){ var c=d.closest('.gz-qa'); if(c) c.remove(); say('Removed'); }).catch(function(){ say('Could not delete'); });

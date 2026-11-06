@@ -73,7 +73,8 @@ service cloud.firestore {
     match /fcmTokens/{token} {
       allow create, update: if signedIn() && request.resource.data.uid == me();
       allow get, delete: if signedIn() && resource.data.uid == me();
-      allow list: if false;
+      // own tokens only (needed for "Delete my account"): query must filter uid == me
+      allow list: if signedIn() && resource.data.uid == me();
     }
 
     // ================================================================
@@ -318,13 +319,8 @@ service cloud.firestore {
     //  ANONYMOUS INBOX  (messages are written ONLY by the Worker route /anon-send)
     // ================================================================
     match /anonMessages/{id} {
-      // no client can create: the Worker (service account) does it, with cooldown + push
-      allow create: if false;
-      // only the receiver can read / delete their own messages
-      allow read, delete: if signedIn() && resource.data.toUid == me();
-      // receiver can only flip "read"
-      allow update: if signedIn() && resource.data.toUid == me()
-        && changed().hasOnly(['read']);
+      // anonymous inbox removed: nobody can read or write
+      allow read, write: if false;
     }
 
     // rate-limit counters (IP hashes) - Worker only, no client access at all
@@ -483,7 +479,7 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['uid', 'pub', 'updatedAt'])
         && request.resource.data.pub is string
         && request.resource.data.pub.size() < 200;
-      allow delete: if false;
+      allow delete: if signedIn() && me() == uid;
     }
 
     // Gupchats key backup: private. Holds the user's private key encrypted with their own backup PIN (server never sees the PIN).
