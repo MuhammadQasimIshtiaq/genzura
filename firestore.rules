@@ -98,6 +98,7 @@ service cloud.firestore {
         && request.resource.data.get('referralCount', 0) == 0
         && !('monetized' in request.resource.data)
         && !('referredByAdmin' in request.resource.data)
+        && !('suspended' in request.resource.data)
         && request.resource.data.channelId is string
         && getAfter(/databases/$(database)/documents/channelIds/$(request.resource.data.channelId)).data.ownerUid == me();
 
@@ -108,7 +109,7 @@ service cloud.firestore {
         isAdmin()
         // owner: edit own profile, but never the protected counters / badges
         || (me() == uid
-            && !changed().hasAny(['subscriberCount', 'likesTotal', 'referralCount', 'referredByAdmin', 'createdAt'])
+            && !changed().hasAny(['subscriberCount', 'likesTotal', 'referralCount', 'referredByAdmin', 'createdAt', 'suspended', 'suspendReason', 'suspendedAt'])
             // auto-monetization: owner may only switch monetized from off to ON (never off)
             && (!changed().hasAny(['monetized']) || (request.resource.data.monetized == true && resource.data.get('monetized', false) == false))
             && (request.resource.data.get('channelId', null) == resource.data.get('channelId', null)
@@ -146,6 +147,7 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/channels/$(me()))
         && isStr(request.resource.data.title, 300)
         && request.resource.data.views == 0
+        && request.resource.data.get('status', '') == 'pending'
         && request.resource.data.get('likesCount', 0) == 0
         && request.resource.data.get('commentsCount', 0) == 0
         && request.resource.data.createdAt == request.time;
@@ -154,7 +156,7 @@ service cloud.firestore {
         isAdmin()
         // owner edits (title, desc, boost, name/logo sync ...) but never counters / identity
         || (resource.data.channelId == me()
-            && !changed().hasAny(['views', 'likesCount', 'commentsCount', 'sharesCount', 'watchCount', 'watchPctSum', 'skipsCount', 'channelId', 'createdAt']))
+            && !changed().hasAny(['views', 'likesCount', 'commentsCount', 'sharesCount', 'watchCount', 'watchPctSum', 'skipsCount', 'channelId', 'createdAt', 'status', 'reviewedBy', 'reviewedAt', 'rejectReason']))
         // likes counter: +1 only with my like doc, -1 only after my like doc is gone
         || (changed().hasOnly(['likesCount'])
             && ((delta('likesCount') == 1  &&  existsAfter(videoLikePath(me(), vid)))
@@ -233,6 +235,7 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/channels/$(me()))
         && request.resource.data.get('likesCount', 0) == 0
         && request.resource.data.get('commentsCount', 0) == 0
+        && request.resource.data.get('status', '') == 'pending'
         && request.resource.data.get('caption', '') is string
         && request.resource.data.get('caption', '').size() <= 2200
         && request.resource.data.createdAt == request.time;
@@ -1138,6 +1141,25 @@ service cloud.firestore {
         && request.resource.data.lastDay != resource.data.lastDay
         && request.resource.data.streak is int && request.resource.data.streak >= 1 && request.resource.data.streak <= resource.data.streak + 1;
       allow delete: if false;
+    }
+
+    // ================================================================
+    //  REVIEW: appeals (suspended channel owner -> admin) + permanent moderation record (admin only)
+    // ================================================================
+    match /appeals/{uid} {
+      allow get: if signedIn() && (me() == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create: if signedIn() && me() == uid
+        && request.resource.data.uid == me()
+        && request.resource.data.status == 'pending'
+        && isStr(request.resource.data.message, 800)
+        && get(/databases/$(database)/documents/channels/$(me())).data.get('suspended', false) == true;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+    match /moderationLog/{id} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false;
     }
 
     // ================================================================

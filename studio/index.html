@@ -23,6 +23,73 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" crossorigin="anonymous"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" crossorigin="anonymous"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js" crossorigin="anonymous"></script>
+<script id="gzReviewGate">
+/* REVIEW GATE: every new video / post is saved with status "pending". Until the admin approves it:
+   - other people never get it (removed from every query result),
+   - the uploader only sees an "under review" placeholder (no video file, no real thumbnail),
+   - rejected / suspended items are hidden from everybody except the admin.
+   Old items without a status keep working as before. */
+(function(){
+  try{
+    var FS=firebase.firestore; if(!FS||!FS.Query||!FS.DocumentReference) return;
+    function svg(t){ return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="540" height="960" viewBox="0 0 540 960"><rect width="540" height="960" fill="#14151c"/><circle cx="270" cy="410" r="46" fill="none" stroke="#8a8fa3" stroke-width="6"/><path d="M270 382v32l20 14" fill="none" stroke="#8a8fa3" stroke-width="6" stroke-linecap="round"/><text x="270" y="525" font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="#e8e9f0" text-anchor="middle">'+t+'</text><text x="270" y="568" font-family="Arial,sans-serif" font-size="21" fill="#8a8fa3" text-anchor="middle">You can see it here once approved</text></svg>'); }
+    var PH_V=svg('Video is under review'), PH_P=svg('Post is under review');
+    function colOf(ref){ try{ var p=ref.path.split('/'); return (p.length===2&&(p[0]==='videos'||p[0]==='posts'))?p[0]:null; }catch(e){ return null; } }
+    function uidNow(){ try{ var u=firebase.auth().currentUser; return u?u.uid:null; }catch(e){ return null; } }
+    function conv(d){
+      try{
+        if(!d||d.exists===false) return d;
+        var c=colOf(d.ref); if(!c) return d;
+        var x=d.data(); if(!x) return d;
+        var s=x.status; if(s!=='pending'&&s!=='rejected'&&s!=='suspended') return d;
+        if(window.__isAdminUser===true) return d;
+        if(s!=='pending') return null;
+        var u=uidNow(); if(!u||(c==='videos'?x.channelId!==u:x.uid!==u)) return null;
+        var y=Object.assign({},x); y.underReview=true;
+        if(c==='videos'){ y.thumbURL=PH_V; y.videoURL=''; } else { y.media=[{url:PH_P,type:'image'}]; }
+        var w=Object.create(d); Object.defineProperty(w,'data',{value:function(){ return y; }});
+        return w;
+      }catch(e){ return d; }
+    }
+    function conQ(s){
+      try{
+        if(!s||!s.docs) return s;
+        var out=[],ch=false,src=s.docs;
+        for(var i=0;i<src.length;i++){ var w=conv(src[i]); if(w!==src[i]) ch=true; if(w) out.push(w); }
+        if(!ch) return s;
+        var o=Object.create(s);
+        Object.defineProperty(o,'docs',{value:out});
+        Object.defineProperty(o,'size',{value:out.length});
+        Object.defineProperty(o,'empty',{value:out.length===0});
+        Object.defineProperty(o,'forEach',{value:function(cb,t){ out.forEach(function(d){ cb.call(t,d); }); }});
+        Object.defineProperty(o,'docChanges',{value:function(opt){ var r=[]; s.docChanges(opt).forEach(function(c){ var w=conv(c.doc); if(w) r.push({type:c.type,doc:w,oldIndex:c.oldIndex,newIndex:c.newIndex}); }); return r; }});
+        return o;
+      }catch(e){ return s; }
+    }
+    function conD(s){
+      try{
+        var w=conv(s); if(w!==null) return w;
+        var o=Object.create(s); Object.defineProperty(o,'exists',{value:false}); Object.defineProperty(o,'data',{value:function(){ return undefined; }}); return o;
+      }catch(e){ return s; }
+    }
+    function patch(proto,name,fix){
+      var orig=proto[name]; if(typeof orig!=='function') return;
+      proto[name]=function(){
+        var a=Array.prototype.slice.call(arguments);
+        if(name==='get') return orig.apply(this,a).then(fix);
+        for(var k=0;k<a.length;k++){
+          var f=a[k];
+          if(typeof f==='function'){ a[k]=(function(f){ return function(s){ return f(fix(s)); }; })(f); break; }
+          if(f&&typeof f==='object'&&typeof f.next==='function'){ a[k]=Object.assign({},f,{next:(function(f){ return function(s){ return f.next(fix(s)); }; })(f)}); break; }
+        }
+        return orig.apply(this,a);
+      };
+    }
+    patch(FS.Query.prototype,'get',conQ); patch(FS.Query.prototype,'onSnapshot',conQ);
+    patch(FS.DocumentReference.prototype,'get',conD); patch(FS.DocumentReference.prototype,'onSnapshot',conD);
+  }catch(e){ console.warn('review gate not active',e); }
+})();
+</script>
 <link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" crossorigin="anonymous">
 <link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" crossorigin="anonymous">
 <link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js" crossorigin="anonymous">
