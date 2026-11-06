@@ -1454,7 +1454,7 @@ html #bootLoading .boot-logo{position:relative;z-index:1;opacity:0;visibility:vi
       <div class="hm-sep"></div>
       <div class="sheet-item" data-hmfn="gzGhostOpen"><div class="icon-circle">👻</div><div class="label" style="flex:1;min-width:0">Ghost Meter<div style="font-size:11.5px;font-weight:400;color:var(--text-dim);margin-top:2px;line-height:1.3">Reply-speed badge · no chat is ever read</div></div></div>
       <div class="sheet-item" data-hmfn="gzQuestOpen"><div class="icon-circle">🗺️</div><div class="label" style="flex:1;min-width:0">Side Quest<div style="font-size:11.5px;font-weight:400;color:var(--text-dim);margin-top:2px;line-height:1.3">Daily real-world quest · 5-sec clip · reward points</div></div></div>
-      <div class="sheet-item" data-hmfn="gzCrushOpen"><div class="icon-circle">💘</div><div class="label" style="flex:1;min-width:0">Crush Vote &amp; Who saved me<div style="font-size:11.5px;font-weight:400;color:var(--text-dim);margin-top:2px;line-height:1.3">Anonymous votes · only totals, never names</div></div></div>
+      <div class="sheet-item" data-hmfn="gzCrushOpen"><div class="icon-circle">💘</div><div class="label" style="flex:1;min-width:0">Who saved me<div style="font-size:11.5px;font-weight:400;color:var(--text-dim);margin-top:2px;line-height:1.3">Only a count · never names</div></div></div>
       <div class="sheet-item" data-proxy="lmBtn"><div class="icon-circle">📍</div><div class="label">Near Me</div></div>
       <div class="sheet-item" data-proxy="gzHubBtn"><div class="icon-circle">🌙</div><div class="label">Mood, Do-not-disturb &amp; Tips</div></div>
       <div class="sheet-item" data-proxy="albumsBtn"><div class="icon-circle">🖼️</div><div class="label">Shared Albums</div></div>
@@ -4564,6 +4564,16 @@ function listenLiveChat(channelId, messagesElId){
           const div = document.createElement('div');
           div.className = 'live-chat-msg';
           div.innerHTML = `<b>${escapeHtml(m.authorName||'User')}:</b>${escapeHtml(m.text||'')}`;
+          /* viewers can report a live-chat comment (not their own) */
+          if(messagesElId==='liveViewChatMessages' && m.authorId && !(currentUser && m.authorId===currentUser.uid)){
+            const rb = document.createElement('span');
+            rb.textContent = '🚩'; rb.title = 'Report comment';
+            rb.style.cssText = 'margin-left:8px;opacity:.75;cursor:pointer;font-size:12px;';
+            rb.addEventListener('click', ()=>{
+              window.gzReport({type:'livemsg', id:channelId+'.'+change.doc.id, uid:m.authorId, name:m.authorName||'User', title:'[Live chat] '+(m.authorName||'User'), text:m.text||''});
+            });
+            div.appendChild(rb);
+          }
           el.appendChild(div);
         }
       });
@@ -5856,7 +5866,7 @@ async function loadAdminRevenue(){
 }
 
 
-const REPORT_LBL2={vcomment:'Video comment',pcomment:'Post comment',voice:'Voice post',clip:'Album clip',live:'Live stream'};
+const REPORT_LBL2={vcomment:'Video comment',pcomment:'Post comment',voice:'Voice post',clip:'Album clip',live:'Live stream',livemsg:'Live chat comment'};
 function reportRef(pf,raw){
   const two=()=>{const i=raw.indexOf('.');return i>0?[raw.slice(0,i),raw.slice(i+1)]:null;};
   if(!pf) return db.collection('videos').doc(raw);
@@ -10636,138 +10646,6 @@ function openATStudioApp(tab){
 })();
 </script>
 
-<!-- ===================== VOICE POSTS (30-second audio posts, visible 48 hours) =====================
-     Firestore: voicePosts/{id} {uid,name,logo,audioURL,dur,caption,createdAt}  (rules: firestore.rules)
-     Shown to: you, people you follow and your phone-contact friends. -->
-<style id="vpCss">
-  .vp-rec{display:flex;flex-direction:column;align-items:center;gap:12px;padding:22px 16px;}
-  .vp-big{width:84px;height:84px;border-radius:50%;border:0;font-size:34px;color:#fff;background:linear-gradient(135deg,#ec2b8e,#4a5cff);cursor:pointer;}
-  .vp-big.on{background:#e5484d;animation:vpPulse 1s infinite;}
-  @keyframes vpPulse{0%{box-shadow:0 0 0 0 rgba(229,72,77,.5)}100%{box-shadow:0 0 0 22px rgba(229,72,77,0)}}
-  .vp-t{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;}
-  .vp-in{width:100%;padding:11px;border-radius:12px;border:1px solid var(--border,#ccc);background:transparent;color:inherit;font-size:14px;box-sizing:border-box;}
-  .vp-item{display:flex;align-items:center;gap:12px;padding:10px 16px;}
-  .vp-play{width:44px;height:44px;border-radius:50%;border:0;background:linear-gradient(135deg,#ec2b8e,#4a5cff);color:#fff;font-size:16px;flex:none;cursor:pointer;}
-  .vp-item .t{flex:1;min-width:0;} .vp-item .t b{display:block;font-size:14px;} .vp-item .t span{font-size:12px;color:var(--text-dim);} .vp-item .t i{display:block;font-style:normal;font-size:13px;margin-top:2px;}
-  .vp-del{border:0;background:none;color:#e5484d;font-size:16px;cursor:pointer;}
-</style>
-<script>
-(function(){
-  var COL='voicePosts', MAXS=30, TTL=48*3600*1000;
-  var ov=null, unsub=null, audio=null, playing=null, allowed=null;
-  var rec=null, chunks=[], tmr=null, t0=0, stream=null, blob=null, dur=0, mimeType='';
-  function say(m){ try{ toast(m); }catch(e){ alert(m); } }
-  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
-  function uid(){ return auth.currentUser && auth.currentUser.uid; }
-  function ms(t){ return t&&t.toMillis?t.toMillis():Date.now(); }
-  function ago(t){ var s=Math.floor((Date.now()-ms(t))/1000); return s<60?'now':s<3600?Math.floor(s/60)+'m':Math.floor(s/3600)+'h'; }
-  function fmt(sec){ sec=Math.round(sec||0); return Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0'); }
-  function pickMime(){ var c=['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg;codecs=opus']; for(var i=0;i<c.length;i++){ try{ if(window.MediaRecorder && MediaRecorder.isTypeSupported(c[i])) return c[i]; }catch(e){} } return ''; }
-
-
-  function mount(){
-    if(ov) return;
-    ov=document.createElement('div'); ov.className='alb-ov hidden'; ov.id='vpOv';
-    ov.innerHTML='<div class="alb-top"><button class="alb-x" id="vpBack">←</button><b>🎙 Voice posts</b></div><div class="alb-body" id="vpBody"></div>';
-    document.body.appendChild(ov); document.getElementById('vpBack').onclick=close;
-  }
-  function stopAudio(){ if(audio){ try{audio.pause();}catch(e){} audio=null; } playing=null; }
-  function stopRec(discard){
-    clearInterval(tmr); tmr=null;
-    if(rec && rec.state!=='inactive'){ if(discard) rec.onstop=null; try{rec.stop();}catch(e){} }
-    if(stream){ stream.getTracks().forEach(function(t){t.stop();}); stream=null; }
-    rec=null;
-  }
-  function close(){ stopAudio(); stopRec(true); if(unsub){ try{unsub();}catch(e){} unsub=null; } if(ov) ov.classList.add('hidden'); }
-
-  async function open(){
-    if(typeof requireAuth==='function' && !requireAuth()) return;
-    mount(); ov.classList.remove('hidden'); showList();
-    try{ var p=await window.__loadPeople(); allowed={}; allowed[uid()]=1; (p.f||[]).forEach(function(x){allowed[x.id]=1;}); (p.c||[]).forEach(function(x){allowed[x.id]=1;}); }catch(e){ allowed={}; allowed[uid()]=1; }
-    listen();
-  }
-  function showList(){
-    stopRec(true); blob=null;
-    document.getElementById('vpBody').innerHTML='<div style="padding:12px 16px"><button class="alb-btn" id="vpNew" style="width:100%">🎙 Record a voice post (30s)</button></div><div id="vpList"><div class="alb-empty">Loading…</div></div>';
-    document.getElementById('vpNew').onclick=recorder;
-  }
-  var items=[];
-  function listen(){
-    if(unsub){ try{unsub();}catch(e){} }
-    unsub=db.collection(COL).orderBy('createdAt','desc').limit(80).onSnapshot(function(sn){
-      items=sn.docs.map(function(d){return Object.assign({id:d.id},d.data());}).filter(function(x){ return (Date.now()-ms(x.createdAt))<TTL && allowed && allowed[x.uid]; });
-      paint();
-    }, function(e){ var l=document.getElementById('vpList'); if(l) l.innerHTML='<div class="alb-empty">'+esc(e.code==='permission-denied'?'Voice posts is not enabled yet (publish the new Firestore rules)':e.message)+'</div>'; });
-  }
-  function paint(){
-    var l=document.getElementById('vpList'); if(!l) return;
-    l.innerHTML=items.length?items.map(function(x){
-      return '<div class="vp-item"><button class="vp-play" data-p="'+esc(x.id)+'">'+(playing===x.id?'⏸':'▶')+'</button><div class="t"><b>'+esc(x.name||'User')+(x.uid===uid()?' (you)':'')+'</b><span>'+ago(x.createdAt)+' · '+fmt(x.dur)+'</span>'+(x.caption?'<i>'+esc(x.caption)+'</i>':'')+'</div>'+(x.uid===uid()?'<button class="vp-del" data-d="'+esc(x.id)+'">🗑</button>':'<button class="vp-del" data-rv="'+esc(x.id)+'" title="Report">⚑</button>')+'</div>';
-    }).join(''):'<div class="alb-empty">No voice posts in the last 48 hours.<br>Record one — friends will hear it here.</div>';
-    l.onclick=function(e){
-      var rv=e.target.closest('[data-rv]'); if(rv){ var vx=(items||[]).find(function(z){return z.id===rv.dataset.rv;})||{}; window.gzReport({type:'voice',id:rv.dataset.rv,uid:vx.uid,name:vx.name,title:'[Voice post] '+(vx.caption||vx.name||'')}); return; }
-      var d=e.target.closest('[data-d]'); if(d){ gzConfirm().then(function(ok){ if(ok) db.collection(COL).doc(d.dataset.d).delete().catch(function(er){ say('Failed: '+er.message); }); }); return; }
-      var b=e.target.closest('[data-p]'); if(!b) return; var id=b.dataset.p;
-      if(playing===id){ stopAudio(); paint(); return; }
-      stopAudio(); var it=items.find(function(z){return z.id===id;}); if(!it) return;
-      audio=new Audio(it.audioURL); playing=id; audio.onended=function(){ playing=null; audio=null; paint(); };
-      audio.play().catch(function(){ say("Couldn't play this voice post"); playing=null; paint(); }); paint();
-    };
-  }
-
-  function recorder(){
-    stopAudio();
-    var b=document.getElementById('vpBody');
-    b.innerHTML='<div class="vp-rec"><button class="vp-big" id="vpRec">🎙</button><div class="vp-t" id="vpT">0:00 / 0:30</div><div style="font-size:13px;opacity:.7" id="vpHint">Tap to start recording</div><button class="alb-btn alt" id="vpCancel">Cancel</button></div>';
-    document.getElementById('vpCancel').onclick=showList;
-    document.getElementById('vpRec').onclick=toggle;
-  }
-  async function toggle(){
-    var btn=document.getElementById('vpRec'); if(!btn) return;
-    if(rec){ finish(); return; }
-    try{ stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}); }catch(e){ say('Allow the microphone to record'); return; }
-    mimeType=pickMime(); chunks=[];
-    try{ rec=mimeType?new MediaRecorder(stream,{mimeType:mimeType}):new MediaRecorder(stream); }catch(e){ say('Recording is not supported on this device'); stopRec(true); return; }
-    rec.ondataavailable=function(e){ if(e.data&&e.data.size) chunks.push(e.data); };
-    rec.onstop=function(){ blob=new Blob(chunks,{type:(rec&&rec.mimeType)||mimeType||'audio/webm'}); dur=Math.min(MAXS,(Date.now()-t0)/1000); review(); };
-    t0=Date.now(); rec.start(250); btn.classList.add('on'); btn.textContent='⏹'; document.getElementById('vpHint').textContent='Recording… tap to stop';
-    tmr=setInterval(function(){ var s=(Date.now()-t0)/1000, t=document.getElementById('vpT'); if(t) t.textContent=fmt(s)+' / 0:30'; if(s>=MAXS) finish(); },200);
-  }
-  function finish(){
-    clearInterval(tmr); tmr=null;
-    var r=rec; if(r && r.state!=='inactive'){ try{r.stop();}catch(e){} }
-    if(stream){ stream.getTracks().forEach(function(t){t.stop();}); stream=null; }
-  }
-  function review(){
-    var b=document.getElementById('vpBody'); if(!b) return;
-    if(!blob || blob.size<1500){ say('Recording too short'); recorder(); return; }
-    var url=URL.createObjectURL(blob);
-    b.innerHTML='<div class="vp-rec"><div class="vp-t">'+fmt(dur)+'</div><audio controls src="'+url+'" style="width:100%"></audio><input class="vp-in" id="vpCap" maxlength="120" placeholder="Add a caption (optional)"><button class="alb-btn" id="vpPost" style="width:100%">Post</button><button class="alb-btn alt" id="vpRe" style="width:100%">Record again</button></div>';
-    document.getElementById('vpRe').onclick=recorder;
-    document.getElementById('vpPost').onclick=async function(){
-      var pb=this; pb.disabled=true; pb.textContent='Posting…';
-      try{
-        var ext=/mp4/.test(blob.type)?'m4a':/ogg/.test(blob.type)?'ogg':'webm';
-        var audioURL=await uploadToCloudinary(blob,'video',null,'voice_'+uid()+'_'+Date.now()+'.'+ext);
-        await db.collection(COL).add({uid:uid(), name:(currentChannel&&currentChannel.name)||'User', logo:(currentChannel&&currentChannel.logoURL)||null, audioURL:audioURL, dur:Math.round(dur), caption:(document.getElementById('vpCap').value||'').trim().slice(0,120), createdAt:firebase.firestore.FieldValue.serverTimestamp()});
-        say('Voice post shared ✓'); blob=null; showList();
-      }catch(e){ say('Failed: '+e.message); pb.disabled=false; pb.textContent='Post'; }
-    };
-  }
-
-  /* ---- light label at the top of Reels (next to Co-Reel) ---- */
-  function addChip(){
-    if(document.getElementById('voicePostBtn')) return;
-    var v=document.getElementById('shortsView'); if(!v) return;
-    var bar=document.getElementById('reelTopBar'); if(!bar){ bar=document.createElement('div'); bar.id='reelTopBar'; v.appendChild(bar); }
-    var it=document.createElement('span'); it.id='voicePostBtn'; it.className='rt-chip'; it.textContent='🎙 Voice';
-    bar.appendChild(it); it.addEventListener('click', open);
-  }
-  addChip();
-  auth.onAuthStateChanged(function(u){ if(!u) close(); });
-})();
-</script>
-
 <!-- ===================== REAL MOMENTS (BeReal-style "Gupzy Time") =====================
      Once a day, at one random time (same for everybody), Gupzy says "Gupzy Time!".
      You get 2 minutes to post what you are doing RIGHT NOW: back camera + front camera, live camera only, no filters.
@@ -13687,7 +13565,7 @@ window.gzConfirm=function(msg,okLabel){
 })();
 </script>
 
-<!-- ===================== CRUSH VOTE (opt-in, anonymous) + "how many saved me" (opt-in, count only) =====================
+<!-- ===================== WHO SAVED ME (opt-in, count only) =====================  (Crush Vote / Spark removed)
      Home 3-lines menu -> "Crush Vote & Who saved me".
      crushOpen/{uid}  {enabled}          public flag: this person ACCEPTS anonymous votes (he turns it on himself)
      crushStats/{uid} {crush,legend}     totals, readable ONLY by the owner; voters can only +1 together with their own vote doc
@@ -13719,135 +13597,40 @@ window.gzConfirm=function(msg,okLabel){
 </style>
 <script id="gzCrush">
 (function(){
-  var ov=null, myOpen=false, stats=null, savedOn=false, savedRes=null, people=[], votes={}, sparkSet=null, sparkAt=0;
+  var ov=null, savedOn=false, savedRes=null;
   var FV=function(){ return firebase.firestore.FieldValue; };
   function $(id){ return document.getElementById(id); }
   function say(m){ try{ toast(m); }catch(e){ alert(m); } }
   function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
   function me(){ return auth.currentUser && auth.currentUser.uid; }
 
-  /* ---- MUTUAL SPARK: needs both people to have voted "crush". Silent: no notification. ---- */
-  function pairId(a,b){ return a<b?a+'_'+b:b+'_'+a; }
-  async function loadSparks(force){
-    if(!me()) return {};
-    if(!force && sparkSet && Date.now()-sparkAt<60000) return sparkSet;
-    var set={};
-    try{
-      var sn=await db.collection('sparks').where('uids','array-contains',me()).get();
-      sn.forEach(function(d){ (d.data().uids||[]).forEach(function(u){ if(u!==me()) set[u]=1; }); });
-    }catch(e){}
-    sparkSet=set; sparkAt=Date.now(); return set;
-  }
-  async function trySpark(id){
-    /* the rules allow this write ONLY if the other person also voted crush on me; otherwise it is denied = no spark */
-    var a=me(), b=id, lo=a<b?a:b, hi=a<b?b:a;
-    try{
-      await db.collection('sparks').doc(lo+'_'+hi).set({uids:[lo,hi], createdAt:FV().serverTimestamp()});
-      if(sparkSet) sparkSet[id]=1;
-      return true;
-    }catch(e){ return false; }
-  }
-  async function paintSpark(uid){
-    var old=document.getElementById('chSpark'); if(old) old.remove();
-    if(!me()||!uid||uid===me()) return;
-    var set=await loadSparks(false);
-    var h=document.getElementById('chHandle'); if(!h||!set[uid]) return;
-    var again=document.getElementById('chSpark'); if(again) again.remove();
-    var el=document.createElement('div'); el.id='chSpark'; el.className='cv-spark'; el.textContent='✨ Spark';
-    el.title='You both like each other';
-    el.onclick=function(){ say('✨ You both like each other'); };
-    h.insertAdjacentElement('afterend',el);
-  }
-
   function mount(){
     if(ov) return;
     ov=document.createElement('div'); ov.id='cvOv'; ov.className='hidden';
-    ov.innerHTML='<div class="cv-top"><button class="cv-x" id="cvBack">←</button><b>💘 Crush Vote &amp; Who saved me</b></div><div class="cv-body" id="cvBody"></div>';
+    ov.innerHTML='<div class="cv-top"><button class="cv-x" id="cvBack">←</button><b>📇 Who saved me</b></div><div class="cv-body" id="cvBody"></div>';
     document.body.appendChild(ov); ov.addEventListener('click',onClick); ov.addEventListener('change',onChange);
   }
   async function open(){
     try{ if(typeof requireAuth==='function' && !requireAuth()) return; }catch(e){}
     if(!me()){ say('Please sign in first'); return; }
     mount(); ov.classList.remove('hidden'); $('cvBody').innerHTML='<div class="cv-empty">Loading…</div>';
-    savedRes=null; votes={}; people=[];
+    savedRes=null;
     try{
-      var denied=[];
-      var g=function(n){ return db.collection(n).doc(me()).get().catch(function(er){ if(er&&er.code==='permission-denied') denied.push(n); return {exists:false,data:function(){return {};}}; }); };
-      var r=await Promise.all([g('crushOpen'), g('crushStats'), g('savedCountOpt')]);
-      if(denied.length){ $('cvBody').innerHTML='<div class="cv-empty">Not enabled yet — publish the new Firestore rules first.<br><small>Blocked: '+denied.join(', ')+'</small></div>'; return; }
-      myOpen=!!(r[0].exists&&r[0].data().enabled); stats=r[1].exists?r[1].data():null; savedOn=!!(r[2].exists&&r[2].data().on);
-    }catch(e){ $('cvBody').innerHTML='<div class="cv-empty">Could not load: '+esc(e&&e.message||e)+'</div>'; return; }
-    await loadSparks(true); render(); loadPeople();
+      var r=await db.collection('savedCountOpt').doc(me()).get();
+      savedOn=!!(r.exists&&r.data().on);
+    }catch(e){ $('cvBody').innerHTML='<div class="cv-empty">'+(e&&e.code==='permission-denied'?'Not enabled yet':'Could not load: '+esc(e&&e.message||e))+'</div>'; return; }
+    render();
   }
   function render(){
     var b=$('cvBody'); if(!b) return;
-    var c=stats?(+stats.crush||0):0, l=stats?(+stats.legend||0):0;
-    var h='<div class="cv-card"><h3>💘 Anonymous Crush Vote</h3><p class="cv-s">Turn this on and your friends can vote for you in secret: <b>Secret Crush 💘</b> or <b>Legend 😎</b>. You only see the <b>totals</b> — never who voted. You can turn it off any time.</p>'
-      +'<label class="cv-sw"><span>Let friends vote me anonymously</span><input type="checkbox" id="cvOpen"'+(myOpen?' checked':'')+'></label>';
-    if(myOpen){
-      h+='<div class="cv-big"><div><b>'+c+'</b>'+(c===1?'person voted':'people voted')+' you<br>Secret Crush 💘</div><div><b>'+l+'</b>'+(l===1?'person voted':'people voted')+' you<br>Legend 😎</div></div>';
-      if(!c&&!l) h+='<p class="cv-s" style="margin-top:10px">No votes yet. Ask your friends to open this page 😉</p>';
-    }
-    h+='</div>';
-    h+='<div class="cv-card" id="cvSparkCard" style="display:none"></div>';
-    h+='<div class="cv-card"><h3>🗳️ Vote for a friend</h3><p class="cv-s">Only friends who turned Crush Vote on are listed. Your vote is secret — they only see the total. One vote per friend.</p><div id="cvList"><div class="cv-empty">Loading friends…</div></div></div>';
-    h+='<div class="cv-card"><h3>📇 How many people saved me?</h3><p class="cv-s">Counts how many people on Gupzy have <b>your number or e-mail</b> in their phone contacts. You get <b>one number only</b> — no names, no labels, nothing about what they saved you as. Shown only when 3 or more people. Needs contact sync (Android app).</p>'
+    var h='<div class="cv-card"><h3>📇 How many people saved me?</h3><p class="cv-s">Counts how many people on Gupzy have <b>your number or e-mail</b> in their phone contacts. You get <b>one number only</b> — no names, no labels, nothing about what they saved you as. Shown only when 3 or more people. Needs contact sync (Android app).</p>'
       +'<label class="cv-sw"><span>Turn this on for me</span><input type="checkbox" id="cvSaved"'+(savedOn?' checked':'')+'></label>';
     if(savedOn){
       h+='<div style="margin-top:10px"><button class="cv-btn" id="cvCount">🔍 Check now</button></div>';
       if(savedRes) h+='<div class="cv-big" style="grid-template-columns:1fr"><div style="background:linear-gradient(135deg,#1b1f3b,#3b1f4f 55%,#5a1f3d)">'+(savedRes.count!=null?'<b>'+savedRes.count+'</b>people have you saved in their contacts':'<b>&lt; 3</b>fewer than 3 people (hidden to protect privacy)')+'</div></div>';
     }
     h+='</div>';
-    b.innerHTML=h; paintList();
-  }
-  async function loadPeople(){
-    var f=[],c=[]; try{ var pp=await window.__loadPeople(); f=pp.f||[]; c=pp.c||[]; }catch(e){}
-    var seen={}, list=[]; f.concat(c).forEach(function(p){ if(p&&p.id&&!seen[p.id]&&p.id!==me()){ seen[p.id]=1; list.push(p); } });
-    list=list.slice(0,60);
-    var res=await Promise.all(list.map(function(p){
-      return Promise.all([db.collection('crushOpen').doc(p.id).get().catch(function(){return null;}), db.collection('crushVotes').doc(me()+'_'+p.id).get().catch(function(){return null;})])
-        .then(function(r){ return {p:p, open:!!(r[0]&&r[0].exists&&r[0].data().enabled), voted:r[1]&&r[1].exists?r[1].data().kind:null}; });
-    }));
-    people=res.filter(function(x){ return x.open; }); paintList();
-  }
-  function paintSparkCard(){
-    var el=$('cvSparkCard'); if(!el) return;
-    var ids=Object.keys(sparkSet||{});
-    if(!ids.length){ el.style.display='none'; return; }
-    var names=ids.map(function(id){ var x=people.find(function(z){return z.p.id===id;}); return x?esc(x.p.name||'Friend'):null; });
-    el.style.display='';
-    el.innerHTML='<h3>✨ Spark</h3><p class="cv-s">You and '+(ids.length===1?'one person':ids.length+' people')+' secretly like each other. Nobody was notified — the ✨ only shows on your two profiles.</p>'
-      +(names.filter(Boolean).length?'<div class="cv-s" style="font-weight:700;color:var(--text,#111)">'+names.filter(Boolean).join(' · ')+'</div>':'');
-  }
-  function paintList(){
-    paintSparkCard();
-    var el=$('cvList'); if(!el) return;
-    if(!people.length){ el.innerHTML='<div class="cv-empty">Abhi koi friend ne Crush Vote on nahi kiya. Unko bolo ye page khol kar on karein 😄</div>'; return; }
-    el.innerHTML=people.map(function(x){
-      return '<div class="cv-row"><span class="n">'+esc(x.p.name||'Friend')+'</span>'+(sparkSet&&sparkSet[x.p.id]?'<span class="cv-ok" style="color:#ec2b8e">✨ Spark</span>':'')+(x.voted?'<span class="cv-ok">Voted '+(x.voted==='crush'?'💘':'😎')+' ✓</span>':'<button class="cv-btn" data-v="crush" data-id="'+esc(x.p.id)+'">💘 Crush</button><button class="cv-btn alt" data-v="legend" data-id="'+esc(x.p.id)+'">😎 Legend</button>')+'</div>';
-    }).join('');
-  }
-  async function vote(id,kind,btn){
-    var x=people.find(function(z){return z.p.id===id;}); if(!x||x.voted) return;
-    btn.disabled=true;
-    try{
-      var b=db.batch(), vref=db.collection('crushVotes').doc(me()+'_'+id), up={}; up[kind]=FV().increment(1);
-      b.set(vref,{voter:me(), owner:id, kind:kind, createdAt:FV().serverTimestamp()});
-      b.update(db.collection('crushStats').doc(id),up);
-      await b.commit(); x.voted=kind;
-      var sp=(kind==='crush')?await trySpark(id):false;
-      paintList(); say(sp?'✨ Spark! You both picked each other':(kind==='crush'?'Secret vote sent 💘':'Legend vote sent 😎'));
-    }catch(e){ btn.disabled=false; say(e&&e.code==='permission-denied'?"Couldn't vote (you must follow each other / be contacts)":'Failed: '+e.message); }
-  }
-  async function setOpen(on,box){
-    try{
-      if(on){
-        var s=await db.collection('crushStats').doc(me()).get();
-        if(!s.exists) await db.collection('crushStats').doc(me()).set({crush:0,legend:0});
-      }
-      await db.collection('crushOpen').doc(me()).set({enabled:on, updatedAt:FV().serverTimestamp()});
-      myOpen=on; if(on&&!stats) stats={crush:0,legend:0}; render();
-    }catch(e){ box.checked=!on; say('Failed: '+e.message); }
+    b.innerHTML=h;
   }
   async function setSaved(on,box){
     try{ await db.collection('savedCountOpt').doc(me()).set({on:on, updatedAt:FV().serverTimestamp()}); savedOn=on; savedRes=null; render(); }
@@ -13863,20 +13646,13 @@ window.gzConfirm=function(msg,okLabel){
       savedRes=d; render();
     }catch(e){ btn.disabled=false; btn.textContent='🔍 Check now'; say(String(e.message||e)); }
   }
-  function onChange(e){
-    var t=e.target;
-    if(t.id==='cvOpen') setOpen(t.checked,t);
-    else if(t.id==='cvSaved') setSaved(t.checked,t);
-  }
+  function onChange(e){ var t=e.target; if(t.id==='cvSaved') setSaved(t.checked,t); }
   function onClick(e){
     var t=e.target, x;
     if(t.closest('#cvBack')){ ov.classList.add('hidden'); return; }
-    if((x=t.closest('[data-v]'))){ vote(x.dataset.id,x.dataset.v,x); return; }
     if((x=t.closest('#cvCount'))){ countNow(x); return; }
   }
   window.gzCrushOpen=open;
-  window.__gzSpark={paint:paintSpark, refresh:function(){ return loadSparks(true); }};
-  try{ auth.onAuthStateChanged(function(){ sparkSet=null; }); }catch(e){}
 })();
 </script>
 
@@ -14186,7 +13962,7 @@ window.gzConfirm=function(msg,okLabel){
 </style>
 <script id="gzReportJs">
 (function(){
-  var NAMES={reel:'reel',video:'video',post:'post',story:'story',channel:'channel',user:'user',message:'message',lm:'post',vcomment:'comment',pcomment:'comment',voice:'voice post',clip:'album clip',live:'live stream'};
+  var NAMES={reel:'reel',video:'video',post:'post',story:'story',channel:'channel',user:'user',message:'message',lm:'post',vcomment:'comment',pcomment:'comment',voice:'voice post',clip:'album clip',live:'live stream',livemsg:'live chat comment'};
   var REASONS=['Spam or scam','Nudity or sexual content','Violence or dangerous content','Harassment or bullying','Hate speech','Copyright or stolen content','Child safety (under 18)','Fake account or impersonation','Something else'];
   var ov=null, onDone=null;
   function say(m){ try{ toast(m); }catch(e){ alert(m); } }
@@ -14209,7 +13985,7 @@ window.gzConfirm=function(msg,okLabel){
     var what=NAMES[type];
     ov=document.createElement('div'); ov.id='gzRptOv';
     ov.innerHTML='<div class="bx"><h3>Report this '+what+'</h3><p class="s">Pick the closest reason. Our team reviews every report. '
-      +((type==='message'||type==='vcomment'||type==='pcomment')?'The text you are reporting will be shared with our team. ':'')+'The other person is not told who reported.</p>'
+      +((type==='message'||type==='vcomment'||type==='pcomment'||type==='livemsg')?'The text you are reporting will be shared with our team. ':'')+'The other person is not told who reported.</p>'
       +REASONS.map(function(r,i){ return '<label class="r"><input type="radio" name="gzRptR" value="'+esc(r)+'"'+(i===0?' checked':'')+'><span>'+esc(r)+'</span></label>'; }).join('')
       +'<textarea id="gzRptD" rows="2" maxlength="200" placeholder="Add details (optional)"></textarea>'
       +'<div class="row"><button type="button" class="no" id="gzRptNo">Cancel</button><button type="button" class="go" id="gzRptGo">Send report</button></div></div>';
@@ -14231,7 +14007,7 @@ window.gzConfirm=function(msg,okLabel){
           reason:reason, details:details, targetType:type, targetId:id, status:'pending',
           createdAt:firebase.firestore.FieldValue.serverTimestamp()
         };
-        if(type==='message'||type==='vcomment'||type==='pcomment'){ d.reportedText=String(o.text||'').slice(0,300); d.chatId=String(o.chatId||'').slice(0,120); }
+        if(type==='message'||type==='vcomment'||type==='pcomment'||type==='livemsg'){ d.reportedText=String(o.text||'').slice(0,300); d.chatId=String(o.chatId||'').slice(0,120); }
         await ref.set(d);
         say('Reported. Thank you, our team will review it');
         close();
