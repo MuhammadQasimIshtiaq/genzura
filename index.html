@@ -57,6 +57,7 @@
 <meta name="apple-mobile-web-app-title" content="Gupzy">
 
 <!-- speed: open connections to the hosts we always need, before the scripts ask for them -->
+<script src="/gz-music.js" defer></script>
 <link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" crossorigin="anonymous">
 <link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" crossorigin="anonymous">
 <link rel="preload" as="script" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js" crossorigin="anonymous">
@@ -687,6 +688,10 @@
   .svs-row{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:14px;}
   .svs-row .st-av{width:34px;height:34px;border:none;font-size:14px;}
   #storyCreate{display:flex;flex-direction:column;}
+  #scMusRow{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  #scMusBtn{border:1px solid #fff5;background:#ffffff1a;color:#fff;border-radius:18px;padding:8px 14px;font-size:14px;font-weight:600;max-width:80%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #scMusX{border:0;background:none;color:#fff;font-size:18px;padding:4px 8px}
+  #svMus{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:6;background:#0009;color:#fff;padding:7px 14px;border-radius:18px;font-size:13px;max-width:86%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
   .sc-top{display:flex;align-items:center;justify-content:space-between;padding:calc(env(safe-area-inset-top,0px) + 8px) 8px 8px;font-weight:700;}
   .sc-preview{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:#111;}
   .sc-preview img,.sc-preview video{max-width:100%;max-height:100%;object-fit:contain;}
@@ -6278,6 +6283,7 @@ if('serviceWorker' in navigator){
       <button class="sv-btn" id="svClose" aria-label="Close"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div class="sv-cap" id="svCap"></div>
+    <div id="svMus" class="st-hide"></div>
     <div class="sv-foot st-hide" id="svFoot"><button id="svViews">👁 <span id="svViewCount">0</span> views</button></div>
   </div>
   <div id="svViewersSheet" class="st-hide"><div class="svs-box"><div style="font-weight:700;margin-bottom:6px;">Viewed by</div><div id="svViewersList"></div></div></div>
@@ -6288,6 +6294,7 @@ if('serviceWorker' in navigator){
     </div>
     <div class="sc-preview" id="scPreview"></div>
     <div class="sc-bottom">
+      <div id="scMusRow"><button type="button" id="scMusBtn">🎵 Add music</button><button type="button" id="scMusX" class="st-hide" aria-label="Remove music">✕</button></div>
       <input type="text" id="scCaption" maxlength="120" placeholder="Add a caption…">
       <div id="scCfRow"><label><input type="checkbox" id="scCf"> ⭐ Close Friends only</label><a id="scCfEdit">Edit list</a></div>
       <button class="primary-btn" id="scShare">Share to your story</button>
@@ -6429,6 +6436,7 @@ if('serviceWorker' in navigator){
   function closeViewer(fromBack){
     if(!V.open) return;
     V.open = false; cancelAnimationFrame(V.raf);
+    try{ if(window.GzMusic) GzMusic.stop(); $('svMus').classList.add('st-hide'); }catch(e){}
     try{ vid.pause(); vid.removeAttribute('src'); vid.load(); }catch(e){}
     img.removeAttribute('src');
     $('storyViewer').classList.add('st-hide');
@@ -6544,6 +6552,11 @@ if('serviceWorker' in navigator){
     try{ storyReplyBar(s, mine, g); }catch(e){}
     $('svBars').innerHTML = g.items.map((_, i)=> `<div class="sv-bar"><i style="width:${i < V.ii ? 100 : 0}%"></i></div>`).join('');
     $('svSpin').classList.remove('st-hide');
+    try{
+      const sm = $('svMus');
+      if(window.GzMusic && s.music && GzMusic.safe(s.music.url)){ GzMusic.play(s.music.url); sm.textContent = '\uD83C\uDFB5 ' + (s.music.title||'Music') + (s.music.artist ? ' \u00b7 ' + s.music.artist : '') + (s.music.license ? ' (' + s.music.license + ')' : ''); sm.classList.remove('st-hide'); }
+      else { if(window.GzMusic) GzMusic.stop(); sm.classList.add('st-hide'); }
+    }catch(e){}
 
     if(myUid && !seen[s.id] && !mine && !V.sent[s.id]){
       V.sent[s.id] = 1;
@@ -6564,7 +6577,7 @@ if('serviceWorker' in navigator){
       const ok = ()=>{ clearTimeout(fbTimer); if(!same()) return; V.ready = true; $('svSpin').classList.add('st-hide'); };
       const loadSrc = (u)=>{
         vid.src = u; try{ vid.load(); }catch(e){}
-        vid.muted = false;
+        vid.muted = !!(myItem.music && myItem.music.url);
         const p = vid.play();
         if(p && p.catch) p.catch(()=>{ vid.muted = true; vid.play().catch(()=>{}); });
       };
@@ -6621,6 +6634,7 @@ if('serviceWorker' in navigator){
   }
   function setPaused(p){
     V.paused = p;
+    try{ if(window.GzMusic) p ? GzMusic.pause() : GzMusic.resume(); }catch(e){}
     if(groups[V.gi] && groups[V.gi].items[V.ii] && groups[V.gi].items[V.ii].mediaType === 'video'){
       try{ p ? vid.pause() : vid.play().catch(()=>{}); }catch(e){}
     }
@@ -6752,16 +6766,46 @@ if('serviceWorker' in navigator){
       sb.onclick = (ev)=>{ ev.stopPropagation(); pv.muted = !pv.muted; if(pv.paused) pv.play().catch(()=>{}); sync(); };
       pv.onclick = ()=>{ pv.muted = !pv.muted; sync(); };
     }
+    draft.music = null; draft.musicFile = null; scMusRender();
     $('scCaption').value = ''; $('scMsg').textContent = 'Your story disappears after 24 hours';
     $('scProg').classList.add('st-hide'); $('scProgFill').style.width = '0%';
     $('scShare').disabled = false; $('scShare').textContent = 'Share to your story';
     $('storyCreate').classList.remove('st-hide');
     pushOverlay(closeCreateFromBack);
   }
+  function scMusRender(){
+    const m = draft && draft.music;
+    $('scMusBtn').textContent = m ? ('\uD83C\uDFB5 ' + m.title + (m.artist ? ' \u00b7 ' + m.artist : '')) : '\uD83C\uDFB5 Add music';
+    $('scMusX').classList.toggle('st-hide', !m);
+  }
+  function scMusPlay(){
+    try{
+      const pv = $('scPreview').querySelector('video'); if(pv) pv.muted = true;
+      const u = draft.musicFile ? URL.createObjectURL(draft.musicFile) : (draft.music && draft.music.url);
+      if(u && window.GzMusic) GzMusic.play(u);
+    }catch(e){}
+  }
+  /* music = copyright-free library (Creative Commons) or a song from the phone: see /gz-music.js */
+  $('scMusBtn').addEventListener('click', ()=>{
+    if(!draft) return;
+    if(!window.GzMusic){ toast('Music is loading, try again'); return; }
+    GzMusic.pick(tr=>{
+      if(!draft) return;
+      draft.music = { title:tr.title, artist:tr.artist, url:tr.url||null, cover:tr.cover||'', license:tr.license||'', link:tr.link||'' };
+      draft.musicFile = tr.file || null;
+      scMusRender(); scMusPlay();
+    });
+  });
+  $('scMusX').addEventListener('click', ()=>{
+    if(!draft) return; draft.music = null; draft.musicFile = null;
+    try{ GzMusic.stop(); const pv = $('scPreview').querySelector('video'); if(pv) pv.muted = false; }catch(e){}
+    scMusRender();
+  });
   function closeCreateFromBack(){ closeCreate(true); }
   function closeCreate(fromBack){
     if($('storyCreate').classList.contains('st-hide')) return;
     if(posting){ if(fromBack){ pushOverlay(closeCreateFromBack); } toast('Please wait, uploading…'); return; }
+    try{ if(window.GzMusic) GzMusic.stop(); }catch(e){}
     $('storyCreate').classList.add('st-hide'); $('scPreview').innerHTML = '';
     if(draft && draft.previewUrl) URL.revokeObjectURL(draft.previewUrl);
     draft = null;
@@ -6785,6 +6829,17 @@ if('serviceWorker' in navigator){
         upFile = pr.file; upExt = pr.ext;
         $('scMsg').textContent = 'Uploading…';
       }
+      let musicDoc = null;
+      if(draft.music){
+        let mu = draft.music.url;
+        if(draft.musicFile){
+          $('scMsg').textContent = 'Uploading music…';
+          const ext = ((draft.musicFile.name||'').split('.').pop() || 'mp3').toLowerCase().replace(/[^a-z0-9]/g,'') || 'mp3';
+          mu = await uploadToCloudinary(draft.musicFile, 'video', $('scProgFill'), `music_${currentUser.uid}_${Date.now()}.${ext}`);
+          $('scMsg').textContent = 'Uploading…';
+        }
+        musicDoc = { title:String(draft.music.title||'Music').slice(0,80), artist:String(draft.music.artist||'').slice(0,60), url:mu, cover:draft.music.cover||'', license:draft.music.license||'', link:draft.music.link||'' };
+      }
       const url = await uploadToCloudinary(upFile, draft.type, $('scProgFill'), `story_${currentUser.uid}_${Date.now()}.${upExt}`);
       const now = Date.now();
       await db.collection('stories').add({
@@ -6794,6 +6849,7 @@ if('serviceWorker' in navigator){
         mediaURL: url, mediaType: draft.type,
         caption: $('scCaption').value.trim().slice(0, 120),
         ...(cfList ? { cf: true, cfUids: cfList } : {}),
+        ...(musicDoc ? { music: musicDoc } : {}),
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         expiresAt: firebase.firestore.Timestamp.fromMillis(now + DAY)
       });

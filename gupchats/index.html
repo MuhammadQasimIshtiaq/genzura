@@ -265,24 +265,6 @@ hr{border:0;border-top:1px solid var(--border);margin:8px 0}
 #sc .musrow{display:flex;align-items:center;gap:8px}
 #sc .mbtn{border:1px solid #fff5;background:#ffffff1a;color:#fff;border-radius:18px;padding:8px 14px;font-size:14px;font-weight:600;max-width:78%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #sc .mx{border:0;background:none;color:#fff;font-size:18px;padding:4px 8px}
-#mus{z-index:80;background:#0b0b10}
-#mus .mh{display:flex;align-items:center;gap:10px;padding:calc(8px + env(safe-area-inset-top,0px)) 12px 6px;font-weight:700}
-#mus .mh button{border:0;background:none;color:#fff;font-size:20px;width:40px;height:40px}
-#mus .ms{display:flex;gap:8px;padding:6px 12px}
-#mus .ms input{flex:1;border:0;border-radius:20px;background:#ffffff22;color:#fff;padding:11px 16px;font-size:15px;outline:0}
-#mus .ms input::placeholder{color:#fff9}
-#mus .mchips{display:flex;gap:8px;flex-wrap:wrap;padding:4px 12px 8px}
-#mus .mchips span{background:#ffffff1f;border-radius:16px;padding:7px 13px;font-size:13px}
-#mus .mlist{flex:1;overflow:auto;padding:0 8px 16px}
-#mus .mr{display:flex;align-items:center;gap:12px;padding:8px 6px;border-radius:10px}
-#mus .mr img,#mus .mr .mc{width:46px;height:46px;border-radius:8px;background:#ffffff22;flex:none;object-fit:cover}
-#mus .mr .mt{flex:1;min-width:0}
-#mus .mr .mt b{display:block;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#mus .mr .mt i{display:block;font-style:normal;font-size:12.5px;color:#fffb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#mus .mr button{border:0;border-radius:16px;padding:8px 13px;font-weight:700;font-size:13px}
-#mus .mr .pl{background:#ffffff22;color:#fff}
-#mus .mr .use{background:var(--blue);color:#fff}
-#mus .mmsg{padding:18px;text-align:center;color:#fffb;font-size:14px}
 #svMus{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(70px + env(safe-area-inset-bottom,0px));z-index:5;background:#0009;color:#fff;padding:7px 14px;border-radius:18px;font-size:13px;max-width:86%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
 </style>
 <style id="pro-btn-polish">
@@ -418,8 +400,8 @@ html #boot img{position:relative;z-index:1;opacity:0;visibility:visible!importan
 <div id="emptyPane"><img src="/gupchats/gupchats-emblem.png" alt=""><h2>GupChats for desktop</h2><div>Select a chat to start messaging.</div><div style="font-size:13px;margin-top:18px">🔒 Your personal messages are end-to-end encrypted</div></div>
 
 <input type="file" id="fileIn" accept="image/*,video/*" class="hidden">
+<script src="/gz-music.js" defer></script>
 <input type="file" id="fileStory" accept="image/*,video/*" class="hidden">
-<input type="file" id="fileMusic" accept="audio/*" class="hidden">
 <div id="postPill" class="hidden"></div>
 
 <div id="sv" class="ovl hidden">
@@ -435,14 +417,6 @@ html #boot img{position:relative;z-index:1;opacity:0;visibility:visible!importan
   <div class="scbar"><div class="musrow"><button class="mbtn" id="scMusicBtn">🎵 Add music</button><button class="mx hidden" id="scMusicX" aria-label="Remove music">✕</button></div><textarea id="scCap" rows="1" maxlength="120" placeholder="Add a caption…"></textarea><div id="scMsg" style="font-size:13px;min-height:16px"></div><button class="btn" id="scShare" style="padding:13px;font-size:16px;border-radius:24px">Share to your story</button></div>
 </div>
 
-
-<div id="mus" class="ovl hidden">
-  <div class="mh"><button id="musX" aria-label="Close">✕</button><div>Music</div></div>
-  <div class="ms"><input id="musQ" type="search" placeholder="Search songs or artists…" autocomplete="off"><button class="btn" id="musGo" style="border-radius:20px">Search</button></div>
-  <div class="mchips" id="musChips"><span>Arijit Singh</span><span>Atif Aslam</span><span>Punjabi</span><span>Bollywood</span><span>Lo-fi</span><span>Hip hop</span><span>Nusrat Fateh Ali Khan</span><span>Naat</span></div>
-  <div style="padding:0 12px 8px"><button class="btn" id="musPhone" style="background:#ffffff22;box-shadow:none;border-radius:20px">📁 Pick a song from my phone</button></div>
-  <div class="mlist" id="musList"><div class="mmsg">Search any song, or tap a name above.</div></div>
-</div>
 
 <div id="iv" class="ovl hidden" style="z-index:75"></div>
 
@@ -1081,14 +1055,14 @@ function openStories(uid){
   $('sv').classList.remove('hidden'); svShow();
 }
 var SVA=new Audio(); SVA.preload='auto';
-function safeAudio(u,pending){ return typeof u==='string' && (/^https:\/\/(res\.cloudinary\.com|audio-ssl\.itunes\.apple\.com|[a-z0-9.-]+\.mzstatic\.com)\//.test(u) || (pending && /^blob:/.test(u))); }
+function safeAudio(u,pending){ return typeof u==='string' && (/^https:\/\//.test(u) || (pending && /^blob:/.test(u))); }
 function svMusic(s){
   var m=s.music, mb=$('svMus');
   try{ SVA.pause(); }catch(e){}
   if(m && safeAudio(m.url,s.pending)){
     SVA.src=m.url; try{ SVA.currentTime=0; }catch(e){} SVA.loop=true;
     var pp=SVA.play(); if(pp&&pp.catch) pp.catch(function(){});
-    mb.textContent='\uD83C\uDFB5 '+(m.title||'Music')+(m.artist?' \u00b7 '+m.artist:''); mb.classList.remove('hidden');
+    mb.textContent='\uD83C\uDFB5 '+(m.title||'Music')+(m.artist?' \u00b7 '+m.artist:'')+(m.license?' ('+m.license+')':''); mb.classList.remove('hidden');
   }else{ try{ SVA.removeAttribute('src'); }catch(e){} mb.classList.add('hidden'); }
 }
 function svStopMedia(){ try{ SVA.pause(); }catch(e){} SV.stop=true; cancelAnimationFrame(SV.raf); var v=$('svMedia').querySelector('video'); if(v){ try{ v.onended=null; v.onerror=null; v.pause(); v.removeAttribute('src'); v.load(); }catch(e){} } $('svMedia').innerHTML=''; }
@@ -1370,7 +1344,7 @@ $('scShare').onclick=function(){
 async function postStoryBg(job){
   var isV=job.type==='video';
   var pend={ id:'pending_'+Date.now(), uid:me.uid, channelName:me.name||'', channelLogo:me.logo||null, mediaURL:job.url, mediaType:job.type, caption:job.cap, createdAt:Date.now(), pending:true,
-             music: job.music ? { title:job.music.title, artist:job.music.artist, url: job.musicFile ? URL.createObjectURL(job.musicFile) : job.music.url } : null };
+             music: job.music ? { title:job.music.title, artist:job.music.artist, url: job.musicFile ? URL.createObjectURL(job.musicFile) : job.music.url, license:job.music.license||'' } : null };
   PEND.push(pend); (storyBy[me.uid]=storyBy[me.uid]||[]).push(pend); try{ renderStrip(); }catch(e){}
   var drop=function(){ PEND=PEND.filter(function(x){ return x!==pend; }); storyBy[me.uid]=(storyBy[me.uid]||[]).filter(function(x){ return x!==pend; }); try{ renderStrip(); }catch(e){} };
   postPill('Posting your story…');
@@ -1382,7 +1356,7 @@ async function postStoryBg(job){
     if(job.music){
       var mu=job.music.url;
       if(job.musicFile){ postPill('Posting your story… music'); var me2=(job.musicFile.name||'').split('.').pop().toLowerCase().replace(/[^a-z0-9]/g,'')||'mp3'; mu=await uploadCloud(job.musicFile,'video','music_'+me.uid+'_'+Date.now()+'.'+me2); }
-      musicDoc={ title:String(job.music.title||'Music').slice(0,80), artist:String(job.music.artist||'').slice(0,60), url:mu, cover:job.music.cover||'' };
+      musicDoc={ title:String(job.music.title||'Music').slice(0,80), artist:String(job.music.artist||'').slice(0,60), url:mu, cover:job.music.cover||'', license:job.music.license||'', link:job.music.link||'' };
     }
     var url=await uploadCloud(upFile,isV?'video':'image','story_'+me.uid+'_'+Date.now()+'.'+upExt,function(p){ postPill('Posting your story… '+Math.round(p*100)+'%'); });
     var doc={ uid:me.uid, channelName:me.name||'', channelLogo:me.logo||null, mediaURL:url, mediaType:job.type, caption:job.cap, createdAt:FV.serverTimestamp(), expiresAt:TS.fromMillis(Date.now()+86400000) };
@@ -1395,60 +1369,19 @@ async function postStoryBg(job){
 }
 
 /* ---------------- story music: search songs (30-second previews) or pick a song from the phone ---------------- */
-var MP=new Audio(), mpId=null;
-function stopMusicPrev(){ try{ MP.pause(); }catch(e){} mpId=null; }
+function stopMusicPrev(){ try{ GzMusic.stop(); }catch(e){} }
 function renderMusicBtn(){
   var m=SC.music, b=$('scMusicBtn'); if(!b) return;
-  b.textContent = m ? ('🎵 '+m.title+(m.artist?' · '+m.artist:'')) : '🎵 Add music';
+  b.textContent = m ? ('\uD83C\uDFB5 '+m.title+(m.artist?' \u00b7 '+m.artist:'')) : '\uD83C\uDFB5 Add music';
   $('scMusicX').classList.toggle('hidden',!m);
 }
-function itunesSearch(q){
-  return new Promise(function(res,rej){
-    var cb='__itm'+Date.now(), s=document.createElement('script'), done=false;
-    var clean=function(){ try{ delete window[cb]; }catch(e){ window[cb]=undefined; } if(s.parentNode) s.parentNode.removeChild(s); };
-    window[cb]=function(d){ done=true; clean(); res(d); };
-    s.onerror=function(){ clean(); rej(new Error('offline')); };
-    setTimeout(function(){ if(!done){ clean(); rej(new Error('timeout')); } },9000);
-    s.src='https://itunes.apple.com/search?term='+encodeURIComponent(q)+'&media=music&entity=song&limit=30&callback='+cb;
-    document.head.appendChild(s);
-  });
-}
-async function musicSearch(q){
-  q=(q||'').trim(); if(!q) return;
-  var L=$('musList'); L.innerHTML='<div class="mmsg">Searching…</div>';
-  try{
-    var d=await itunesSearch(q), r=(d&&d.results||[]).filter(function(x){ return x.previewUrl; });
-    if(!r.length){ L.innerHTML='<div class="mmsg">No songs found. Try another name.</div>'; return; }
-    L.innerHTML=r.map(function(x,k){ return '<div class="mr" data-k="'+k+'"><img src="'+esc(x.artworkUrl60||'')+'" alt=""><div class="mt"><b>'+esc(x.trackName||'')+'</b><i>'+esc(x.artistName||'')+'</i></div><button class="pl">▶</button><button class="use">Use</button></div>'; }).join('');
-    L.querySelectorAll('.mr').forEach(function(row){
-      var x=r[+row.getAttribute('data-k')];
-      row.querySelector('.pl').onclick=function(){
-        if(mpId===x.trackId && !MP.paused){ stopMusicPrev(); L.querySelectorAll('.pl').forEach(function(b){ b.textContent='▶'; }); return; }
-        L.querySelectorAll('.pl').forEach(function(b){ b.textContent='▶'; });
-        mpId=x.trackId; MP.src=x.previewUrl; MP.play().catch(function(){}); this.textContent='❚❚';
-      };
-      row.querySelector('.use').onclick=function(){
-        stopMusicPrev(); SC.music={ title:x.trackName||'Music', artist:x.artistName||'', url:x.previewUrl, cover:x.artworkUrl100||x.artworkUrl60||'' }; SC.musicFile=null;
-        renderMusicBtn(); $('mus').classList.add('hidden'); startComposerMusic();
-      };
-    });
-  }catch(e){ L.innerHTML='<div class="mmsg">Could not reach the music library ('+esc(e.message||'error')+'). Check your internet, or pick a song from your phone.</div>'; }
-}
-function startComposerMusic(){ try{ var sv=$('scVid'); if(SC.type==='video'){ sv.muted=true; } MP.src=SC.music.url||(SC.musicFile?URL.createObjectURL(SC.musicFile):''); MP.loop=true; MP.play().catch(function(){}); }catch(e){} }
-$('scMusicBtn').onclick=function(){ $('mus').classList.remove('hidden'); };
-$('scMusicX').onclick=function(){ SC.music=null; SC.musicFile=null; stopMusicPrev(); try{ if(SC.type==='video') $('scVid').muted=false; }catch(e){} renderMusicBtn(); };
-$('musX').onclick=function(){ stopMusicPrev(); $('mus').classList.add('hidden'); };
-$('musGo').onclick=function(){ musicSearch($('musQ').value); };
-$('musQ').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); musicSearch(this.value); this.blur(); } });
-$('musChips').addEventListener('click',function(e){ var s=e.target.closest('span'); if(!s) return; $('musQ').value=s.textContent; musicSearch(s.textContent); });
-$('musPhone').onclick=function(){ $('fileMusic').value=''; $('fileMusic').click(); };
-$('fileMusic').onchange=function(){
-  var f=this.files&&this.files[0]; if(!f) return;
-  if(f.size>15*1048576){ toast('Song is too big (max 15 MB)'); return; }
-  var nm=(f.name||'My song').replace(/\.[a-z0-9]+$/i,'');
-  SC.musicFile=f; SC.music={ title:nm.slice(0,60), artist:'From my phone', url:null, cover:'' };
-  stopMusicPrev(); renderMusicBtn(); $('mus').classList.add('hidden'); startComposerMusic();
+function startComposerMusic(){ try{ if(SC.type==='video') $('scVid').muted=true; var u=SC.musicFile?URL.createObjectURL(SC.musicFile):(SC.music&&SC.music.url); if(u) GzMusic.play(u); }catch(e){} }
+/* music = copyright-free library (Creative Commons) or a song from the phone: see /gz-music.js */
+$('scMusicBtn').onclick=function(){
+  if(!window.GzMusic){ toast('Music is loading, try again'); return; }
+  GzMusic.pick(function(tr){ SC.music={ title:tr.title, artist:tr.artist, url:tr.url||null, cover:tr.cover||'', license:tr.license||'', link:tr.link||'' }; SC.musicFile=tr.file||null; renderMusicBtn(); startComposerMusic(); });
 };
+$('scMusicX').onclick=function(){ SC.music=null; SC.musicFile=null; stopMusicPrev(); try{ if(SC.type==='video') $('scVid').muted=false; }catch(e){} renderMusicBtn(); };
 
 /* ---------------- chats list ---------------- */
 function peerOf(c){ if(c.isGroup) return {uid:c.id,name:c.name||'Group',logo:c.logo||null,group:true,members:c.members||[]}; var o=(c.members||[]).filter(function(x){ return x!==me.uid; })[0]; var i=(c.info&&c.info[o])||chInfo.get(o)||{}; return {uid:o,name:i.name||'User',logo:i.logo||null}; }
