@@ -472,6 +472,8 @@ html #boot img{position:relative;z-index:1;opacity:0;visibility:visible!importan
 var CFG = {"apiKey": "AIzaSyATkLM81knrj_enQUsg1L9XRXt9_jdvL0w", "authDomain": (function(h){ return (h==='gupzy.com'||h==='www.gupzy.com'||h==='genzura.netlify.app'||h==='genzura.muhammadqasimishtiaq0604.workers.dev') ? h : 'arain-tube-672a1.firebaseapp.com'; })(location.hostname), "projectId": "arain-tube-672a1", "storageBucket": "arain-tube-672a1.firebasestorage.app", "messagingSenderId": "649325973427", "appId": "1:649325973427:web:8021eab6a361352f7ec5c6"};
 firebase.initializeApp(CFG);
 var auth = firebase.auth(), db = firebase.firestore(), FV = firebase.firestore.FieldValue, TS = firebase.firestore.Timestamp;
+try{ db.settings({experimentalAutoDetectLongPolling:true, merge:true}); }catch(e){}
+try{ db.enablePersistence({ synchronizeTabs:true }).catch(function(){}); }catch(e){}   /* chats come from the phone's own copy first (like WhatsApp), then update from the server */
 var $ = function(id){ return document.getElementById(id); };
 var te = new TextEncoder(), td = new TextDecoder();
 /* same backend + media host as Gupzy */
@@ -780,6 +782,10 @@ async function peerPub(uid){
 /* every public key the peer ever published (a sender key must be one of them) */
 async function knownPubs(uid, fresh){
   if(fresh) ppCache.delete(uid);
+  else{
+    var saved=(await idbGet('p_'+uid))||[];
+    if(saved.length){ if(!ppCache.has(uid)) peerPub(uid).then(function(p){ if(p && saved.indexOf(p)<0) idbGet('p_'+uid).then(function(l){ l=l||[]; if(l.indexOf(p)<0) idbSet('p_'+uid,l.concat([p])); }); }).catch(function(){}); return { cur:saved[saved.length-1], list:saved }; }   /* instant: keys we already know (refreshed quietly in the background) */
+  }
   var cur=await peerPub(uid), list=(await idbGet('p_'+uid))||[];
   if(cur && list.indexOf(cur)<0){ list=list.concat([cur]); await idbSet('p_'+uid,list); }
   return { cur:cur, list:list };
@@ -955,7 +961,7 @@ async function signOut(){
   try{ if(myTok && me) await db.collection('fcmTokens').doc(myTok).delete(); }catch(e){}
   try{ await beat(false); }catch(e){}
   stopPresence();
-  if(unsubChats){ unsubChats(); unsubChats=null; } closeChat(); auth.signOut();
+  if(unsubChats){ unsubChats(); unsubChats=null; } closeChat(); msgCacheWipe(); auth.signOut();
 }
 $('ncOut').onclick = signOut;
 
@@ -1501,8 +1507,17 @@ function renderPicker(){
 $('composeBtn').onclick=openPicker; $('pkBack').onclick=function(){ $('picker').classList.add('hidden'); }; $('pkQ').addEventListener('input',renderPicker);
 
 /* ---------------- chat screen ---------------- */
+/* instant chat open: last messages are kept on the phone and painted at once, the server then refreshes them */
+function msgCacheKey(id){ return 'gcmsgs_'+(me&&me.uid)+'_'+id; }
+function msgCacheSave(id,out){
+  try{ var keep=out.filter(function(m){ return m && m.kind!=='lock'; }).slice(-40); localStorage.setItem(msgCacheKey(id), JSON.stringify(keep)); }catch(e){}
+}
+function msgCacheLoad(id){ try{ var s=localStorage.getItem(msgCacheKey(id)); return s?JSON.parse(s):null; }catch(e){ return null; } }
+function msgCacheWipe(){ try{ Object.keys(localStorage).forEach(function(k){ if(k.indexOf('gcmsgs_')===0) localStorage.removeItem(k); }); }catch(e){} }
 async function openChat(peerUid){
-  var c; try{ c=await getCh(peerUid); }catch(e){ c={name:'User',logo:null,handle:''}; }
+  var c=chInfo.get(peerUid);
+  if(!c || !c.name){ var ci=null; Object.keys(chats).forEach(function(k){ var x=chats[k]; if(!x.isGroup && (x.members||[]).indexOf(peerUid)>=0 && x.info && x.info[peerUid]) ci=x.info[peerUid]; }); if(ci) c={name:ci.name||'User',logo:ci.logo||null,handle:''}; }
+  if(!c || !c.name){ c={name:'…',logo:null,handle:''}; getCh(peerUid).then(function(v){ if(cur && cur.peer && cur.peer.uid===peerUid){ cur.peer.name=v.name; cur.peer.logo=v.logo; try{ $('cName').textContent=v.name; updateHeaderSub(); }catch(e){} } }).catch(function(){}); }
   cur={ id:dmId(me.uid,peerUid), peer:{uid:peerUid,name:c.name,logo:c.logo}, canSend:false };
   markActive(); $('chat').classList.remove('hidden');   /* show the chat first so a small UI error can never block it */
   try{ $('cCallV').classList.remove('hidden'); $('cCallVid').classList.remove('hidden'); $('cName').parentNode.onclick=null; $('cName').parentNode.style.cursor=''; }catch(e){ console.warn(e); }
@@ -1511,6 +1526,7 @@ async function openChat(peerUid){
   try{ recCancel(true); updateSend(); }catch(e){ console.warn(e); }
   if(unsubMsgs) unsubMsgs();
   var tok=++msgTok;
+  try{ var _cm=msgCacheLoad(cur.id); if(_cm && _cm.length) paintOut(_cm,tok,cur.peer,true); }catch(e){}
   unsubMsgs=db.collection('chats').doc(cur.id).collection('messages').orderBy('createdAt','asc').limitToLast(150).onSnapshot(function(snap){
     renderMsgs(snap, tok);
   }, function(e){ if(tok===msgTok) toast('Messages error: '+e.message); });
@@ -1580,6 +1596,11 @@ async function renderMsgs(snap, tok){
   var docs=snap.docs.map(function(d){ var x=d.data({serverTimestamps:'estimate'}); x.id=d.id; return x; }).filter(function(x){ return !goneMsg(chatId,x); });
   var out=(await Promise.all(docs.map(function(x){ return parseMsg(x, peer.uid, chatId).catch(function(){ return { mine:x.from===me.uid, at:ms(x.createdAt), kind:'lock' }; }); }))).filter(Boolean);
   if(tok!==msgTok || !cur) return;
+  if(!cur.group) msgCacheSave(chatId,out);
+  paintOut(out,tok,peer,false);
+}
+function paintOut(out,tok,peer,fromCache){
+  if(tok!==msgTok || !cur) return;
   var html='', lastDay='', box=$('msgs'), toLoad=[];
   var atBottom = box.scrollHeight-box.scrollTop-box.clientHeight < 120;
   out.forEach(function(m){
@@ -1593,6 +1614,7 @@ async function renderMsgs(snap, tok){
     if(m.media){ mediaSpec.set(m.media.u,m.media); MSGTXT[m.id]={t:(m.media.kind==='img'?'📷 Photo':m.media.kind==='vid'?'🎥 Video':'🎤 Voice message'),n:m.mine?'You':(m.sn||peer.name||''),mine:m.mine,rx:m.rx}; html+='<div class="b '+side+' media" data-mid="'+esc(m.id)+'">'+sn+mediaInner(m.media)+rxHtml(m)+'</div>'; if(m.media.enc && !mediaUrls.has(m.media.u)) toLoad.push(m.media); return; }
     MSGTXT[m.id]={t:m.text,n:m.mine?'You':(m.sn||peer.name||''),mine:m.mine,rx:m.rx}; html+='<div class="b '+side+'" data-mid="'+esc(m.id)+'">'+sn+(m.q?'<div class="rq">'+esc(m.q)+'</div>':'')+esc(m.text)+rxHtml(m)+'</div>';
   });
+  if(fromCache && !html) return;
   box.innerHTML = html || '<div class="empty">'+(cur.group?'Say hi to the group 👋':'Say hi to '+esc(peer.name)+' 👋')+'</div>';
   bindBig(box); fillPostThumbs();
   if(atBottom || out.length<=30) box.scrollTop=box.scrollHeight;
@@ -1607,7 +1629,7 @@ async function renderMsgs(snap, tok){
       $('msgs').querySelectorAll('[data-mu]').forEach(function(el){ if(el.getAttribute('data-mu')===x.u) el.textContent='⚠️ Couldn’t load'; });
     });
   });
-  markRead();
+  if(!fromCache) markRead();
 }
 
 /* ---------------- sending (writes the SAME documents Gupzy writes: chats/{id}/messages) ---------------- */
