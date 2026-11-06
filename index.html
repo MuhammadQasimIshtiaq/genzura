@@ -6356,6 +6356,16 @@ if('serviceWorker' in navigator){
     (list || []).forEach(s=>{ followed[s.channelId] = { name: s.channelName, logo: s.channelLogo }; });
     loadStories(true);
   }
+  /* the story you are posting shows in your row at once (with a small "posting" look) until the upload is finished */
+  let pendStory = null;
+  function applyPending(){
+    groups.forEach(g=>{ g.items = g.items.filter(s=> !s.pending); });
+    groups = groups.filter(g=> g.items.length);
+    if(!pendStory || !currentUser) return;
+    let g = groups.find(x=> x.uid === currentUser.uid);
+    if(!g){ g = { uid: currentUser.uid, name: pendStory.channelName, logo: pendStory.channelLogo, items: [] }; groups.unshift(g); }
+    g.items.push(pendStory);
+  }
   async function loadStories(force){
     if(!currentUser){ groups = []; renderTray(); return; }
     if(!force && Date.now() - lastLoad < 60000) return;
@@ -6382,6 +6392,7 @@ if('serviceWorker' in navigator){
         if(ua !== ub) return ua ? -1 : 1;
         return ms(b.items[b.items.length-1].createdAt) - ms(a.items[a.items.length-1].createdAt);
       });
+      applyPending();
       renderTray();
     }catch(e){ console.error('stories load', e); }
   }
@@ -6547,15 +6558,15 @@ if('serviceWorker' in navigator){
     $('svName').textContent = (mine ? 'Your story' : g.name) + (s.cf ? ' ⭐' : '');
     $('svTime').textContent = ago(ms(s.createdAt) || Date.now());
     $('svCap').textContent = s.caption || '';
-    $('svDel').classList.toggle('st-hide', !mine);
+    $('svDel').classList.toggle('st-hide', !mine || !!s.pending);
     $('svRep').classList.toggle('st-hide', mine);
-    $('svFoot').classList.toggle('st-hide', !mine);
+    $('svFoot').classList.toggle('st-hide', !mine || !!s.pending);
     try{ storyReplyBar(s, mine, g); }catch(e){}
     $('svBars').innerHTML = g.items.map((_, i)=> `<div class="sv-bar"><i style="width:${i < V.ii ? 100 : 0}%"></i></div>`).join('');
     $('svSpin').classList.remove('st-hide');
     try{
       const sm = $('svMus');
-      if(window.GzMusic && s.music && GzMusic.safe(s.music.url)){ GzMusic.play(s.music.url); sm.textContent = '\uD83C\uDFB5 ' + (s.music.title||'Music') + (s.music.artist ? ' \u00b7 ' + s.music.artist : '') + (s.music.license ? ' (' + s.music.license + ')' : ''); sm.classList.remove('st-hide'); }
+      if(window.GzMusic && s.music && GzMusic.safe(s.music.url, s.pending)){ GzMusic.play(s.music.url); sm.textContent = '\uD83C\uDFB5 ' + (s.music.title||'Music') + (s.music.artist ? ' \u00b7 ' + s.music.artist : '') + (s.music.license ? ' (' + s.music.license + ')' : ''); sm.classList.remove('st-hide'); }
       else { if(window.GzMusic) GzMusic.stop(); sm.classList.add('st-hide'); }
     }catch(e){}
 
@@ -6602,7 +6613,7 @@ if('serviceWorker' in navigator){
       img.onerror = ()=>{ toast('Could not load this story'); next(); };
       img.src = imgUrl(s.mediaURL);
     }
-    if(mine) loadViewCount(s);
+    if(mine && !s.pending) loadViewCount(s);
     V.raf = requestAnimationFrame(tick);
   }
 
@@ -6836,6 +6847,11 @@ if('serviceWorker' in navigator){
     bgPosting = true; postStoryBg(job);
   });
   async function postStoryBg(job){
+    const pendUrl = URL.createObjectURL(job.file);
+    pendStory = { id:'pending_' + Date.now(), uid:currentUser.uid, channelName:(currentChannel && currentChannel.name) || '', channelLogo:(currentChannel && currentChannel.logoURL) || null,
+      mediaURL:pendUrl, mediaType:job.type, caption:job.cap, createdAt:Date.now(), pending:true,
+      music: job.music ? { title:job.music.title, artist:job.music.artist, license:job.music.license||'', url: job.musicFile ? URL.createObjectURL(job.musicFile) : job.music.url } : null };
+    applyPending(); renderTray();
     postPill('Posting your story…');
     const bar = { style:{ set width(v){ postPill('Posting your story… ' + parseInt(v, 10) + '%'); } } };
     try{
@@ -6870,10 +6886,13 @@ if('serviceWorker' in navigator){
       try{ db.collection('storyArchive').add({uid:currentUser.uid,mediaURL:url,mediaType:job.type,caption:job.cap,createdAt:firebase.firestore.FieldValue.serverTimestamp()}); }catch(e){}
       if(job.type==='video' && url.indexOf('/video/upload/')>-1){ try{ const wv = document.createElement('video'); wv.preload = 'metadata'; wv.src = vidUrl(url); setTimeout(()=>{ try{ wv.removeAttribute('src'); wv.load(); }catch(e){} }, 25000); }catch(e){} }   /* prepares the playable copy so the first viewer does not wait */
       postPill(''); toast('Story shared ✓');
+      pendStory = null; applyPending();
       loadStories(true);
     }catch(err){
       postPill(''); toast('Story failed: ' + (err && err.message || err));
+      pendStory = null; applyPending(); renderTray();
     }
+    try{ URL.revokeObjectURL(pendUrl); }catch(e){}
     bgPosting = false;
   }
 
@@ -7752,11 +7771,24 @@ function armFeedLoop(){
   feedLoopIO.observe(last);
 }
 let vo;
+/* ONE sound setting for the whole feed: turn the sound on for one post and every post (also the ones you scroll to later) plays with sound;
+   turn it off and all are muted again. (Before, each post had to be unmuted by hand.) */
+window.__igSound=false;
+function igSyncBtn(v){ const b=v.parentNode&&v.parentNode.querySelector('[data-snd]'); if(b) b.innerHTML=v.muted?ICO.mute:ICO.snd; }
+function igSetSound(on){
+  window.__igSound=!!on;
+  document.querySelectorAll('#homeFeed video').forEach(v=>{ v.muted=!on; igSyncBtn(v); });
+}
+function igPlay(v){
+  if(window.__igSound && v.muted){ v.muted=false; igSyncBtn(v); }
+  const pr=v.play();
+  if(pr&&pr.catch)pr.catch(()=>{ if(!v.muted){ v.muted=true; igSyncBtn(v); v.play().catch(()=>{}); } });   /* browser refused sound without a tap: play muted */
+}
 function observeVideos(){
   if(vo)vo.disconnect();
   vo=new IntersectionObserver(es=>es.forEach(e=>{
     const v=e.target;
-    if(e.isIntersecting&&$('homeView').classList.contains('active')&&e.intersectionRatio>.6)v.play().catch(()=>{});else v.pause();
+    if(e.isIntersecting&&$('homeView').classList.contains('active')&&e.intersectionRatio>.6)igPlay(v);else v.pause();
   }),{threshold:[0,.6]});
   document.querySelectorAll('#homeFeed video').forEach(v=>vo.observe(v));
 }
@@ -7799,7 +7831,7 @@ const feedClick=e=>{
   if(t.closest('[data-prep]'))return window.gzReport({type:'post',id:p.id,uid:p.uid,name:p.channelName,title:p.caption||('['+'post] '+(p.channelName||'')),thumb:(p.media&&p.media[0]&&p.media[0].type!=='video')?p.media[0].url:(p.thumbURL||'')});
   if(t.closest('[data-menu]'))return openMenu(p);
   const sb=t.closest('[data-snd]');
-  if(sb){const v=sb.parentNode.querySelector('video');v.muted=!v.muted;sb.innerHTML=v.muted?ICO.mute:ICO.snd;return;}
+  if(sb){const v=sb.parentNode.querySelector('video');igSetSound(v.muted);return;}
   const media=t.closest('.ig-media');
   if(media){const now=Date.now();if(now-(lastTap[p.id]||0)<320){likePost(p,art,true);const h=media.querySelector('.ig-heart-pop');h.classList.remove('go');void h.offsetWidth;h.classList.add('go');}
     lastTap[p.id]=now;}
