@@ -1068,7 +1068,7 @@ function svMusic(s){
 function svStopMedia(){ try{ SVA.pause(); }catch(e){} SV.stop=true; cancelAnimationFrame(SV.raf); var v=$('svMedia').querySelector('video'); if(v){ try{ v.onended=null; v.onerror=null; v.pause(); v.removeAttribute('src'); v.load(); }catch(e){} } $('svMedia').innerHTML=''; }
 function svShow(){
   var s=SV.items[SV.i]; if(!s) return svClose();
-  svStopMedia(); SV.stop=false; SV.t0=0; SV.paused=false;
+  svStopMedia(); SV.stop=false; SV.t0=0; SV.paused=false; SV.pmax=0;
   var mine=s.uid===me.uid;
   $('svAv').innerHTML=av(s.channelLogo,s.channelName,'sm');
   $('svName').textContent=(mine?'Your story':(s.channelName||'User'))+(s.cf?' \u2B50':'');
@@ -1105,8 +1105,9 @@ function svTick(ts){
   if(SV.paused){ if(SV.t0) SV.t0+=ts-(SV.last||ts); SV.last=ts; SV.raf=requestAnimationFrame(svTick); return; }
   SV.last=ts;
   var v=$('svMedia').querySelector('video'), p;
-  if(v){ p = v.duration ? v.currentTime/v.duration : 0; }
+  if(v){ p = (v.duration && isFinite(v.duration)) ? v.currentTime/v.duration : (SV.pmax||0); }
   else { if(!SV.t0) SV.t0=ts; p=(ts-SV.t0)/5000; }
+  p=Math.max(p,SV.pmax||0); SV.pmax=p;   /* the line only ever moves forward */
   var bar=$('svBars').children[SV.i]; if(bar&&bar.firstChild) bar.firstChild.style.width=Math.min(100,p*100)+'%';
   if(p>=1) return svNext();
   SV.raf=requestAnimationFrame(svTick);
@@ -1266,6 +1267,7 @@ function vcTarget(info, prof){
 async function smartCompressVideo(file, kind, onProgress){
   const prof = vcProfiles()[kind] || vcProfiles().upload;
   const out = { file, ext:'mp4', compressed:false };
+  if(kind==='short' && file.size <= 20*1048576) return out;   /* small clip: upload the original - re-encoding on the phone made story videos choppy and slow */
   const must = (kind === 'upload' && file.size > MAX_VIDEO_UPLOAD_BYTES);   /* over the upload limit: compression is required */
   const supported = (typeof MediaRecorder !== 'undefined') && !!HTMLCanvasElement.prototype.captureStream;
   if(!supported){ if(must) throw new Error('This browser cannot compress video'); return out; }
@@ -1363,6 +1365,7 @@ async function postStoryBg(job){
     if(musicDoc) doc.music=musicDoc;
     await db.collection('stories').add(doc);
     try{ var ar={ uid:me.uid, mediaURL:url, mediaType:job.type, caption:job.cap, createdAt:FV.serverTimestamp() }; if(musicDoc) ar.music=musicDoc; db.collection('storyArchive').add(ar); }catch(e){}
+    if(isV && url.indexOf('/video/upload/')>-1){ try{ var wv=document.createElement('video'); wv.preload='metadata'; wv.src=url.replace('/video/upload/','/video/upload/f_mp4,vc_h264,q_auto,w_720/'); setTimeout(function(){ try{ wv.removeAttribute('src'); wv.load(); }catch(e){} },25000); }catch(e){} }   /* prepares the playable copy so the first viewer does not wait */
     drop(); postPill(''); toast('Story shared ✓'); loadStories();
     try{ URL.revokeObjectURL(job.url); }catch(e){}
   }catch(e){ drop(); postPill(''); toast('Story failed: '+((e&&e.message)||e)); }

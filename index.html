@@ -5101,6 +5101,7 @@ function vcTarget(info, prof){
 async function smartCompressVideo(file, kind, onProgress){
   const prof = vcProfiles()[kind] || vcProfiles().upload;
   const out = { file, ext:'mp4', compressed:false };
+  if(kind==='short' && file.size <= 20*1048576) return out;   /* small clip: upload the original - re-encoding on the phone made story videos choppy and slow */
   const must = (kind === 'upload' && file.size > MAX_VIDEO_UPLOAD_BYTES);   /* over the upload limit: compression is required */
   const supported = (typeof MediaRecorder !== 'undefined') && !!HTMLCanvasElement.prototype.captureStream;
   if(!supported){ if(must) throw new Error('This browser cannot compress video'); return out; }
@@ -6538,7 +6539,7 @@ if('serviceWorker' in navigator){
     const g = groups[V.gi]; if(!g) return closeViewer();
     const s = g.items[V.ii]; if(!s) return next();
     cancelAnimationFrame(V.raf);
-    V.ready = false; V.paused = false; V.elapsed = 0; V.last = 0;
+    V.ready = false; V.paused = false; V.elapsed = 0; V.last = 0; V.pmax = 0;
     const myUid = currentUser && currentUser.uid;
     const mine = !!myUid && s.uid === myUid;
 
@@ -6612,8 +6613,9 @@ if('serviceWorker' in navigator){
       const bar = $('svBars').children[V.ii] && $('svBars').children[V.ii].firstElementChild;
       if(V.ready && !V.paused){
         let p;
-        if(s.mediaType === 'video' && vid.duration && isFinite(vid.duration)){ p = vid.currentTime / vid.duration; }
+        if(s.mediaType === 'video'){ p = (vid.duration && isFinite(vid.duration)) ? vid.currentTime / vid.duration : (V.pmax || 0); }
         else { if(V.last) V.elapsed += ts - V.last; p = V.elapsed / IMG_MS; }
+        p = Math.max(p, V.pmax || 0); V.pmax = p;   /* the line only ever moves forward */
         if(bar) bar.style.width = Math.min(100, p * 100) + '%';
         if(s.mediaType !== 'video' && p >= 1){ V.last = 0; return next(); }
       }
@@ -6812,57 +6814,68 @@ if('serviceWorker' in navigator){
     if(!fromBack) popOverlay(closeCreateFromBack);
   }
   $('scClose').addEventListener('click', ()=> closeCreate());
+  let bgPosting = false;
+  function postPill(txt){
+    let p = $('gzPostPill');
+    if(!p){ p = document.createElement('div'); p.id = 'gzPostPill'; p.style.cssText = 'position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:99999;background:#111c;color:#fff;padding:8px 16px;border-radius:20px;font-size:13px;font-weight:600;max-width:90%;text-align:center'; document.body.appendChild(p); }
+    if(!txt){ p.style.display = 'none'; return; }
+    p.textContent = txt; p.style.display = 'block';
+  }
+  /* Share closes the screen at once; compressing + uploading continues in the background with a small progress pill on top */
   $('scShare').addEventListener('click', async ()=>{
+    if(bgPosting){ toast('Your last story is still posting…'); return; }
     if(!draft || posting) return;
-    posting = true; $('scShare').disabled = true; $('scShare').textContent = 'Uploading…';
-    $('scProg').classList.remove('st-hide');
+    posting = true; $('scShare').disabled = true;
     let cfList = null;
     if($('scCf').checked){
       try{ const d = await db.collection('closeFriends').doc(currentUser.uid).get(); cfList = (d.exists && d.data().uids) || []; }catch(e){ cfList = []; }
-      if(!cfList.length){ posting = false; $('scShare').disabled = false; $('scShare').textContent = 'Share'; $('scProg').classList.add('st-hide'); toast('Create your Close Friends list first (Edit list)'); return; }
+      if(!cfList.length){ posting = false; $('scShare').disabled = false; toast('Create your Close Friends list first (Edit list)'); return; }
     }
+    const job = { type:draft.type, file:draft.file, music:draft.music, musicFile:draft.musicFile, cap:$('scCaption').value.trim().slice(0, 120), cfList };
+    posting = false; closeCreate();
+    bgPosting = true; postStoryBg(job);
+  });
+  async function postStoryBg(job){
+    postPill('Posting your story…');
+    const bar = { style:{ set width(v){ postPill('Posting your story… ' + parseInt(v, 10) + '%'); } } };
     try{
-      let upFile = draft.file, upExt = (draft.type==='video' ? 'mp4' : 'jpg');
-      if(draft.type==='video'){
-        $('scMsg').textContent = 'Compressing video… 0%';
-        const pr = await smartCompressVideo(draft.file, 'short', pct=>{ $('scMsg').textContent = 'Compressing video… ' + pct + '%'; });
+      let upFile = job.file, upExt = (job.type==='video' ? 'mp4' : 'jpg');
+      if(job.type==='video'){
+        const pr = await smartCompressVideo(job.file, 'short', pct=>{ postPill('Posting your story… compressing ' + pct + '%'); });
         upFile = pr.file; upExt = pr.ext;
-        $('scMsg').textContent = 'Uploading…';
       }
       let musicDoc = null;
-      if(draft.music){
-        let mu = draft.music.url;
-        if(draft.musicFile){
-          $('scMsg').textContent = 'Uploading music…';
-          const ext = ((draft.musicFile.name||'').split('.').pop() || 'mp3').toLowerCase().replace(/[^a-z0-9]/g,'') || 'mp3';
-          mu = await uploadToCloudinary(draft.musicFile, 'video', $('scProgFill'), `music_${currentUser.uid}_${Date.now()}.${ext}`);
-          $('scMsg').textContent = 'Uploading…';
+      if(job.music){
+        let mu = job.music.url;
+        if(job.musicFile){
+          postPill('Posting your story… music');
+          const ext = ((job.musicFile.name||'').split('.').pop() || 'mp3').toLowerCase().replace(/[^a-z0-9]/g,'') || 'mp3';
+          mu = await uploadToCloudinary(job.musicFile, 'video', bar, `music_${currentUser.uid}_${Date.now()}.${ext}`);
         }
-        musicDoc = { title:String(draft.music.title||'Music').slice(0,80), artist:String(draft.music.artist||'').slice(0,60), url:mu, cover:draft.music.cover||'', license:draft.music.license||'', link:draft.music.link||'' };
+        musicDoc = { title:String(job.music.title||'Music').slice(0,80), artist:String(job.music.artist||'').slice(0,60), url:mu, cover:job.music.cover||'', license:job.music.license||'', link:job.music.link||'' };
       }
-      const url = await uploadToCloudinary(upFile, draft.type, $('scProgFill'), `story_${currentUser.uid}_${Date.now()}.${upExt}`);
+      const url = await uploadToCloudinary(upFile, job.type, bar, `story_${currentUser.uid}_${Date.now()}.${upExt}`);
       const now = Date.now();
       await db.collection('stories').add({
         uid: currentUser.uid,
         channelName: currentChannel.name || '',
         channelLogo: currentChannel.logoURL || null,
-        mediaURL: url, mediaType: draft.type,
-        caption: $('scCaption').value.trim().slice(0, 120),
-        ...(cfList ? { cf: true, cfUids: cfList } : {}),
+        mediaURL: url, mediaType: job.type,
+        caption: job.cap,
+        ...(job.cfList ? { cf: true, cfUids: job.cfList } : {}),
         ...(musicDoc ? { music: musicDoc } : {}),
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         expiresAt: firebase.firestore.Timestamp.fromMillis(now + DAY)
       });
-      try{ db.collection('storyArchive').add({uid:currentUser.uid,mediaURL:url,mediaType:draft.type,caption:$('scCaption').value.trim().slice(0,120),createdAt:firebase.firestore.FieldValue.serverTimestamp()}); }catch(e){}
-      posting = false; closeCreate();
-      toast('Story shared ✓');
+      try{ db.collection('storyArchive').add({uid:currentUser.uid,mediaURL:url,mediaType:job.type,caption:job.cap,createdAt:firebase.firestore.FieldValue.serverTimestamp()}); }catch(e){}
+      if(job.type==='video' && url.indexOf('/video/upload/')>-1){ try{ const wv = document.createElement('video'); wv.preload = 'metadata'; wv.src = vidUrl(url); setTimeout(()=>{ try{ wv.removeAttribute('src'); wv.load(); }catch(e){} }, 25000); }catch(e){} }   /* prepares the playable copy so the first viewer does not wait */
+      postPill(''); toast('Story shared ✓');
       loadStories(true);
     }catch(err){
-      posting = false;
-      $('scShare').disabled = false; $('scShare').textContent = 'Try again';
-      $('scMsg').textContent = 'Failed: ' + err.message;
+      postPill(''); toast('Story failed: ' + (err && err.message || err));
     }
-  });
+    bgPosting = false;
+  }
 
   /* ---------------- wiring ---------------- */
   $('sheetStory').addEventListener('click', ()=>{
