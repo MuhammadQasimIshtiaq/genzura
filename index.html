@@ -481,6 +481,8 @@
   #goLiveChatWrap{bottom:96px;}
   .live-chat-messages{flex:1;overflow-y:auto;padding:6px 70px 6px 12px;display:flex;flex-direction:column;gap:5px;pointer-events:auto;}
   .live-chat-msg{background:rgba(0,0,0,.45);color:#fff;font-size:12.5px;padding:5px 10px;border-radius:14px;align-self:flex-start;word-break:break-word;max-width:100%;}
+  .gz-rep{display:inline-block;margin-left:8px;padding:3px 10px;border:1.5px solid #e5484d;border-radius:14px;font-size:12.5px;font-weight:700;line-height:1.3;color:#e5484d;background:rgba(229,72,77,.10);cursor:pointer;vertical-align:middle;}
+  .gz-rep-live{color:#fff;background:rgba(229,72,77,.75);border-color:#ff6b70;font-size:12px;}
   .live-chat-msg b{color:#5ec2ff;margin-right:4px;font-weight:700;}
   .live-chat-input-row{display:flex;gap:8px;padding:8px 12px calc(8px + env(safe-area-inset-bottom,0px));pointer-events:auto;}
   .live-chat-input-row input{flex:1;min-width:0;background:rgba(255,255,255,.18);border:none;border-radius:20px;padding:9px 14px;color:#fff;font-size:13px;}
@@ -4567,8 +4569,7 @@ function listenLiveChat(channelId, messagesElId){
           /* viewers can report a live-chat comment (not their own) */
           if(messagesElId==='liveViewChatMessages' && m.authorId && !(currentUser && m.authorId===currentUser.uid)){
             const rb = document.createElement('span');
-            rb.textContent = '🚩'; rb.title = 'Report comment';
-            rb.style.cssText = 'margin-left:8px;opacity:.75;cursor:pointer;font-size:12px;';
+            rb.textContent = '🚩 Report'; rb.title = 'Report comment'; rb.className = 'gz-rep gz-rep-live';
             rb.addEventListener('click', ()=>{
               window.gzReport({type:'livemsg', id:channelId+'.'+change.doc.id, uid:m.authorId, name:m.authorName||'User', title:'[Live chat] '+(m.authorName||'User'), text:m.text||''});
             });
@@ -5432,7 +5433,7 @@ function renderComments(comments){
     c.insertAdjacentHTML('beforeend', `
       <div class="comment-item">
         <div class="avatar" style="background:${colorFor(cm.authorName)}">${cm.authorLogo ? `<img src="${cm.authorLogo}">` : initials(cm.authorName)}</div>
-        <div><div class="c-name">${gzEsc(cm.authorName)}${cm.creatorHeart ? ' <span title="Loved by creator">❤️</span>' : ''}</div><div class="c-text">${gzEsc(cm.text)}</div><div class="c-meta">${timeAgo(cm.createdAt)}${(currentUser && cm.authorId!==currentUser.uid) ? ' · <a data-vcrep="'+gzEsc(cm.id)+'" style="color:#e5484d;cursor:pointer">Report</a>' : ''}</div></div>
+        <div><div class="c-name">${gzEsc(cm.authorName)}${cm.creatorHeart ? ' <span title="Loved by creator">❤️</span>' : ''}</div><div class="c-text">${gzEsc(cm.text)}</div><div class="c-meta">${timeAgo(cm.createdAt)}${(currentUser && cm.authorId!==currentUser.uid) ? ' <a class="gz-rep" data-vcrep="'+gzEsc(cm.id)+'">🚩 Report</a>' : ''}</div></div>
       </div>`);
     applyChannelBadgeToAvatar(cm.authorId, c.lastElementChild.querySelector('.avatar'));
   });
@@ -7784,7 +7785,7 @@ function openComments(p){
 function cHTML(c,isReply){
   const likes=c.likes||[],liked=currentUser&&likes.includes(currentUser.uid),n=likes.length;
   const can=currentUser&&(c.authorId===currentUser.uid||(cp&&cp.uid===currentUser.uid));
-  return `<div class="ig-c" data-id="${c.id}"><div class="ig-av" data-bduid="${esc(c.authorId||'')}" style="width:${isReply?26:32}px;height:${isReply?26:32}px;background:${c.authorLogo?'transparent':colorFor(c.authorName)}">${av(c.authorName,c.authorLogo)}</div><div class="t"><b>${esc(c.authorName)}</b>${isReply&&c.replyTo?`<span class="ig-rt">@${esc(c.replyTo)}</span> `:''}${rich(c.text)}<small>${ago(c.createdAt)}${n?' · '+n+' like'+(n>1?'s':''):''} · <a data-rp="${c.id}">Reply</a>${can?' · <a data-d="'+c.id+'">Delete</a>':''}${(currentUser&&c.authorId!==currentUser.uid)?' · <a data-crp="'+c.id+'" style="color:#e5484d">Report</a>':''}</small></div><button class="clk ${liked?'on':''}" data-cl="${c.id}" aria-label="Like">${ICO.heart}</button></div>`;
+  return `<div class="ig-c" data-id="${c.id}"><div class="ig-av" data-bduid="${esc(c.authorId||'')}" style="width:${isReply?26:32}px;height:${isReply?26:32}px;background:${c.authorLogo?'transparent':colorFor(c.authorName)}">${av(c.authorName,c.authorLogo)}</div><div class="t"><b>${esc(c.authorName)}</b>${isReply&&c.replyTo?`<span class="ig-rt">@${esc(c.replyTo)}</span> `:''}${rich(c.text)}<small>${ago(c.createdAt)}${n?' · '+n+' like'+(n>1?'s':''):''} · <a data-rp="${c.id}">Reply</a>${can?' · <a data-d="'+c.id+'">Delete</a>':''}${(currentUser&&c.authorId!==currentUser.uid)?' <a class="gz-rep" data-crp="'+c.id+'">🚩 Report</a>':''}</small></div><button class="clk ${liked?'on':''}" data-cl="${c.id}" aria-label="Like">${ICO.heart}</button></div>`;
 }
 function renderComments(){
   const L=$('igCl'),keep=L.scrollTop;
