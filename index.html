@@ -10349,7 +10349,7 @@ function openATStudioApp(tab){
 </script>
 
 <script>
-/* ===== AGE GATE: sign-in is only possible after the person confirms they are 13+ and accepts Terms/Privacy ===== */
+/* ===== AGE GATE: sign-in is only possible after the person confirms they are 16+ and accepts Terms/Privacy ===== */
 (function(){
   var b=document.getElementById('googleLoginBtn'); if(!b) return;
   function ok(){ try{ return localStorage.getItem('gzAgeOk')==='1'; }catch(e){ return false; } }
@@ -10360,12 +10360,12 @@ function openATStudioApp(tab){
     o.style.cssText='position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:20px;font-family:inherit';
     o.innerHTML='<div style="background:#16161d;color:#fff;border-radius:16px;max-width:340px;width:100%;padding:22px;text-align:center">'
       +'<h3 style="margin:0 0 8px;font-size:18px">Before you continue</h3>'
-      +'<p id="gzAgeTxt" style="margin:0 0 16px;font-size:14px;line-height:1.5;opacity:.85">Gupzy is for people aged 13 or older. By continuing you agree to our <a href="/terms.html" target="_blank" style="color:#6cf">Terms</a> and <a href="/privacy.html" target="_blank" style="color:#6cf">Privacy Policy</a>.</p>'
-      +'<button id="gzAgeYes" style="width:100%;padding:12px;border:0;border-radius:12px;background:#e33;color:#fff;font-weight:700;font-size:15px;margin-bottom:8px">I am 13 or older</button>'
-      +'<button id="gzAgeNo" style="width:100%;padding:12px;border:0;border-radius:12px;background:#2a2a33;color:#fff;font-size:15px">I am under 13</button></div>';
+      +'<p id="gzAgeTxt" style="margin:0 0 16px;font-size:14px;line-height:1.5;opacity:.85">Gupzy is for people aged 16 or older. By continuing you agree to our <a href="/terms.html" target="_blank" style="color:#6cf">Terms</a> and <a href="/privacy.html" target="_blank" style="color:#6cf">Privacy Policy</a>.</p>'
+      +'<button id="gzAgeYes" style="width:100%;padding:12px;border:0;border-radius:12px;background:#e33;color:#fff;font-weight:700;font-size:15px;margin-bottom:8px">I am 16 or older</button>'
+      +'<button id="gzAgeNo" style="width:100%;padding:12px;border:0;border-radius:12px;background:#2a2a33;color:#fff;font-size:15px">I am under 16</button></div>';
     document.body.appendChild(o);
     o.querySelector('#gzAgeYes').onclick=function(){ try{ localStorage.setItem('gzAgeOk','1'); }catch(er){} o.remove(); b.click(); };
-    o.querySelector('#gzAgeNo').onclick=function(){ o.querySelector('#gzAgeTxt').textContent='Sorry, you need to be at least 13 years old to use Gupzy.'; o.querySelector('#gzAgeYes').remove(); o.querySelector('#gzAgeNo').textContent='Close'; o.querySelector('#gzAgeNo').onclick=function(){ o.remove(); }; };
+    o.querySelector('#gzAgeNo').onclick=function(){ o.querySelector('#gzAgeTxt').textContent='Sorry, you need to be at least 16 years old to use Gupzy.'; o.querySelector('#gzAgeYes').remove(); o.querySelector('#gzAgeNo').textContent='Close'; o.querySelector('#gzAgeNo').onclick=function(){ o.remove(); }; };
   }, true);
 })();
 </script>
