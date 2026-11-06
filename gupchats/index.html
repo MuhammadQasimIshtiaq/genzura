@@ -968,10 +968,18 @@ $('loginBtn').onclick = function(){
   }
 };
 async function signOut(){
-  try{ if(myTok && me) await db.collection('fcmTokens').doc(myTok).delete(); }catch(e){}
-  try{ await beat(false); }catch(e){}
-  stopPresence();
-  if(unsubChats){ unsubChats(); unsubChats=null; } closeChat(); msgCacheWipe(); auth.signOut();
+  /* never let a slow/failed server write block the sign out: wait at most 1.5 s, then sign out whatever happens */
+  var w=[];
+  try{ if(myTok && me) w.push(db.collection('fcmTokens').doc(myTok).delete()); }catch(e){}
+  try{ w.push(beat(false)); }catch(e){}
+  try{ await Promise.race([Promise.all(w.map(function(x){ return Promise.resolve(x).catch(function(){}); })), new Promise(function(r){ setTimeout(r,1500); })]); }catch(e){}
+  try{ stopPresence(); }catch(e){}
+  try{ if(unsubChats){ unsubChats(); unsubChats=null; } }catch(e){}
+  try{ closeChat(); }catch(e){}
+  try{ msgCacheWipe(); }catch(e){}
+  try{ if(window.AndroidAuth && AndroidAuth.signOut) AndroidAuth.signOut(); }catch(e){}
+  try{ await auth.signOut(); }catch(e){ toast('Could not sign out: '+(e&&e.message||e)); return; }
+  try{ show('login'); $('loginBtn').disabled=false; }catch(e){}
 }
 $('ncOut').onclick = signOut;
 
