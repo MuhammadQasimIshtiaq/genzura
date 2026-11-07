@@ -1015,7 +1015,7 @@ async function aiChat(env, user, body) {
     .map((m) => ({ role: m && m.role === "assistant" ? "assistant" : "user", content: String((m && m.content) || "").slice(0, 1500) }))
     .filter((m) => m.content.trim());
   if (!msgs.length || msgs[msgs.length - 1].role !== "user") return ctJ(400, { error: "empty message" });
-  const models = [String(env.GROQ_MODEL || "llama-3.3-70b-versatile").trim(), "llama-3.1-8b-instant"];
+  const models = [String(env.GROQ_MODEL || "llama-3.3-70b-versatile").trim(), "llama-3.1-8b-instant", "openai/gpt-oss-20b", "openai/gpt-oss-120b"].filter((m, i, a) => m && a.indexOf(m) === i);
   let r, d = {}, lastErr = "";
   for (const model of models) {
     try {
@@ -1027,7 +1027,7 @@ async function aiChat(env, user, body) {
     } catch (e) { lastErr = "network: " + String((e && e.message) || e).slice(0, 80); continue; }
     d = await r.json().catch(() => ({}));
     if (r.ok) break;
-    lastErr = "Groq " + r.status + ": " + String((d && d.error && d.error.message) || "").slice(0, 140);
+    lastErr = "Groq " + r.status + " [" + model + "]: " + String((d && d.error && d.error.message) || "").slice(0, 110);
     if (r.status === 401 || r.status === 403) break;
   }
   if (!r || !r.ok) {
