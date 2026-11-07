@@ -992,6 +992,49 @@ async function ctContacts(env, user, body) {
   return ctJ(400, { error: "bad action" });
 }
 
+/* ---- Gupzy AI assistant (Groq). The Groq key lives ONLY in the worker secret GROQ_API_KEY, never in the app. ---- */
+const AI_RL = new Map();
+const AI_SYSTEM = [
+  "You are Gupzy AI, the friendly assistant inside Gupzy (gupzy.com), a social video app with reels, posts, stories, chats, calls and live streaming.",
+  "Reply in the same language and style as the user: Roman Urdu, Urdu, Hindi or English. Keep answers short, warm and clear (a few sentences).",
+  "You know about Gupzy: creators make a channel and upload reels, long videos and posts; every new video and post is reviewed before it goes public; there are report and block buttons; the minimum age is 16; accounts can be deleted inside the app.",
+  "If you do not know something about Gupzy, say so honestly. Never invent features, prices or policies.",
+  "You are an AI, never claim to be a human. Never ask for passwords, OTP codes or card numbers.",
+  "Do not write sexual content, hate speech, content that attacks a religion, or help with violence, hacking or illegal activity. Refuse politely and offer something safe instead.",
+  "For medical, legal or money questions give general information only and suggest a qualified professional."
+].join(" ");
+async function aiChat(env, user, body) {
+  const key = String(env.GROQ_API_KEY || "").trim();
+  if (!key) return ctJ(503, { error: "Gupzy AI is not switched on yet" });
+  const now = Date.now(), me = user.localId;
+  const hits = (AI_RL.get(me) || []).filter((t) => now - t < 600000);
+  if (hits.length >= 30) return ctJ(429, { error: "Too many messages. Please wait a few minutes" });
+  hits.push(now); AI_RL.set(me, hits);
+  if (AI_RL.size > 5000) AI_RL.clear();
+  const msgs = (Array.isArray(body.messages) ? body.messages : []).slice(-12)
+    .map((m) => ({ role: m && m.role === "assistant" ? "assistant" : "user", content: String((m && m.content) || "").slice(0, 1500) }))
+    .filter((m) => m.content.trim());
+  if (!msgs.length || msgs[msgs.length - 1].role !== "user") return ctJ(400, { error: "empty message" });
+  let r;
+  try {
+    r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
+      body: JSON.stringify({
+        model: String(env.GROQ_MODEL || "llama-3.3-70b-versatile").trim(),
+        messages: [{ role: "system", content: AI_SYSTEM }].concat(msgs),
+        temperature: 0.6, max_tokens: 500,
+      }),
+    });
+  } catch (e) { return ctJ(502, { error: "AI is busy" }); }
+  if (r.status === 429) return ctJ(429, { error: "Gupzy AI is very busy right now" });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) return ctJ(502, { error: "AI is busy" });
+  let reply = String((d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || "");
+  reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  return ctJ(200, { reply });
+}
+
 async function ctHandle(request, env) {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CT_H });
   if (request.method !== "POST") return ctJ(405, { error: "POST only" });
@@ -1005,6 +1048,7 @@ async function ctHandle(request, env) {
     const user = ld.users && ld.users[0];
     if (!user || !user.localId) return ctJ(401, { error: "bad token" });
     const body = await request.json().catch(() => ({}));
+    if (path === "/ai") return await aiChat(env, user, body);
     if (path === "/translate") return await ctTranslate(body);
     return await ctContacts(env, user, body);
   } catch (e) {
@@ -1018,7 +1062,7 @@ export default {
     if (p === "/anon-send") return new Response(JSON.stringify({error:"disabled"}), {status:410, headers:{"Content-Type":"application/json","Access-Control-Allow-Origin":"*"}}); /* anonymous inbox removed */
     if (request.method === "POST" && p === "/ring-ack") return rkHandle(request, env);
     if (request.method === "GET" && p === "/sitemap-videos.xml") return smHandle(request, env, ctx);
-    if (p === "/contacts" || p === "/translate") return ctHandle(request, env); /* handles its own OPTIONS preflight */
+    if (p === "/contacts" || p === "/translate" || p === "/ai") return ctHandle(request, env); /* handles its own OPTIONS preflight */
     if (p === "/view") return VIEWS.fetch(request, env, ctx);
     return API.fetch(request, env, ctx);
   },
