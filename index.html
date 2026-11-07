@@ -2836,7 +2836,9 @@ function startPublicFeedListener(){
   const handle = async snap=>{
       if(window.__wpActive) return; /* Watch Party: everyone keeps the same shared playlist */
       await sharedVideoReady; /* shared-link video must be known before the first render */
-      const structural = snap.docChanges().some(ch => ch.type === 'added' || ch.type === 'removed');
+      const __wasUnder = new Set(shortsData.filter(v=> v && v.underReview).map(v=> v.id));
+      const __approved = __wasUnder.size > 0 && snap.docChanges().some(ch=> ch.type === 'modified' && __wasUnder.has(ch.doc.id) && !ch.doc.data().underReview);
+      const structural = __approved || snap.docChanges().some(ch => ch.type === 'added' || ch.type === 'removed');
       if(structural || shortsData.length===0){
         let fresh = snap.docs.map(d=>({id:d.id,...d.data()})).filter(v=> !isBlockedUid(v.channelId));
         fresh.sort((a,b)=> cms(b)-cms(a));
@@ -2914,6 +2916,15 @@ function startFeedListeners(){
       renderYourVideos(list);
       renderEarnTab();
     }, err=>{ console.error(err); toast('Your videos error: ' + err.message); }));
+
+  feedUnsubs.push(db.collection('posts').where('uid','==',__uid).where('status','==','pending')
+    .onSnapshot(snap=>{
+      if(!__live()) return;
+      if(snap.docChanges().some(c=> c.type==='removed')){
+        try{ window.__ig && window.__ig.reloadFeed && window.__ig.reloadFeed(); }catch(e){}
+        try{ document.dispatchEvent(new Event('ig:posted')); }catch(e){}
+      }
+    }, ()=>{}));
 
   feedUnsubs.push(db.collection('subscriptions').where('subscriberId','==',__uid)
     .onSnapshot(snap=>{ if(!__live()) return; myFollowingCount = snap.size; updateProfileStats(); const _subs = snap.docs.map(d=>d.data()); renderJoin(_subs); try{ if(window.__stories) window.__stories.onFollowing(_subs); }catch(e){} }, err=>{ console.error(err); toast('Following error: ' + err.message); }));
@@ -6076,8 +6087,27 @@ async function resolveReportGroup(group, removeVideo){
 ================================================================ */
 const gzRvTime = x => { try{ return x && x.toMillis ? x.toMillis() : 0; }catch(e){ return 0; } };
 const gzRvWhen = x => { const m = gzRvTime(x); return m ? new Date(m).toLocaleString() + ' (' + timeAgo(x) + ')' : '—'; };
+let gzRvUnsubs = [], gzRvT = null;
+function gzRvWatch(){
+  if(gzRvUnsubs.length) return;
+  ['videos','posts'].forEach(col=>{
+    let init = true;
+    gzRvUnsubs.push(db.collection(col).where('status','==','pending').onSnapshot(s=>{
+      if(init){ init = false; return; }
+      if(!s.docChanges().some(c=> c.type==='added')) return;
+      clearTimeout(gzRvT);
+      gzRvT = setTimeout(()=>{
+        const c = document.getElementById('adminReviewContainer');
+        if(!c || c.classList.contains('hidden')) return;
+        if(GZ_AI.busy){ GZ_AI.again = true; return; }
+        loadAdminReview();
+      }, 1500);
+    }, ()=>{}));
+  });
+}
 async function loadAdminReview(){
   const c = document.getElementById('adminReviewContainer');
+  gzRvWatch();
   c.innerHTML = `<div class="empty-state">Loading…</div>`;
   try{
     const [vs, ps] = await Promise.all([
@@ -6348,7 +6378,7 @@ async function gzAiRun(all, c){
       }catch(e){ tag.textContent = '⚠️ ' + (e.message||'could not save'); }
       gzAiStatus('🤖 AI check: <b>ON</b> · approved '+GZ_AI.n.ok+' · rejected '+GZ_AI.n.rej+' · for you '+GZ_AI.n.man);
     }
-  } finally { GZ_AI.busy = false; }
+  } finally { GZ_AI.busy = false; if(GZ_AI.again){ GZ_AI.again = false; loadAdminReview(); } }
 }
 async function gzAiRejectedList(c){
   try{
