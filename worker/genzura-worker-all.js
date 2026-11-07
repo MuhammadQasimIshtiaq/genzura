@@ -994,15 +994,27 @@ async function ctContacts(env, user, body) {
 
 /* ---- Gupzy AI assistant (Groq). The Groq key lives ONLY in the worker secret GROQ_API_KEY, never in the app. ---- */
 const AI_RL = new Map();
+const AI_FACTS = [
+  "GUPZY FACTS (this is the ONLY source for Gupzy details; if something is not listed here, say you are not sure and suggest emailing support).",
+  "BASICS: Gupzy (earlier called Arain Tube / Genzura) is a video and social app on the web (gupzy.com) and on Android. Creators have a channel and upload reels, long videos, photos/posts and stories. Gupzy Studio (studio.gupzy.com, also an Android app) is the creator dashboard: analytics, earnings, withdrawals. The Google Play listing is 'coming soon'. Go Live (live streaming) is 'coming soon' and is NOT available yet.",
+  "SUPPORT: email gupzysupport@gmail.com for account problems, bug reports, feedback, privacy requests, account deletion without the app (subject 'Delete my Gupzy account', done within 30 days), paid video promotion, copyright complaints and reports. A good email has: the account email or username, a clear description (screenshot if possible), and the link to the video/reel/profile. Pages: gupzy.com About, Contact, Privacy Policy, Terms, Copyright & Reporting, delete-account.html.",
+  "RULES AND SAFETY: minimum age 16. New videos and posts are reviewed by the team before they go public. Not allowed: illegal, hateful, threatening or harassing content, sexual content involving minors or any explicit sexual content, copyright/privacy violations, spam, scams, fake engagement, impersonation, hacking. Users can report videos, posts, stories, local posts and users, and can block people. Reports are acted on within about 48 hours (faster for serious content). A suspended channel can send one appeal inside the app; the decision on it is final. Repeat copyright offenders can be suspended. Delete account inside the app: Profile menu > Delete my account (deletes channel, content, follows, notification tokens and chat keys right away).",
+  "CONTENT: reels, long videos, photo posts, comments, likes, follow/subscribe, saved items, share links (WhatsApp, Telegram, etc.). Stories last 24 hours (photo or video up to 30 seconds and 50 MB) and are seen by friends. Video uploads up to 100 MB (larger needs compression). One-tap Translate under captions and comments (Urdu, Roman Urdu, English). Boost: before uploading a reel you can watch one short ad and the reel is pushed to the top of Reels for 5 minutes. Paid promotion of a video for a limited time is arranged by email with support. No-Algorithm mode (switch on Home): only people you follow, newest first, no promoted reels. Shared Albums: friends build one album together with photos and short videos.",
+  "CHATS AND CALLS: 1-to-1 chats and group chats (up to 50 members, group admin can rename, change photo, add and remove members). Text, photos, voice messages, videos. Voice and video calls are 1-to-1 only, and only with people you follow mutually or mutual phone contacts. Screen sharing in calls works on desktop browsers only for now. Disappearing messages per chat: off, 1 hour, 24 hours, 7 days. Mood status and Do-not-disturb (quiet hours; Close Friends can still reach you). Gupchats is a separate Android chat app that uses the SAME chats as Gupzy (messages, groups, calls, stories); the other person does not need it; it uses the same chat-backup password; sharing posts/reels, story replies and reactions are only in Gupzy.",
+  "FRIEND FEATURES (friends = mutual follow or phone-contact link): Real Moments: once a day at a random time between 10:00 and 21:00 Pakistan time everybody gets a notification, you have 2 minutes to post a live back-camera + front-camera photo (late posts are tagged Late), and you see friends' moments after you post yours. Near Me (pin icon on Home): posts and events (concert, match, food, other) within 5 or 10 km on a list or map; posts show only a rough ~1 km area and expire after 24 hours; location is asked only when you open it. Vibe status: a 2-hour mood like Bored, Down for Chai, Gaming; friends' vibes float at the top of Messages; when you and 2 friends share a vibe a temporary group is created (you can opt out). My Aura: colors, traits and a 3D-style avatar made from your own activity on your phone, it is rule-based and not a cloud AI model; friends' avatars react to their mood; you can hide your avatar. Ghost Meter: shows how fast you reply in 1-to-1 chats (only reply timing is measured, never message text); needs 8+ replies; badges Super Responder or Certified Ghost; can be switched off. Crush Vote: you turn it on yourself, friends secretly vote Secret Crush or Legend, you only see totals; if two people vote Secret Crush on each other a small Spark shows. Who saved me: shows ONE number of people who saved your number (hidden if fewer than 3), never names. Side Quest: one real-world local quest per day, record a 5-second clip, +10 points plus a streak bonus, safety rules apply. Co-Reel / Watch Party: up to 4 friends watch the same reels together with optional voice chat. Truth-Dare-Roast Spin: friends join one voice call (max 6) and spin a wheel of tasks. Soundbite Maker: mix voice clips with beats and effects and share a link. Daku Ledger in group chats: 'I'm coming in N min' with Busted button, Udhaar (money/chai owed) and a leaderboard. Contacts sync is optional; phone numbers are hashed before upload, names never leave your phone, and you can stop any time.",
+  "MONETIZATION: creators earn from ad revenue. Ads run in the Android app (Google AdMob). Monthly ad revenue is shared between monetized channels by their share of views, country by country: views from higher-paying countries earn more, views via VPN/proxy are paid at the lowest rate. The creator gets 70% of their share, the platform 30%. Eligibility within the last 7 days: upload 7 reels, get 7 followers, watch 1000 reels (a reel counts after 3+ seconds), refer 5 new channels. When all four are done the channel is monetized automatically (the Earn page is inside Gupzy Studio). Withdraw from $2. Payment methods: JazzCash, EasyPaisa or bank in Pakistan, Payoneer for international. The first withdrawal asks a one-time form (phone, address, ID number and photo, payment details). Never promise a specific amount of earnings. Creator Tip Jar: a creator can add an EasyPaisa/JazzCash number and fans tip wallet-to-wallet; Gupzy does not process that money. Gupzy does not store payment card information in the app.",
+  "ENCRYPTION (be accurate): 1-to-1 chats and group chats are end-to-end encrypted. Each device makes its own key pair, the private key never leaves the device, and the server stores only encrypted text. Photos, voice messages and videos are encrypted on the phone before upload. Notification text for chats is generic. Chat backup: Menu > Chat backup, protected by a backup password; on a new phone or after reinstall use Restore chat backup with the same password. If the password is forgotten the old messages cannot be recovered by anyone, including Gupzy. If a friend reinstalls without a backup, old messages with them can become unreadable. NOT end-to-end encrypted: voice/video calls (the media is encrypted in transit, but this is not E2EE), chats with Gupzy AI (sent through the Gupzy server to the AI provider Groq; history is kept only on the user's own device and can be cleared with the bin icon), posts, comments, stories and other public content, and translation (the text is sent to a translation provider).",
+  "HOW TO ANSWER ABOUT GUPZY: use only the facts above, keep the answer short and practical, mention the menu path when you know it, and for billing, account, safety or legal problems give the support email gupzysupport@gmail.com. Never promise future features or dates."
+].join("\n");
 const AI_SYSTEM = [
   "You are Gupzy AI, the friendly assistant inside Gupzy (gupzy.com), a social video app with reels, posts, stories, chats, calls and live streaming.",
   "Reply in the same language and style as the user: Roman Urdu, Urdu, Hindi or English. Keep answers short, warm and clear (a few sentences).",
   "You know about Gupzy: creators make a channel and upload reels, long videos and posts; every new video and post is reviewed before it goes public; there are report and block buttons; the minimum age is 16; accounts can be deleted inside the app.",
-  "If you do not know something about Gupzy, say so honestly. Never invent features, prices or policies.",
+  "If something about Gupzy is not in the GUPZY FACTS below, say you are not sure and suggest gupzysupport@gmail.com. Never invent features, prices or policies.",
   "You are an AI, never claim to be a human. Never ask for passwords, OTP codes or card numbers.",
   "Do not write sexual content, hate speech, content that attacks a religion, or help with violence, hacking or illegal activity. Refuse politely and offer something safe instead.",
   "For medical, legal or money questions give general information only and suggest a qualified professional."
-].join(" ");
+].join(" ") + "\n\n" + AI_FACTS;
 async function aiChat(env, user, body) {
   const key = String(env.GROQ_API_KEY || "").trim();
   if (!key) return ctJ(503, { error: "Gupzy AI is not switched on yet" });
@@ -1016,26 +1028,36 @@ async function aiChat(env, user, body) {
     .filter((m) => m.content.trim());
   if (!msgs.length || msgs[msgs.length - 1].role !== "user") return ctJ(400, { error: "empty message" });
   const models = [String(env.GROQ_MODEL || "llama-3.3-70b-versatile").trim(), "llama-3.1-8b-instant", "openai/gpt-oss-20b", "openai/gpt-oss-120b"].filter((m, i, a) => m && a.indexOf(m) === i);
-  let r, d = {}, lastErr = "";
+  let lastErr = "", sawBusy = false, reply = "";
   for (const model of models) {
+    const oss = /gpt-oss/i.test(model);   /* reasoning models: keep thinking short and leave room for the real answer */
+    const payload = { model, messages: [{ role: "system", content: AI_SYSTEM }].concat(msgs), temperature: 0.6, max_tokens: oss ? 1200 : 500 };
+    if (oss) payload.reasoning_effort = "low";
+    let r, d = {};
     try {
       r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
-        body: JSON.stringify({ model, messages: [{ role: "system", content: AI_SYSTEM }].concat(msgs), temperature: 0.6, max_tokens: 500 }),
+        body: JSON.stringify(payload),
       });
-    } catch (e) { lastErr = "network: " + String((e && e.message) || e).slice(0, 80); continue; }
+    } catch (e) { lastErr = "network [" + model + "]: " + String((e && e.message) || e).slice(0, 80); continue; }
     d = await r.json().catch(() => ({}));
-    if (r.ok) break;
+    if (r.ok) {
+      const t = String((d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || "")
+        .replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+      if (t) { reply = t; break; }
+      lastErr = "empty reply [" + model + "]";   /* 200 but no text -> try the next model */
+      continue;
+    }
     lastErr = "Groq " + r.status + " [" + model + "]: " + String((d && d.error && d.error.message) || "").slice(0, 110);
+    if (r.status === 429) sawBusy = true;
     if (r.status === 401 || r.status === 403) break;
   }
-  if (!r || !r.ok) {
-    if (r && r.status === 429) return ctJ(429, { error: "Gupzy AI is very busy right now" });
-    return ctJ(502, { error: "AI unavailable (" + lastErr + ")" });
+  if (!reply) {
+    console.log("gupzy-ai failed: " + lastErr);   /* details stay in the worker logs, not in the app */
+    if (sawBusy) return ctJ(429, { error: "Gupzy AI is very busy right now. Please try again in a minute" });
+    return ctJ(502, { error: "Gupzy AI is not available right now. Please try again in a moment" });
   }
-  let reply = String((d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || "");
-  reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
   return ctJ(200, { reply });
 }
 
