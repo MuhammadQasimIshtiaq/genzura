@@ -6088,7 +6088,7 @@ async function loadAdminReview(){
       vs.docs.map(d=>({_t:'video', id:d.id, ...d.data()})),
       ps.docs.map(d=>({_t:'post', id:d.id, ...d.data()}))
     ).sort((a,b)=> gzRvTime(a.createdAt) - gzRvTime(b.createdAt));   /* oldest first = on top */
-    if(!all.length){ c.innerHTML = `<div class="empty-state">Nothing waiting for review. 🎉</div>`; return; }
+    if(!all.length){ c.innerHTML = `<div class="empty-state">Nothing waiting for review. 🎉</div>`; gzAiTail(c, all); return; }
     c.innerHTML = `<div style="padding:8px 16px;font-size:12.5px;color:var(--text-dim);">${all.length} waiting · oldest first</div>`;
     all.forEach(it=>{
       const row = document.createElement('div');
@@ -6097,17 +6097,20 @@ async function loadAdminReview(){
       if(it._t==='video') th = it.thumbURL || '';
       else { try{ th = thumbOf(it) || ''; }catch(e){} }
       const name = it._t==='video' ? it.channelName : it.channelName;
+      row.dataset.k = it._t + ':' + it.id;
       row.innerHTML = `
         ${/^https:\/\//.test(th) ? `<img src="${aEsc(th)}" style="width:56px;height:76px;border-radius:8px;object-fit:cover;flex-shrink:0;">` : `<div style="width:56px;height:76px;border-radius:8px;flex-shrink:0;background:var(--surface2);"></div>`}
         <div style="min-width:0;flex:1;">
           <span style="font-size:11px;font-weight:700;color:var(--accent2);">${it._t==='video' ? (it.kind==='short' ? 'Reel' : 'Video') : 'Post'}</span>
           <div style="font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${aEsc(it.title || it.caption || '—')}</div>
           <div style="font-size:12.5px;color:var(--text-dim);">by ${aEsc(name)||'—'} · ${aEsc(timeAgo(it.createdAt))}</div>
+          <div class="gz-ai" style="font-size:11.5px;margin-top:2px;color:var(--text-dim);"></div>
         </div>
         <div style="font-size:12px;font-weight:700;color:#f1c40f;white-space:nowrap;">Review</div>`;
       row.onclick = ()=> openReviewDetail(it);
       c.appendChild(row);
     });
+    gzAiTail(c, all);
   }catch(err){ console.error(err); c.innerHTML = `<div class="empty-state">Couldn't load. ${aEsc(err.message)}</div>`; }
 }
 function gzRvMedia(it){
@@ -6233,6 +6236,150 @@ document.querySelectorAll('#adminTabs .profile-tab').forEach(tab=>{
 document.getElementById('adminPanelBtn').addEventListener('click', ()=>{
   const t = document.querySelector('#adminTabs [data-atab="review"]'); if(t) setTimeout(()=>t.click(), 0);
 });
+
+/* ================================================================
+   FREE AI PRE-CHECK (runs in YOUR browser while the Review tab is open — no API, no limit, nothing is sent to any AI company)
+   - Hugging Face models via Transformers.js: NSFW check on 3 frames + toxic-text check
+   - plus an editable Roman Urdu / Urdu / English bad-word list (GZ_BAD_WORDS)
+   - clearly safe     -> approved automatically
+   - clearly explicit -> rejected automatically (hidden, listed under "AI rejected" so you can undo)
+   - everything else  -> stays in your list with a ⚠️ note
+   If the models cannot load, nothing is touched: the list simply stays manual.
+================================================================ */
+const GZ_BAD_WORDS = ['madarchod','madrchod','behenchod','bhenchod','bhosdi','bhosda','chutiya','chutia','gandu','randi','haramzada','harami','kanjar','lund','gaand','wajib ul qatal','wajibul qatal','gustakh','maar do','kill yourself','nigger','faggot','fuck','bitch','whore','cunt','rape','مادرچود','بہن چود','حرامی','کنجر','رنڈی','گشتاخ','واجب القتل'];
+const GZ_AI = { loading:null, busy:false, seen:new Set(), notes:{}, n:{ok:0,rej:0,man:0},
+  on:(()=>{ try{ return localStorage.getItem('gzAiOn')!=='0'; }catch(e){ return true; } })() };
+function gzAiWords(text){
+  const s = ' ' + String(text||'').toLowerCase().replace(/[^a-z؀-ۿ]+/g,' ') + ' ';
+  return GZ_BAD_WORDS.filter(w=> s.includes(' ' + w + ' ') || (w.length>5 && s.includes(w)));
+}
+function gzAiLoad(){
+  if(GZ_AI.loading) return GZ_AI.loading;
+  GZ_AI.loading = (async()=>{
+    const T = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2');
+    T.env.allowLocalModels = false;
+    let img=null, txt=null;
+    for(const m of ['AdamCodd/vit-base-nsfw-detector','Falconsai/nsfw_image_detection']){
+      try{ img = await T.pipeline('image-classification', m, {dtype:'q8'}); break; }catch(e1){
+        try{ img = await T.pipeline('image-classification', m); break; }catch(e2){ console.warn('AI model failed', m, e2); }
+      }
+    }
+    try{ txt = await T.pipeline('text-classification', 'Xenova/toxic-bert', {dtype:'q8'}); }catch(e){ console.warn('text AI not loaded', e); }
+    return {img, txt};
+  })();
+  GZ_AI.loading.catch(()=>{ GZ_AI.loading = null; });
+  return GZ_AI.loading;
+}
+function gzAiFrames(it){
+  const out = [];
+  const fr = (u,t)=> (u && u.includes('/video/upload/')) ? u.replace('/video/upload/','/video/upload/so_'+t+',w_384,f_jpg/').replace(/\.[a-z0-9]+(\?.*)?$/i,'.jpg') : null;
+  const im = u=> (u && u.includes('/image/upload/')) ? u.replace('/image/upload/','/image/upload/w_384,f_jpg/') : u;
+  if(it._t==='video'){ ['10p','50p','90p'].forEach(t=>{ const f = fr(it.videoURL,t); if(f) out.push(f); }); }
+  else (it.media||[]).slice(0,4).forEach(m=>{ if(m.type==='video'){ const f = fr(m.url,'50p'); if(f) out.push(f); } else if(m.url) out.push(im(m.url)); });
+  return out;
+}
+async function gzAiCheck(it){
+  const M = await gzAiLoad();
+  const urls = gzAiFrames(it);
+  if(!M.img || !urls.length) return {verdict:'manual', why:'AI could not check the picture'};
+  let max = 0, ok = 0;
+  for(const u of urls){
+    try{
+      const r = await M.img(u, {top_k:5});
+      const s = r.filter(x=> /nsfw|porn|explicit|hentai/i.test(x.label)).reduce((a,x)=> a + x.score, 0);
+      max = Math.max(max, s); ok++;
+    }catch(e){ console.warn('frame failed', e); }
+  }
+  const text = [it.title, it.desc, it.caption].filter(Boolean).join(' . ').slice(0,500);
+  const words = gzAiWords(text);
+  let tox = 0, toxOk = !text.trim();
+  if(M.txt && text.trim()){
+    try{ const r = await M.txt(text, {top_k:6}); [].concat(r).forEach(x=>{ if(/toxic|obscene|threat|insult|hate/i.test(x.label)) tox = Math.max(tox, x.score); }); toxOk = true; }catch(e){}
+  }
+  const pct = Math.round(max*100);
+  if(ok >= Math.min(2, urls.length) && max >= 0.9) return {verdict:'reject', nsfw:max, why:'explicit picture ('+pct+'%)'};
+  const why = [];
+  if(ok < urls.length) why.push('some frames could not be checked');
+  if(max > 0.05) why.push('picture '+pct+'% NSFW');
+  if(words.length) why.push('bad words: '+words.slice(0,3).join(', '));
+  if(tox >= 0.5) why.push('text looks toxic');
+  if(!toxOk) why.push('text not checked');
+  if(!why.length) return {verdict:'safe', nsfw:max, why:'looks safe'};
+  return {verdict:'manual', nsfw:max, why:why.join(' · ')};
+}
+function gzAiBar(c){
+  let b = document.getElementById('gzAiBar');
+  if(!b){ b = document.createElement('div'); b.id = 'gzAiBar'; b.style.cssText = 'margin:8px 16px;padding:10px 12px;border-radius:12px;background:rgba(127,127,127,.14);font-size:12.5px;display:flex;gap:10px;align-items:center;justify-content:space-between;'; }
+  if(b.parentNode!==c) c.prepend(b);
+  b.innerHTML = '<span id="gzAiTxt">🤖 AI check: <b>'+(GZ_AI.on?'ON':'OFF')+'</b> · approved '+GZ_AI.n.ok+' · rejected '+GZ_AI.n.rej+' · for you '+GZ_AI.n.man+'</span><button id="gzAiTog" style="border:0;border-radius:8px;padding:6px 12px;font-weight:700;background:#4a5cff;color:#fff;">'+(GZ_AI.on?'Pause':'Start')+'</button>';
+  document.getElementById('gzAiTog').onclick = ()=>{ GZ_AI.on = !GZ_AI.on; try{ localStorage.setItem('gzAiOn', GZ_AI.on?'1':'0'); }catch(e){} loadAdminReview(); };
+}
+function gzAiStatus(msg){ const el = document.getElementById('gzAiTxt'); if(el) el.innerHTML = msg; }
+async function gzAiRun(all, c){
+  if(GZ_AI.busy || !GZ_AI.on || !all.length) return;
+  GZ_AI.busy = true;
+  const FVx = firebase.firestore.FieldValue;
+  try{
+    gzAiStatus('🤖 Loading AI… (first time takes a minute or two)');
+    try{ await gzAiLoad(); }catch(e){ gzAiStatus('🤖 AI could not load here — everything stays manual.'); console.warn(e); return; }
+    for(const it of all){
+      if(document.getElementById('adminReviewContainer').classList.contains('hidden') || !GZ_AI.on) break;
+      const key = it._t + ':' + it.id;
+      const row = c.querySelector('[data-k="'+key+'"]'); if(!row) continue;
+      const tag = row.querySelector('.gz-ai');
+      if(GZ_AI.seen.has(key)){ if(GZ_AI.notes[key]) tag.innerHTML = GZ_AI.notes[key]; continue; }
+      GZ_AI.seen.add(key); tag.textContent = '🤖 checking…';
+      let r; try{ r = await gzAiCheck(it); }catch(e){ r = {verdict:'manual', why:'AI error'}; }
+      const col = it._t==='video' ? 'videos' : 'posts', ref = db.collection(col).doc(it.id);
+      const ownerUid = it._t==='video' ? it.channelId : it.uid;
+      try{
+        if(r.verdict==='safe'){
+          await ref.update({status:'approved', reviewedBy:'ai', reviewedAt:FVx.serverTimestamp(), aiNsfw:r.nsfw||0});
+          GZ_AI.n.ok++; row.remove();
+        }else if(r.verdict==='reject'){
+          await db.collection('moderationLog').add({type:it._t, targetId:it.id, ownerUid, channelName:it.channelName||'', title:(it.title||it.caption||'').slice(0,200),
+            mediaURL: it._t==='video' ? (it.videoURL||'') : ((it.media&&it.media[0]&&it.media[0].url)||''), thumbURL:it.thumbURL||'', uploadedAt:it.createdAt||null,
+            decision:'ai-reject', reason:'AI: '+r.why, reviewedBy:'ai', reviewedAt:FVx.serverTimestamp()});
+          await ref.update({status:'rejected', rejectReason:'AI: '+r.why, reviewedBy:'ai', aiRejected:true, aiNsfw:r.nsfw||0, reviewedAt:FVx.serverTimestamp()});
+          GZ_AI.n.rej++; row.remove();
+        }else{
+          GZ_AI.n.man++; GZ_AI.notes[key] = '<span style="color:#f1c40f;font-weight:700;">⚠️ Please check:</span> ' + aEsc(r.why||''); tag.innerHTML = GZ_AI.notes[key];
+        }
+      }catch(e){ tag.textContent = '⚠️ ' + (e.message||'could not save'); }
+      gzAiStatus('🤖 AI check: <b>ON</b> · approved '+GZ_AI.n.ok+' · rejected '+GZ_AI.n.rej+' · for you '+GZ_AI.n.man);
+    }
+  } finally { GZ_AI.busy = false; }
+}
+async function gzAiRejectedList(c){
+  try{
+    const [a,b] = await Promise.all([
+      db.collection('videos').where('status','==','rejected').where('aiRejected','==',true).get(),
+      db.collection('posts').where('status','==','rejected').where('aiRejected','==',true).get()
+    ]);
+    const list = a.docs.map(d=>({_t:'video', id:d.id, ...d.data()})).concat(b.docs.map(d=>({_t:'post', id:d.id, ...d.data()})));
+    if(!list.length) return;
+    const h = document.createElement('div');
+    h.style.cssText = 'padding:14px 16px 6px;font-weight:700;font-size:13px;';
+    h.textContent = '🚫 AI rejected (' + list.length + ') — undo if the AI was wrong';
+    c.appendChild(h);
+    list.forEach(it=>{
+      const row = document.createElement('div');
+      row.style.cssText = 'padding:10px 16px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;';
+      row.innerHTML = '<div style="min-width:0;flex:1;"><div style="font-weight:700;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+aEsc(it.title||it.caption||'—')+'</div><div style="font-size:12px;color:var(--text-dim);">'+aEsc(it.channelName||'')+' · '+aEsc(it.rejectReason||'')+'</div></div>'
+        + '<button data-a="undo" style="border:0;border-radius:8px;padding:8px 12px;background:#2ecc71;color:#fff;font-weight:700;">Approve</button>'
+        + '<button data-a="del" style="border:0;border-radius:8px;padding:8px 12px;background:#ff5c5c;color:#fff;font-weight:700;">Delete</button>';
+      const ref = db.collection(it._t==='video'?'videos':'posts').doc(it.id);
+      row.querySelector('[data-a="undo"]').onclick = async()=>{ try{ await ref.update({status:'approved', aiRejected:firebase.firestore.FieldValue.delete(), reviewedBy:currentUser.uid, reviewedAt:firebase.firestore.FieldValue.serverTimestamp()}); row.remove(); toast('Approved'); }catch(e){ toast('Failed: '+e.message); } };
+      row.querySelector('[data-a="del"]').onclick = async()=>{ if(!(await gzConfirm())) return; try{ await ref.delete(); row.remove(); toast('Deleted'); }catch(e){ toast('Failed: '+e.message); } };
+      c.appendChild(row);
+    });
+  }catch(e){ console.warn('ai rejected list', e); }
+}
+function gzAiTail(c, all){
+  gzAiBar(c);
+  gzAiRejectedList(c);
+  gzAiRun(all, c);
+}
 
 async function loadAdminApplications(){
   const c = document.getElementById('adminAppsContainer');
