@@ -2906,7 +2906,7 @@ var t=document.querySelector('#chat .top');if(t){t.style.cursor='pointer'}
 })();
 </script>
 <script>
-window.__GZAI_CFG={ url:function(){ return API_BASE+'/ai'; }, token:function(){ return auth.currentUser.getIdToken(); }, uid:function(){ return auth.currentUser&&auth.currentUser.uid; } };
+window.__GZAI_CFG={ url:function(){ return 'https://arain-api.muhammadqasimishtiaq0604.workers.dev/ai'; }, token:function(){ return firebase.auth().currentUser.getIdToken(); }, uid:function(){ var u=firebase.auth().currentUser; return u&&u.uid; } };
 /* ===== GUPZY AI (chat assistant, like Meta AI): pinned at the top of the chat list ===== */
 (function(){
   if(window.gzAiOpen) return;
