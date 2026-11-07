@@ -1015,21 +1015,25 @@ async function aiChat(env, user, body) {
     .map((m) => ({ role: m && m.role === "assistant" ? "assistant" : "user", content: String((m && m.content) || "").slice(0, 1500) }))
     .filter((m) => m.content.trim());
   if (!msgs.length || msgs[msgs.length - 1].role !== "user") return ctJ(400, { error: "empty message" });
-  let r;
-  try {
-    r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
-      body: JSON.stringify({
-        model: String(env.GROQ_MODEL || "llama-3.3-70b-versatile").trim(),
-        messages: [{ role: "system", content: AI_SYSTEM }].concat(msgs),
-        temperature: 0.6, max_tokens: 500,
-      }),
-    });
-  } catch (e) { return ctJ(502, { error: "AI is busy" }); }
-  if (r.status === 429) return ctJ(429, { error: "Gupzy AI is very busy right now" });
-  const d = await r.json().catch(() => ({}));
-  if (!r.ok) return ctJ(502, { error: "AI is busy" });
+  const models = [String(env.GROQ_MODEL || "llama-3.3-70b-versatile").trim(), "llama-3.1-8b-instant"];
+  let r, d = {}, lastErr = "";
+  for (const model of models) {
+    try {
+      r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
+        body: JSON.stringify({ model, messages: [{ role: "system", content: AI_SYSTEM }].concat(msgs), temperature: 0.6, max_tokens: 500 }),
+      });
+    } catch (e) { lastErr = "network: " + String((e && e.message) || e).slice(0, 80); continue; }
+    d = await r.json().catch(() => ({}));
+    if (r.ok) break;
+    lastErr = "Groq " + r.status + ": " + String((d && d.error && d.error.message) || "").slice(0, 140);
+    if (r.status === 401 || r.status === 403) break;
+  }
+  if (!r || !r.ok) {
+    if (r && r.status === 429) return ctJ(429, { error: "Gupzy AI is very busy right now" });
+    return ctJ(502, { error: "AI unavailable (" + lastErr + ")" });
+  }
   let reply = String((d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || "");
   reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
   return ctJ(200, { reply });
