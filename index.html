@@ -14561,7 +14561,7 @@ window.__GZAI_CFG={ url:function(){ return atFn('ai'); }, token:function(){ retu
   css();
 })();
 
-(function(){ var l=document.getElementById('dmList'); if(l) l.addEventListener('click',function(e){ if(e.target.closest('[data-gzai]')) window.gzAiOpen(); }); })();
+(function(){ var l=document.getElementById('dmList'); if(l) l.addEventListener('click',function(e){ if(e.target.closest('[data-gzai]')){ try{ if(typeof gupchatsInstalled==='function' && gupchatsInstalled()){ openGupchatsApp('ai'); return; } }catch(er){} window.gzAiOpen(); } }); })();   /* Gupchats installed -> the AI chat lives in Gupchats, same as every other chat */
 </script>
 <script id="gzReportJs">
 (function(){
