@@ -202,17 +202,34 @@ hr{border:0;border-top:1px solid var(--border);margin:8px 0}
 .gcb.sm.on{background:#fff;color:#111}
 #gcIn .gcb.green{animation:gcpulse 1.2s ease-in-out infinite}
 @keyframes gcpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
-#gcCall{justify-content:space-between;padding:calc(env(safe-area-inset-top,0px) + 40px) 20px calc(env(safe-area-inset-bottom,0px) + 28px)}
+#gcCall{justify-content:space-between;padding:calc(env(safe-area-inset-top,0px) + 14px) 14px calc(env(safe-area-inset-bottom,0px) + 14px)}
 #gcRemote{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000;display:none}
 #gcCall.rv #gcRemote{display:block}
-#gcLocal{position:absolute;right:14px;top:calc(env(safe-area-inset-top,0px) + 14px);width:104px;height:148px;object-fit:cover;border-radius:14px;background:#000;border:2px solid rgba(255,255,255,.5);display:none;z-index:2;transform:scaleX(-1)}
+#gcLocal{position:absolute;right:14px;top:calc(env(safe-area-inset-top,0px) + 74px);width:104px;height:148px;object-fit:cover;border-radius:14px;background:#000;border:2px solid rgba(255,255,255,.5);display:none;z-index:2;transform:scaleX(-1)}
 #gcLocal.rear{transform:none}
 #gcCall.lv #gcLocal{display:block}
-#gcCall .gcc-top{position:relative;z-index:1;text-align:center;margin-top:30px}
-#gcCall.rv .gcc-top .gcc-av{display:none}
-#gcCall .gcc-n{font-size:26px;font-weight:800;margin-top:16px;text-shadow:0 1px 6px rgba(0,0,0,.5)}
-#gcCall .gcc-s{font-size:16px;opacity:.9;margin-top:6px;text-shadow:0 1px 6px rgba(0,0,0,.5)}
-#gcCall .gcc-bar{position:relative;z-index:1;display:flex;gap:16px;align-items:center;justify-content:center;flex-wrap:wrap}
+#gcCall .gcc-head{position:relative;z-index:3;width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px}
+#gcCall .gcc-hb{width:48px;height:48px;border-radius:50%;border:0;background:rgba(255,255,255,.12);color:#fff;display:flex;align-items:center;justify-content:center;flex:none;padding:0}
+#gcCall .gcc-hb.sp{visibility:hidden}
+#gcCall .gcc-top{position:relative;z-index:1;text-align:center;flex:1;min-width:0}
+#gcCall .gcc-n{font-size:20px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 6px rgba(0,0,0,.5)}
+#gcCall .gcc-s{font-size:15px;opacity:.7;margin-top:3px;text-shadow:0 1px 6px rgba(0,0,0,.5)}
+#gcCall .gcc-av{position:relative;z-index:1}
+#gcCall .gcc-av .av{width:min(62vw,260px,28vh);height:min(62vw,260px,28vh);font-size:min(22vw,92px,10vh);margin:0 auto}
+#gcCall .gcc-bn{display:none;position:relative;z-index:1;width:100%;max-width:340px;height:100px;margin:0 auto 18px;flex:none;border-radius:12px}
+#gcCall.ads:not(.rv):not(.lv) .gcc-bn{display:block}
+#gcCall.rv .gcc-av{display:none}
+#gcCall .gcc-pan{position:relative;z-index:3;width:100%;max-width:520px;background:rgba(8,16,40,.42);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-radius:34px;padding:22px 14px 14px;border:1px solid rgba(255,255,255,.10)}
+#gcCall.rv .gcc-pan{background:rgba(8,16,40,.55)}
+#gcCall .gcc-bar{position:relative;z-index:1;display:grid;grid-template-columns:repeat(3,1fr);row-gap:44px;justify-items:center;padding-bottom:32px}
+#gcCall .gcc-bar .gcb{position:relative;width:66px;height:66px;background:rgba(255,255,255,.18);margin:0}
+#gcCall .gcc-bar .gcb::after{content:attr(data-l);position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);font-size:15px;color:#fff;white-space:nowrap;font-weight:500}
+#gcCall .gcc-bar .gcb.on{background:#fff;color:#111}
+#gcCall .gcc-bar .gcb.red{background:#e4003c;color:#fff}
+#gcCall .gcc-bar .gcb.hidden{display:none}
+#gcCall #gcbFlip{grid-column:1;grid-row:2}
+#gcCall #gcbEnd{grid-column:3;grid-row:2}
+#gcBack{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 8px);z-index:96;background:#1fa855;color:#fff;border:0;border-radius:22px;padding:9px 18px;font-weight:700;font-size:14px;box-shadow:0 4px 14px rgba(0,0,0,.35)}
 #gcSound{position:relative;z-index:1;border:0;border-radius:20px;padding:10px 18px;font-weight:700;background:#fff;color:#111;margin-bottom:12px}
 /* ---- v5: groups ---- */
 .b .sn{font-size:12px;font-weight:700;color:var(--blue);margin-bottom:2px;white-space:normal}
@@ -482,18 +499,25 @@ html #boot img{position:relative;z-index:1;opacity:0;visibility:visible!importan
 <div id="gcCall" class="hidden">
   <video id="gcRemote" autoplay playsinline></video>
   <video id="gcLocal" autoplay playsinline muted></video>
-  <div class="gcc-top"><div class="gcc-av" id="gccAv"></div><div class="gcc-n" id="gccName"></div><div class="gcc-s" id="gccSt"></div></div>
-  <div>
+  <div class="gcc-head">
+    <button class="gcc-hb" id="gccMin" aria-label="Minimize"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg></button>
+    <div class="gcc-top"><div class="gcc-n" id="gccName"></div><div class="gcc-s" id="gccSt"></div></div>
+    <span class="gcc-hb sp"></span>
+  </div>
+  <div class="gcc-av" id="gccAv"></div>
+  <div class="gcc-bn" id="gccBanner"></div>
+  <div class="gcc-pan">
     <div style="text-align:center"><button id="gcSound" class="hidden">Tap to enable sound</button></div>
     <div class="gcc-bar">
-      <button class="gcb sm" id="gcbMute" aria-label="Mute"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
-      <button class="gcb sm" id="gcbSpk" aria-label="Speaker"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg></button>
-      <button class="gcb sm" id="gcbVid" aria-label="Camera"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="13" height="12" rx="3"/><path d="M15 10l7-3v10l-7-3z"/></svg></button>
-      <button class="gcb sm hidden" id="gcbFlip" aria-label="Flip camera"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg></button>
-      <button class="gcb red" id="gcbEnd" aria-label="End call"><svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M12 9c-1.6 0-3.1.3-4.6.7v3.1c0 .4-.2.7-.6.9-.9.5-1.7 1-2.4 1.7-.2.2-.5.3-.7.3-.3 0-.5-.1-.7-.3L.3 13.7c-.2-.2-.3-.4-.3-.7s.1-.5.3-.7C3.3 9.4 7.4 8 12 8s8.7 1.4 11.7 4.3c.2.2.3.4.3.7s-.1.5-.3.7l-2.8 2.4c-.2.2-.4.3-.7.3s-.5-.1-.7-.3c-.7-.7-1.5-1.2-2.4-1.7-.4-.2-.6-.5-.6-.9V9.7C15.1 9.3 13.6 9 12 9z"/></svg></button>
+      <button class="gcb sm" id="gcbSpk" data-l="Speaker" aria-label="Speaker"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg></button>
+      <button class="gcb sm" id="gcbVid" data-l="Video" aria-label="Camera"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="13" height="12" rx="3"/><path d="M15 10l7-3v10l-7-3z"/></svg></button>
+      <button class="gcb sm" id="gcbMute" data-l="Mute" aria-label="Mute"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+      <button class="gcb sm hidden" id="gcbFlip" data-l="Flip" aria-label="Flip camera"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg></button>
+      <button class="gcb red" id="gcbEnd" data-l="End" aria-label="End call"><svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M12 9c-1.6 0-3.1.3-4.6.7v3.1c0 .4-.2.7-.6.9-.9.5-1.7 1-2.4 1.7-.2.2-.5.3-.7.3-.3 0-.5-.1-.7-.3L.3 13.7c-.2-.2-.3-.4-.3-.7s.1-.5.3-.7C3.3 9.4 7.4 8 12 8s8.7 1.4 11.7 4.3c.2.2.3.4.3.7s-.1.5-.3.7l-2.8 2.4c-.2.2-.4.3-.7.3s-.5-.1-.7-.3c-.7-.7-1.5-1.2-2.4-1.7-.4-.2-.6-.5-.6-.9V9.7C15.1 9.3 13.6 9 12 9z"/></svg></button>
     </div>
   </div>
 </div>
+<button id="gcBack" class="hidden">Tap to return to call</button>
 
 <div id="toast" class="hidden"></div>
 
@@ -2005,6 +2029,19 @@ function mediaErr(e){
 function callPeerName(){ return (CL && CL.peer && CL.peer.name) || ''; }
 
 /* ---- UI ---- */
+/* AdMob banner in the middle of the call screen (Android app only): the app draws a real ad over the empty box #gccBanner */
+var _bnOn=false,_bnLast='';
+function bannerTick(){
+  var B=window.AndroidAds, cs=$('gcCall');
+  if(!B || !CL || cs.classList.contains('hidden')){ if(B && B.hideCallBanner){ try{ B.hideCallBanner(); }catch(e){} } _bnOn=false; _bnLast=''; return; }
+  var r=$('gccBanner').getBoundingClientRect();
+  var show=!cs.classList.contains('rv') && !cs.classList.contains('lv') && r.width>0 && r.height>0;
+  var key=Math.round(r.left)+','+Math.round(r.top)+','+Math.round(r.width)+','+Math.round(r.height)+','+show;
+  if(key!==_bnLast){ _bnLast=key; try{ B.updateCallBanner(Math.round(r.left),Math.round(r.top),Math.round(r.width),Math.round(r.height),show); }catch(e){} }
+  setTimeout(bannerTick,250);
+}
+function startBanner(){ var B=window.AndroidAds; if(_bnOn || !B || !B.updateCallBanner) return; _bnOn=true; setTimeout(bannerTick,100); }
+function callNick(peer){ try{ var r=''; if(peer && peer.uid) Object.keys(chats).forEach(function(k){ var c=chats[k]; if(c && !c.isGroup && c.nicks && c.nicks[peer.uid] && (c.members||[]).indexOf(peer.uid)>=0) r=c.nicks[peer.uid]; }); return r; }catch(e){ return ''; } }
 function setSt(s){ $('gccSt').textContent=s; }
 function refreshCallUI(){
   if(!CL) return; var sc=$('gcCall');
@@ -2013,7 +2050,9 @@ function refreshCallUI(){
   $('gcbFlip').classList.toggle('hidden',!CL.cam);
 }
 function showCallUI(peer,type,status){
-  $('gccAv').innerHTML=av(peer.logo,peer.name); $('gccName').textContent=peer.name||'Unknown'; setSt(status);
+  $('gccAv').innerHTML=av(peer.logo,peer.name); $('gccName').textContent=callNick(peer)||peer.name||'Unknown'; setSt(status);
+  $('gcBack').classList.add('hidden');
+  $('gcCall').classList.toggle('ads',!!(window.AndroidAds && window.AndroidAds.updateCallBanner)); startBanner();
   CL.remoteVideo=(type==='video'); CL.speaker=(type==='video'); nativeSpeaker(CL.speaker); reapplySpeaker();
   $('gcCall').classList.remove('hidden'); $('gcCall').classList.remove('connected');
   $('gcbMute').classList.remove('on'); refreshCallUI();
@@ -2281,13 +2320,17 @@ function endCall(msg,notify){
   try{ if(c.dc) c.dc.close(); }catch(e){}
   andCall('release');
   $('gcRemote').srcObject=null; $('gcLocal').srcObject=null;
-  $('gcCall').classList.add('hidden'); $('gcSound').classList.add('hidden');
+  $('gcCall').classList.add('hidden'); $('gcSound').classList.add('hidden'); $('gcBack').classList.add('hidden');
+  try{ if(window.AndroidAds && window.AndroidAds.hideCallBanner) window.AndroidAds.hideCallBanner(); }catch(e){}
   CL=null;
   if(c.openedLocked) closeAfterLocked();
   flushTaps();
   if(msg) toast(msg);
 }
 $('gcbEnd').onclick=function(){ endCall(null,true); };
+/* minimize: go back to the chats while the call keeps running; a green pill brings the call screen back */
+$('gccMin').onclick=function(){ if(!CL) return; $('gcCall').classList.add('hidden'); $('gcBack').classList.remove('hidden'); };
+$('gcBack').onclick=function(){ if(!CL) return; $('gcBack').classList.add('hidden'); $('gcCall').classList.remove('hidden'); startBanner(); };
 document.addEventListener('visibilitychange',function(){
   if(!CL || CL.ended) return;
   try{ var p=$('gcRemote').play(); if(p && p.catch) p.catch(function(){}); p=$('gcLocal').play(); if(p && p.catch) p.catch(function(){}); }catch(e){}
