@@ -1587,7 +1587,7 @@ function gcBannerMount(host, activeFn){
     var r=hole.getBoundingClientRect(), nav=document.querySelector('nav'), hd=document.querySelector('#tMenu .hdr');
     var top=hd?Math.round(hd.getBoundingClientRect().bottom):0, bot=nav?Math.round(nav.getBoundingClientRect().top):window.innerHeight;
     var vis=act && r.width>0 && r.height>0 && r.bottom>top+2 && r.top<bot-2;
-    if(act) host.style.display='';
+    if(act && !host._fail) host.style.display='';
     if(!reg && act && r.width>0){ reg=true; try{ if(kind==='banner') B.registerBannerSlot(id); else B.registerAdSlot(id); }catch(e){} }
     if(reg){
       var x=Math.round(r.left), y=Math.round(r.top), w=Math.round(r.width), h=Math.round(r.height), key=x+','+y+','+w+','+h+','+vis+','+top+','+bot;
@@ -1595,8 +1595,9 @@ function gcBannerMount(host, activeFn){
     }
     if(act) requestAnimationFrame(tick); else setTimeout(tick,300);
   }
-  window.__adSlotFailed=window.__adSlotFailed||function(i){ if(i===id) host.style.display='none'; };
-  window.__adSlotLoaded=window.__adSlotLoaded||function(i){ if(i===id) host.style.display=''; };
+  var _f=window.__adSlotFailed, _l=window.__adSlotLoaded;
+  window.__adSlotFailed=function(i){ if(i===id){ host._fail=1; host.style.display='none'; } if(_f) return _f.apply(this,arguments); };
+  window.__adSlotLoaded=function(i){ if(i===id){ host._fail=0; host.style.display=''; } if(_l) return _l.apply(this,arguments); };
   setTimeout(tick,50);
 }
 
