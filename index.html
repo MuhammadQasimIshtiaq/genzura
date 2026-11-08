@@ -8295,10 +8295,33 @@ $('root').insertAdjacentHTML('beforeend',
  '<div class="ig-ov-b"><div id="igPickBox" class="ig-pick"><div>Choose photos or videos (up to 10, videos up to 90 sec)</div><button id="igPickBtn">Select from gallery</button></div>'+
  '<div id="igEdit" class="hidden"><div class="ig-prev" id="igPrev"></div><div class="ig-thumbs" id="igThumbs"></div><textarea id="igCaption" maxlength="2200" placeholder="Write a caption…"></textarea><div class="ig-capsule"><label for="igCapSel">⏳ Time capsule</label><select id="igCapSel"><option value="0">Off — show now</option><option value="6m">Unlock in 6 months</option><option value="1y">Unlock in 1 year</option><option value="date">Pick a date…</option></select><input type="date" id="igCapDate" class="hidden"><small>Friends will see only a locked box until the date.</small></div><label style="display:flex;gap:10px;align-items:flex-start;font-size:12.5px;line-height:1.4;padding:6px 14px;color:var(--text-faint);"><input type="checkbox" id="igOwn" style="margin-top:3px;flex-shrink:0;"><span>I confirm this is my own content (or I have the right to upload it) and it does not infringe anyone&#39;s copyright.</span></label><div class="ig-prog" id="igProg"><i id="igProgF"></i></div><div class="ig-hint" id="igHint"></div></div></div></div>'+
  '<input type="file" id="igFile" accept="image/*,video/*" class="hidden">');
-let files=[],sel=0,busy=false,tagged=[];
+let files=[],sel=0,busy=false,tagged=[],postDraft=null;
 const MAXV=90;
-function openNew(){if(!requireAuth())return;files=[];sel=0;busy=false;tagged=[];renderTags();$('igCaption').value='';$('igCapSel').value='0';$('igCapDate').value='';$('igCapDate').classList.add('hidden');$('igOwn').checked=false;$('igNew').classList.add('show');renderNew();igPauseHome();}
-function closeNew(){const go=()=>{$('igNew').classList.remove('show');files.forEach(f=>URL.revokeObjectURL(f.url));files=[];};if(busy){gzConfirm('The upload will stop. Close anyway?','Close').then(ok=>{if(ok)go();});return;}go();}
+/* early review: each picked file uploads in the background at once; the first finished upload creates a draft post that the admin already sees (detailsDone:false) */
+function postDraftCancel(){ if(postDraft){ postDraft.cancelled=true; if(postDraft.ref){ try{ postDraft.ref.delete().catch(()=>{}); }catch(e){} } postDraft=null; } }
+function startPostUp(f){
+  f.up=(async()=>{
+    let up=f.file,ext=((f.file.name||'').split('.').pop()||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+    if(!ext||ext.length>5)ext=f.type==='video'?'mp4':'jpg';
+    if(f.type==='image'&&!/gif/i.test(f.file.type)){try{up=await shrink(f.file);ext='jpg';}catch(e){up=f.file;}}
+    if(f.type==='video'){const pr=await smartCompressVideo(f.file,'short',()=>{});up=pr.file;if(pr.compressed)ext='webm';}
+    const url=await uploadToCloudinary(up,f.type,null,`post_${currentUser.uid}_${Date.now()}_${Math.random().toString(36).slice(2,6)}.${ext}`);
+    return {url,type:f.type};
+  })();
+  f.up.catch(()=>{});
+}
+function ensurePostDraft(f){
+  if(postDraft)return;
+  const d=postDraft={ref:null,cancelled:false,p:null};
+  d.p=f.up.then(async m=>{
+    if(d.cancelled)return null;
+    const r=await db.collection('posts').add({tags:[],uid:currentUser.uid,channelName:currentChannel.name,channelLogo:currentChannel.logoURL||null,caption:'',media:[m],status:'pending',detailsDone:false,likesCount:0,commentsCount:0,tagged:[],taggedUids:[],createdAt:FV.serverTimestamp()});
+    if(d.cancelled){try{await r.delete();}catch(e){}return null;}
+    d.ref=r;return r;
+  }).catch(()=>null);
+}
+function openNew(){if(!requireAuth())return;postDraftCancel();files=[];sel=0;busy=false;tagged=[];renderTags();$('igCaption').value='';$('igCapSel').value='0';$('igCapDate').value='';$('igCapDate').classList.add('hidden');$('igOwn').checked=false;$('igNew').classList.add('show');renderNew();igPauseHome();}
+function closeNew(){const go=()=>{$('igNew').classList.remove('show');files.forEach(f=>URL.revokeObjectURL(f.url));files=[];postDraftCancel();};if(busy){gzConfirm('The upload will stop. Close anyway?','Close').then(ok=>{if(ok)go();});return;}go();}
 $('igOwn').addEventListener('change',()=>renderNew());
 $('igCapSel').addEventListener('change',()=>{const d=$('igCapDate');d.classList.toggle('hidden',$('igCapSel').value!=='date');if(!d.min){const t=new Date(Date.now()+86400000*2);d.min=t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');}});
 function capUnlockMs(){const v=$('igCapSel').value;if(v==='0')return 0;const d=new Date();if(v==='6m'){d.setMonth(d.getMonth()+6);return d.getTime();}if(v==='1y'){d.setFullYear(d.getFullYear()+1);return d.getTime();}const x=$('igCapDate').value;if(!x)return -1;const t=new Date(x+'T00:00:00').getTime();return t>Date.now()+86400000?t:-1;}
@@ -8307,9 +8330,9 @@ function renderNew(){
   $('igShare').disabled=!files.length||busy||!$('igOwn').checked;
   if(!files.length)return;
   const f=files[sel];
-  $('igPrev').innerHTML=f.type==='video'?`<video src="${f.url}" controls playsinline></video>`:`<img src="${f.url}" alt="">`;
+  $('igPrev').innerHTML=f.type==='video'?`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:34px 22px;min-height:180px;"><div style="font-size:34px">🔒</div><div style="font-weight:800">Video preview is off</div><div style="font-size:12.5px;opacity:.7;line-height:1.5">For security every video is checked before anyone can play it. It is already being sent for review while you write the caption.</div></div>`:`<img src="${f.url}" alt="">`;
   edRefresh();
-  $('igThumbs').innerHTML=files.map((x,i)=>`<div class="ig-th ${i===sel?'sel':''}" data-i="${i}">${x.type==='video'?`<video src="${x.url}" muted></video>`:`<img src="${x.url}">`}<button data-r="${i}">&times;</button></div>`).join('')+(files.length<10?'<div class="ig-th add" id="igAdd">+</div>':'');
+  $('igThumbs').innerHTML=files.map((x,i)=>`<div class="ig-th ${i===sel?'sel':''}" data-i="${i}">${x.type==='video'?`<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:22px;background:rgba(127,127,127,.25)">🎬</div>`:`<img src="${x.url}">`}<button data-r="${i}">&times;</button></div>`).join('')+(files.length<10?'<div class="ig-th add" id="igAdd">+</div>':'');
 }
 function vdur(url){return new Promise(r=>{const v=document.createElement('video');v.preload='metadata';v.muted=true;let d=0;const fin=x=>{if(d)return;d=1;clearTimeout(tm);r(x);};const tm=setTimeout(()=>fin(0),5000);v.onloadedmetadata=()=>fin(isFinite(v.duration)?v.duration:0);v.onerror=()=>fin(0);v.src=url;});}
 $('igFile').addEventListener('change',async e=>{
@@ -8322,7 +8345,7 @@ $('igFile').addEventListener('change',async e=>{
     if(type==='video'&&f.size>200*1024*1024){toast('Video is too large (max 200MB)');continue;}
     const url=URL.createObjectURL(f);
     if(type==='video'){const d=await vdur(url);if(d>MAXV+0.5){toast('Video is longer than 90 sec');URL.revokeObjectURL(url);continue;}}
-    files.push({file:f,type,url,adj:{p:'none',b:100,c:100,s:100,r:0}});
+    const nf={file:f,type,url,adj:{p:'none',b:100,c:100,s:100,r:0}};files.push(nf);startPostUp(nf);ensurePostDraft(nf);
   }
   e.target.value='';sel=Math.min(sel,files.length-1);if(sel<0)sel=0;renderNew();
   }catch(err){console.error('pick fail',err);toast('Could not open file: '+(err&&err.message||err));try{renderNew();}catch(x){}}
@@ -8342,22 +8365,24 @@ $('igShare').onclick=async()=>{
   const media=[];let stage='upload';$('igHint').style.color='';
   try{
     for(let i=0;i<files.length;i++){
-      $('igHint').textContent=`Uploading ${i+1}/${files.length}…`;$('igProgF').style.width='0%';
+      $('igHint').textContent=`Finishing ${i+1}/${files.length}…`;$('igProgF').style.width='0%';
       const f=files[i];
-      let up=f.file,ext=((f.file.name||'').split('.').pop()||'').toLowerCase().replace(/[^a-z0-9]/g,'');
-      if(!ext||ext.length>5)ext=f.type==='video'?'mp4':'jpg';
-      if(f.type==='image'&&!/gif/i.test(f.file.type)){try{up=edDirty(f.adj)?await renderBlob(f):await shrink(f.file);ext='jpg';}catch(e){up=f.file;}}
-      if(f.type==='video'){
-        const pr=await smartCompressVideo(f.file,'short',pct=>{$('igHint').textContent=`Compressing ${i+1}/${files.length}… ${pct}%`;});
-        up=pr.file;if(pr.compressed)ext='webm';
-        $('igHint').textContent=`Uploading ${i+1}/${files.length}…`;
+      if(f.type==='image'&&!/gif/i.test(f.file.type)&&edDirty(f.adj)){
+        let up=f.file,ext='jpg';try{up=await renderBlob(f);}catch(e){up=null;}
+        if(up){const url=await uploadToCloudinary(up,f.type,$('igProgF'),`post_${currentUser.uid}_${Date.now()}_${i}.${ext}`);media.push({url,type:f.type});continue;}
       }
-      const url=await uploadToCloudinary(up,f.type,$('igProgF'),`post_${currentUser.uid}_${Date.now()}_${i}.${ext}`);
-      media.push({url,type:f.type});
+      if(!f.up)startPostUp(f);
+      let m;try{m=await f.up;}catch(e){f.up=null;startPostUp(f);m=await f.up;}   /* the early upload failed: try once more now */
+      $('igProgF').style.width='100%';media.push(m);
     }
     stage='save';
     const capT=$('igCaption').value.trim();
-    const nref=await db.collection('posts').add({tags:extractTags(capT),uid:currentUser.uid,channelName:currentChannel.name,channelLogo:currentChannel.logoURL||null,caption:capT,media,status:'pending',likesCount:0,commentsCount:0,...(unlockMs>0?{unlockAt:firebase.firestore.Timestamp.fromMillis(unlockMs),capsule:true}:{}),tagged:tagged.map(u=>({uid:u.uid,name:u.name,logo:u.logo||null,handle:u.handle||''})),taggedUids:tagged.map(u=>u.uid),createdAt:FV.serverTimestamp()});
+    const fields={tags:extractTags(capT),caption:capT,media,...(unlockMs>0?{unlockAt:firebase.firestore.Timestamp.fromMillis(unlockMs),capsule:true}:{}),tagged:tagged.map(u=>({uid:u.uid,name:u.name,logo:u.logo||null,handle:u.handle||''})),taggedUids:tagged.map(u=>u.uid)};
+    let nref=null;
+    if(postDraft){try{nref=await postDraft.p;}catch(e){nref=null;}}
+    if(nref){await nref.update({...fields,detailsDone:true});}   /* the draft the admin already sees gets its final media and caption */
+    else nref=await db.collection('posts').add({...fields,uid:currentUser.uid,channelName:currentChannel.name,channelLogo:currentChannel.logoURL||null,status:'pending',likesCount:0,commentsCount:0,createdAt:FV.serverTimestamp()});
+    postDraft=null;
     notifyMentions(capT,nref.id,thumbOf({media}));
     tagged.forEach(u=>notify(u.uid,'tag',{postId:nref.id,thumb:thumbOf({media})}));
     busy=false;$('igProg').classList.remove('show');$('igHint').textContent='';
@@ -10158,7 +10183,7 @@ async function toDM(p){const fl=await db.collection('subscriptions').where('subs
  document.body.appendChild(s);}
 document.addEventListener('click',async e=>{const b=e.target.closest('.ig-post [data-share]');if(!b)return;e.stopPropagation();e.preventDefault();
  if(!requireAuth())return;const p=await getPost(b.closest('.ig-post').dataset.pid);if(!p)return;
- sheet([['➕ Add post to your story',()=>toStory(p)],['✉️ Send in message',()=>toDM(p)],['🔗 Share link',()=>{const url=location.origin+'/?post='+p.id;atShare({title:'Gupzy',url});}]]);},true);
+ atShare({title:'Gupzy',text:'Check out this post by '+(p.channelName||'a creator')+' on Gupzy',url:location.origin+'/?post='+p.id});},true);
 /* open shared post from a DM */
 $('dmMsgs')&&$('dmMsgs').addEventListener('click',async e=>{const m=e.target.closest('[data-post]');if(!m)return;const p=await getPost(m.dataset.post);if(p&&window.__ig&&window.__ig.openPost)window.__ig.openPost(p);else toast('Post no longer available');});
 })();

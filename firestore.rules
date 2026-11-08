@@ -156,7 +156,7 @@ service cloud.firestore {
         isAdmin()
         // owner edits (title, desc, boost, name/logo sync ...) but never counters / identity
         || (resource.data.channelId == me()
-            && !changed().hasAny(['views', 'likesCount', 'commentsCount', 'sharesCount', 'watchCount', 'watchPctSum', 'skipsCount', 'channelId', 'createdAt', 'status', 'reviewedBy', 'reviewedAt', 'rejectReason']))
+            && !changed().hasAny(['views', 'likesCount', 'commentsCount', 'sharesCount', 'watchCount', 'watchPctSum', 'skipsCount', 'channelId', 'createdAt', 'status', 'reviewedBy', 'reviewedAt', 'rejectReason', 'videoURL']))
         // likes counter: +1 only with my like doc, -1 only after my like doc is gone
         || (changed().hasOnly(['likesCount'])
             && ((delta('likesCount') == 1  &&  existsAfter(videoLikePath(me(), vid)))
@@ -242,6 +242,11 @@ service cloud.firestore {
 
       allow update: if signedIn() && (
         isAdmin()
+        // owner, while the post is still a draft (detailsDone == false): fill in media, caption, tags, tagged people, time capsule -- once detailsDone is true the media is locked
+        || (resource.data.uid == me()
+            && resource.data.get('detailsDone', true) == false
+            && request.resource.data.get('status', '') == 'pending'
+            && changed().hasOnly(['caption', 'tags', 'media', 'tagged', 'taggedUids', 'unlockAt', 'capsule', 'detailsDone']))
         // owner: edit caption only (+ lower commentsCount when deleting comments)
         || (resource.data.uid == me()
             && changed().hasOnly(['caption', 'tags', 'edited', 'commentsCount'])
