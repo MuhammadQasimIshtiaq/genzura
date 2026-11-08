@@ -327,6 +327,28 @@ html #boot::before,html #boot::after,html.in-apk #boot::before,html.in-apk #boot
 html #boot img{position:relative;z-index:1;opacity:0;visibility:visible!important;animation:gzwPop .5s cubic-bezier(.2,.9,.3,1.1) .85s both!important;filter:drop-shadow(0 0 10px rgba(138,59,255,.5))}
 @media (prefers-reduced-motion:reduce){html #boot img{animation:none!important;opacity:1}}
 </style>
+<style id="stPgCss">
+#stPg{z-index:60;overflow-y:auto;-webkit-overflow-scrolling:touch}
+#stPg .stTop{display:flex;align-items:center;gap:8px;padding:10px 8px 6px;position:sticky;top:0;background:var(--bg);z-index:2}
+#stPg .stTop .t{font-size:22px;font-weight:600}
+#stPg .stHero{display:flex;flex-direction:column;align-items:center;padding:18px 16px 14px}
+#stPg .stHero .big{width:104px;height:104px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;color:#fff;font-size:42px;font-weight:700;background:#888}
+#stPg .stHero .big img{width:100%;height:100%;object-fit:cover}
+#stPg .stHero .nm{font-size:26px;font-weight:700;margin-top:14px}
+#stPg .stHero .hd{font-size:15px;color:var(--dim);margin-top:2px}
+#stPg .stSec{padding:18px 18px 6px;font-size:15px;color:var(--dim);font-weight:600}
+#stPg .stRow{display:flex;align-items:center;gap:16px;padding:13px 18px;cursor:pointer;min-height:56px}
+#stPg .stRow:active{background:var(--surface)}
+#stPg .stRow .ic{width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:22px;flex:none}
+#stPg .stRow .tx{flex:1;min-width:0}
+#stPg .stRow .tt{font-size:17px}
+#stPg .stRow .ss{font-size:14px;color:var(--dim);margin-top:1px}
+#stPg .stRow .ck{font-size:22px;color:var(--text)}
+#stPg .stRow.nocur{cursor:default}
+#gcMenuAd{margin:18px 12px 12px}
+#gcMenuAd .ah{font-size:12px;color:var(--dim);font-weight:600;padding:0 4px 6px}
+#gcMenuAd .gz-adhole{width:100%;height:250px;border-radius:12px;background:var(--surface);overflow:hidden}
+</style>
 </head>
 <body>
 <div id="boot"><img src="/gupchats/gupchats-emblem.png" alt=""></div>
@@ -377,6 +399,8 @@ html #boot img{position:relative;z-index:1;opacity:0;visibility:visible!importan
     <button id="n3" aria-label="Menu"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
   </nav>
 </div>
+
+<div id="stPg" class="screen hidden"></div>
 
 <div id="chat" class="screen hidden">
   <div class="top">
@@ -1543,28 +1567,91 @@ function renderMenu(){
     +'<div class="card" id="mSet"><div class="ic">⚙️</div>Settings &amp; privacy</div>'
     +'<div class="card" id="mOut"><div class="ic">↩️</div>Sign out</div><hr>'
     +'<div class="sec">Also from Gupzy</div>'
-    +'<div class="card" id="mGz"><div class="ic">▶️</div>Gupzy</div>';
+    +'<div class="card" id="mGz"><div class="ic">▶️</div>Gupzy</div>'
+    +'<div id="gcMenuAd"><div class="ah">Sponsored</div><div class="gz-adhole"></div></div>';
+  gcBannerMount($('gcMenuAd'), function(){ return curTab===3 && !cur && $('stPg').classList.contains('hidden') && !document.querySelector('.sheetbg'); });
   $('mOut').onclick=signOut;
   $('mSet').onclick=openSettings;
   $('mGz').onclick=function(){ var u='https://gupzy.com/'; try{ if(window.AndroidAuth && window.AndroidAuth.openExternal){ window.AndroidAuth.openExternal(u); return; } }catch(e){} window.open(u,'_blank'); };
 }
+/* ---------------- banner ad (Android app only: needs window.AndroidAdBridge) ---------------- */
+function gcBannerMount(host, activeFn){
+  var B=window.AndroidAdBridge; if(!B||!host) return;
+  var hole=host.querySelector('.gz-adhole'); if(!hole) return;
+  if(host._gcAd){ return; } host._gcAd=1;
+  var kind=B.registerBannerSlot?'banner':'native', id='gcmenu_'+kind+'_'+Date.now(), reg=false, last='';
+  host.style.display='none';
+  function tick(){
+    if(!host.isConnected){ try{ B.unregisterAdSlot(id); }catch(e){} return; }
+    var act=false; try{ act=!!activeFn(); }catch(e){}
+    var r=hole.getBoundingClientRect(), nav=document.querySelector('nav'), hd=document.querySelector('#tMenu .hdr');
+    var top=hd?Math.round(hd.getBoundingClientRect().bottom):0, bot=nav?Math.round(nav.getBoundingClientRect().top):window.innerHeight;
+    var vis=act && r.width>0 && r.height>0 && r.bottom>top+2 && r.top<bot-2;
+    if(act) host.style.display='';
+    if(!reg && act && r.width>0){ reg=true; try{ if(kind==='banner') B.registerBannerSlot(id); else B.registerAdSlot(id); }catch(e){} }
+    if(reg){
+      var x=Math.round(r.left), y=Math.round(r.top), w=Math.round(r.width), h=Math.round(r.height), key=x+','+y+','+w+','+h+','+vis+','+top+','+bot;
+      if(key!==last){ last=key; try{ if(B.updateAdRectClipped) B.updateAdRectClipped(id,x,y,w,h,vis,top,bot); else B.updateAdRect(id,x,y,w,h,vis); }catch(e){} }
+    }
+    if(act) requestAnimationFrame(tick); else setTimeout(tick,300);
+  }
+  window.__adSlotFailed=window.__adSlotFailed||function(i){ if(i===id) host.style.display='none'; };
+  window.__adSlotLoaded=window.__adSlotLoaded||function(i){ if(i===id) host.style.display=''; };
+  setTimeout(tick,50);
+}
+
+/* ---------------- Settings page ---------------- */
+function openExt(u){ try{ if(window.AndroidAuth && window.AndroidAuth.openExternal){ window.AndroidAuth.openExternal(u); return; } }catch(e){} window.open(u,'_blank'); }
+function closeStPg(){ var p=$('stPg'); if(p){ p.classList.add('hidden'); p.innerHTML=''; } }
 function openSettings(){
-  var native=!!(window.AndroidPush && window.AndroidPush.request);
-  var bg=sheet('<div class="sh-t">Settings &amp; privacy</div>'
-    +'<div class="setrow" style="border-top:0"><div class="rb"><div class="rn">Show when I\u2019m online</div><div class="rs">If off, you also won\u2019t see when others are online or their last seen.</div></div><label class="sw"><input type="checkbox" id="stOnl"'+(presHidden?'':' checked')+'><i></i></label></div>'
-    +(native?'<div class="setrow"><div class="rb"><div class="rn">Message notifications</div><div class="rs">Get notified when a friend messages you.</div></div><button class="btn gray" id="stNot">Enable</button></div>':'')
-    +'<div class="setrow"><div class="rb"><div class="rn">Chat backup</div><div class="rs" id="stBkS">'+(backupState==='on'?'On \u2013 same backup as Gupzy. Restore your messages on a new phone with your backup password.':'Off \u2013 if you uninstall the app or lose this phone, older messages cannot be read again. One backup covers Gupzy and Gupchats.')+'</div></div><button class="btn gray" id="stBk">'+(backupState==='on'?'Change':'Turn on')+'</button></div>'
-    +'<p class="sh-p" style="margin-top:12px">Messages, photos and voice messages are end-to-end encrypted. Only you and your friend can read them.</p>'
-    +'<button class="btn gray" style="width:100%;padding:13px" id="stClose">Close</button>');
-  bg.onclick=function(e){ if(e.target===bg) bg.remove(); };
-  bg.querySelector('#stClose').onclick=function(){ bg.remove(); };
-  bg.querySelector('#stOnl').onchange=function(){
-    presHidden=!this.checked;
+  var native=!!(window.AndroidPush && window.AndroidPush.request), p=$('stPg');
+  var hero=/^https?:\/\//.test(me.logo||'') ? '<img src="'+esc(me.logo)+'" alt="">' : esc(initials(me.name));
+  var bgc=/^https?:\/\//.test(me.logo||'') ? 'transparent' : color(me.name);
+  function row(id,ic,tt,ss,extra){ return '<div class="stRow" id="'+id+'"><div class="ic">'+ic+'</div><div class="tx"><div class="tt">'+tt+'</div>'+(ss?'<div class="ss">'+ss+'</div>':'')+'</div>'+(extra||'')+'</div>'; }
+  p.innerHTML=
+    '<div class="stTop"><button class="iconbtn" id="stBack" aria-label="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button><div class="t">Settings</div></div>'
+   +'<div class="stHero"><div class="big" style="background:'+bgc+'">'+hero+'</div><div class="nm">'+esc(me.name)+'</div>'+(me.handle?'<div class="hd">@'+esc(me.handle)+'</div>':'')+'</div>'
+   +'<div class="stSec">Accounts</div>'
+   +'<div class="stRow nocur"><div class="ic">'+av(me.logo,me.name)+'</div><div class="tx"><div class="tt">'+esc(me.name)+'</div><div class="ss">Signed in</div></div><div class="ck">✓</div></div>'
+   +row('stOut','↩️','Sign out','')
+   +'<div class="stSec">Profile</div>'
+   +row('stAct','🟢','Active status','<span id="stActS">'+(presHidden?'Off':'On')+'</span>','<label class="sw"><input type="checkbox" id="stOnl"'+(presHidden?'':' checked')+'><i></i></label>')
+   +row('stUser','@','Username',me.handle?'@'+esc(me.handle):'Set in Gupzy')
+   +'<div class="stSec">Preferences</div>'
+   +(native?row('stNot','🔔','Notifications &amp; sounds','Get notified when a friend messages you'):'')
+   +row('stBk','☁️','Chat backup',backupState==='on'?'On – same backup as Gupzy':'Off – tap to turn on')
+   +row('stPriv','🔒','Privacy &amp; safety','Messages are end-to-end encrypted')
+   +'<div class="stSec">Safety</div>'
+   +row('stRep','⚠️','Report technical problem','')
+   +row('stHelp','❓','Help','')
+   +row('stLegal','📄','Legal &amp; policies','')
+   +'<div style="height:30px"></div>';
+  p.classList.remove('hidden'); p.scrollTop=0;
+  p.querySelector('#stBack').onclick=closeStPg;
+  p.querySelector('#stOut').onclick=function(){ closeStPg(); signOut(); };
+  var cb=p.querySelector('#stOnl');
+  function setAct(on){
+    presHidden=!on; cb.checked=on; p.querySelector('#stActS').textContent=on?'On':'Off';
     try{ localStorage.setItem('gc_hide_online_'+me.uid, presHidden?'1':'0'); }catch(e){}
     beat(!presHidden); refreshPresenceUI();
+  }
+  cb.onclick=function(e){ e.stopPropagation(); };
+  cb.onchange=function(){ setAct(cb.checked); };
+  p.querySelector('#stAct').onclick=function(e){ if(e.target===cb) return; setAct(!cb.checked); };
+  p.querySelector('#stUser').onclick=function(){ toast('Change your username in Gupzy → Edit profile'); };
+  var nb=p.querySelector('#stNot'); if(nb) nb.onclick=function(){ try{ window.AndroidPush.request('notif'); }catch(e){} setTimeout(saveNativeToken,1500); };
+  p.querySelector('#stBk').onclick=function(){ backupSheet(false); };
+  p.querySelector('#stPriv').onclick=function(){
+    var bg=sheet('<div class="sh-t">Privacy &amp; safety</div><p class="sh-p">Messages, photos and voice messages are end-to-end encrypted. Only you and your friend can read them.</p><p class="sh-p">If off, “Active status” also hides when others are online and their last seen.</p><button class="btn gray" style="width:100%;padding:13px" id="pvClose">Close</button>');
+    bg.onclick=function(e){ if(e.target===bg) bg.remove(); }; bg.querySelector('#pvClose').onclick=function(){ bg.remove(); };
   };
-  var nb=bg.querySelector('#stNot'); if(nb) nb.onclick=function(){ try{ window.AndroidPush.request('notif'); }catch(e){} setTimeout(saveNativeToken,1500); };
-  bg.querySelector('#stBk').onclick=function(){ bg.remove(); backupSheet(false); };
+  p.querySelector('#stRep').onclick=function(){ openExt('mailto:araintubesupport@gmail.com?subject='+encodeURIComponent('Gupchats - technical problem')); };
+  p.querySelector('#stHelp').onclick=function(){ openExt('https://gupzy.com/contact.html'); };
+  p.querySelector('#stLegal').onclick=function(){
+    var bg=sheet('<div class="sh-t">Legal &amp; policies</div><div class="card" id="lgP">Privacy policy</div><div class="card" id="lgT">Terms of service</div><button class="btn gray" style="width:100%;padding:13px;margin-top:8px" id="lgC">Close</button>');
+    bg.onclick=function(e){ if(e.target===bg) bg.remove(); }; bg.querySelector('#lgC').onclick=function(){ bg.remove(); };
+    bg.querySelector('#lgP').onclick=function(){ openExt('https://gupzy.com/privacy.html'); }; bg.querySelector('#lgT').onclick=function(){ openExt('https://gupzy.com/terms.html'); };
+  };
 }
 
 /* ---------------- picker (new message) ---------------- */
@@ -2525,6 +2612,7 @@ window.__gcBack=function(){
   if(!$('sv').classList.contains('hidden')){ svClose(); return true; }
   if(!$('sc').classList.contains('hidden')){ if(!SC.posting) $('sc').classList.add('hidden'); return true; }
   var sh=document.querySelector('.sheetbg'); if(sh){ sh.remove(); return true; }
+  if($('stPg') && !$('stPg').classList.contains('hidden')){ closeStPg(); return true; }
   if(!$('grpNew').classList.contains('hidden')){ $('grpNew').classList.add('hidden'); return true; }
   if(!$('picker').classList.contains('hidden')){ $('picker').classList.add('hidden'); return true; }
   if(cur){ closeChat(); return true; }

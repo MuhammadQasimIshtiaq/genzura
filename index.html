@@ -1342,8 +1342,10 @@ html #bootLoading .boot-logo{position:relative;z-index:1;opacity:0;visibility:vi
         <div class="pf-actions">
           <button class="pf-pill" id="pfEditPill">Edit profile</button>
           <button class="pf-pill hidden" id="pfAdminPill"><svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>Admin Panel</button>
+          <button class="pf-pill" id="pfSharePill"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>Share</button>
           <button class="pf-pill" id="pfEarnPill"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5a2.5 2.5 0 0 1 2.5-1.5h.5a2.5 2.5 0 0 1 0 5h-1a2.5 2.5 0 0 0 0 5H12a2.5 2.5 0 0 0 2.5-1.5"/></svg>Earn</button>
         </div>
+        <div class="gz-adpost gz-pfad" id="gzPfAd" style="display:none"><div class="ah">Sponsored<small>Ad</small></div><div class="gz-adhole banner"></div></div>
         <div class="pf-tabs" id="profileTabs">
           <button class="pf-tab active" data-ptab="reels" aria-label="Reels"><svg viewBox="0 0 24 24"><line x1="6" y1="5" x2="6" y2="19"/><line x1="12" y1="5" x2="12" y2="19"/><line x1="18" y1="5" x2="18" y2="19"/></svg></button>
           <button class="pf-tab" data-ptab="private" aria-label="Private videos"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></button>
@@ -4409,7 +4411,7 @@ document.addEventListener('click', e=>{
 const sheetBackdrop = document.getElementById('sheetBackdrop');
 document.getElementById('plusBtn').addEventListener('click', ()=>{
   if(!requireAuth()) return;
-  sheetBackdrop.classList.add('show');
+  if(window.gzOpenCreatePg) window.gzOpenCreatePg(); else sheetBackdrop.classList.add('show');
   document.querySelectorAll('#shortsScroll video').forEach(v=> v.pause());
 });
 function resumeVisibleShortIfOnReelsTab(){
@@ -8356,7 +8358,7 @@ $('igThumbs').addEventListener('click',e=>{
   const r=e.target.closest('[data-r]');if(r){const i=+r.dataset.r;URL.revokeObjectURL(files[i].url);files.splice(i,1);sel=Math.min(sel,files.length-1);if(sel<0)sel=0;return renderNew();}
   const t=e.target.closest('[data-i]');if(t){sel=+t.dataset.i;renderNew();}
 });
-$('igNx').onclick=closeNew;
+$('igNx').onclick=closeNew;window.__gzOpenNew=openNew;
 function shrink(file){return new Promise((res,rej)=>{const img=new Image();const u=URL.createObjectURL(file);img.onload=()=>{const M=1600;let w=img.naturalWidth,h=img.naturalHeight;const k=Math.min(1,M/Math.max(w,h));w=Math.round(w*k);h=Math.round(h*k);const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);c.toBlob(b=>{URL.revokeObjectURL(u);b?res(b):rej(new Error('compress'));},'image/jpeg',0.86);};img.onerror=()=>{URL.revokeObjectURL(u);rej(new Error('decode'));};img.src=u;});}
 $('igShare').onclick=async()=>{
   if(busy||!files.length)return;
@@ -15255,5 +15257,108 @@ document.addEventListener('pointerdown',function(e){
  }catch(_){}
 },{passive:true});
 })();</script>
+<style id="gzCreatePgCss">
+  #gzCp{z-index:85;background:var(--bg);color:var(--text);overflow-y:auto;-webkit-overflow-scrolling:touch}
+  #gzCp .cp-h{display:flex;align-items:center;gap:14px;padding:14px 16px 10px}
+  #gzCp .cp-x{width:40px;height:40px;border-radius:50%;border:0;background:none;color:var(--text);display:flex;align-items:center;justify-content:center;padding:0}
+  #gzCp .cp-x svg{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round}
+  #gzCp .cp-t{font-size:22px;font-weight:700;line-height:1.15} #gzCp .cp-s{font-size:14px;color:var(--text-dim);margin-top:2px}
+  #gzCp .cp-bar{display:flex;gap:6px;padding:0 16px 14px} #gzCp .cp-bar i{flex:1;height:4px;border-radius:2px;background:var(--surface3)} #gzCp .cp-bar i:first-child{background:var(--accent2)}
+  #gzCp .cp-q{font-size:21px;font-weight:700;padding:4px 16px 12px}
+  #gzCp .cp-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 16px}
+  #gzCp .cp-tile{border:0;border-radius:20px;background:var(--surface2);color:var(--text);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:22px 8px;font-size:17px;font-weight:700;min-height:118px}
+  #gzCp .cp-tile:active{background:var(--surface3)}
+  #gzCp .cp-ic{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;background:rgba(74,92,255,.14)}
+  #gzCp .cp-ic svg{width:24px;height:24px;stroke:var(--accent2);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  #gzCp .cp-ic.v{background:rgba(255,106,61,.16)} #gzCp .cp-ic.v svg{stroke:#ff6a3d}
+  #gzCp .cp-story{display:flex;align-items:center;justify-content:center;gap:8px;margin:12px 16px 0;padding:13px;border-radius:16px;background:var(--surface2);border:0;color:var(--text);font-size:16px;font-weight:600;width:calc(100% - 32px)}
+  #gzCp .gz-adpost{margin:18px 16px 24px;padding:0;border:0} #gzCp .gz-adpost .ah{padding:0 2px 8px;color:var(--text-dim)}
+  #gzCp .gz-adhole.banner{height:250px;border-radius:12px;overflow:hidden}
+  .gz-pfad{margin:14px 0 0 !important}
+</style>
+<script id="gzCreatePgJs">
+/* Plus button -> full-screen "Create post" page (Photo / Camera / Video / Text) with a banner ad below (Android app only).
+   Profile page: banner ad between the buttons and the tabs. Same AdMob bridge protocol as the feed ads. */
+(function(){
+  function $(i){return document.getElementById(i);}
+  var root=$('root'); if(!root) return;
+  var ic={
+    photo:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg>',
+    cam:'<svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.6"/></svg>',
+    vid:'<svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="3"/><path d="M16 10.5l5-3v9l-5-3z"/></svg>',
+    txt:'<svg viewBox="0 0 24 24"><path d="M5 6V4h14v2M12 4v16M9 20h6"/></svg>',
+    st:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/><path d="M12 8v8M8 12h8"/></svg>'
+  };
+  root.insertAdjacentHTML('beforeend',
+   '<div class="ig-ov" id="gzCp">'
+   +'<div class="ig-ov-h cp-h" style="border:0;padding:14px 16px 10px;justify-content:flex-start"><button class="cp-x" id="gzCpX" aria-label="Close"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button><div><div class="cp-t">Create post</div><div class="cp-s">Step 1 of 4</div></div></div>'
+   +'<div class="cp-bar"><i></i><i></i><i></i><i></i></div>'
+   +'<div class="cp-q">What do you want to share?</div>'
+   +'<div class="cp-grid">'
+   +'<button class="cp-tile" id="gzCpPhoto"><span class="cp-ic">'+ic.photo+'</span>Photo</button>'
+   +'<button class="cp-tile" id="gzCpCam"><span class="cp-ic">'+ic.cam+'</span>Camera</button>'
+   +'<button class="cp-tile" id="gzCpVid"><span class="cp-ic v">'+ic.vid+'</span>Video</button>'
+   +'<button class="cp-tile" id="gzCpTxt"><span class="cp-ic">'+ic.txt+'</span>Text</button>'
+   +'</div>'
+   +'<button class="cp-story" id="gzCpStory"><span class="cp-ic" style="width:28px;height:28px;border-radius:9px;background:none">'+ic.st.replace('<svg','<svg style="width:22px;height:22px;stroke:var(--accent2);fill:none;stroke-width:2;stroke-linecap:round"')+'</span>Create Story</button>'
+   +'<div class="gz-adpost" id="gzCpAd" style="display:none"><div class="ah">Sponsored<small>Ad</small></div><div class="gz-adhole banner"></div></div>'
+   +'</div>');
+  var pg=$('gzCp');
+  function open(){ pg.classList.add('show'); pg.scrollTop=0; }
+  function close(){ pg.classList.remove('show'); }
+  window.gzOpenCreatePg=open;
+  $('gzCpX').onclick=close;
+  function viaNew(mode){
+    close();
+    try{ window.__gzOpenNew(); }catch(e){ return; }
+    var f=$('igFile'); if(!f) return;
+    if(mode==='photo'){ f.accept='image/*'; f.removeAttribute('capture'); }
+    else if(mode==='cam'){ f.accept='image/*,video/*'; f.setAttribute('capture','environment'); }
+    setTimeout(function(){ f.click(); setTimeout(function(){ f.accept='image/*,video/*'; f.removeAttribute('capture'); },1500); },60);
+  }
+  $('gzCpPhoto').onclick=function(){ viaNew('photo'); };
+  $('gzCpCam').onclick=function(){ viaNew('cam'); };
+  $('gzCpVid').onclick=function(){ close(); var b=$('sheetShort'); if(b) b.click(); };
+  $('gzCpStory').onclick=function(){ close(); var b=$('sheetStory'); if(b) b.click(); };
+  $('gzCpTxt').onclick=function(){ try{ toast('Text posts are coming soon'); }catch(e){} };
+  /* the sheet's own handlers only close the old sheet; make sure it never stays open */
+  var sb=$('sheetBackdrop'); if(sb) new MutationObserver(function(){ if(sb.classList.contains('show')) sb.classList.remove('show'); }).observe(sb,{attributes:true,attributeFilter:['class']});
+
+  /* ---- banner ads (Android app only) ---- */
+  var seq=0, _of=window.__adSlotFailed, _ol=window.__adSlotLoaded;
+  window.__adSlotFailed=function(id){ try{ var h=_adSlides[id]; if(h && h.id && /^gz(Cp|Pf)Ad$/.test(h.id)) h._gzFail=1; }catch(e){} return _of && _of.apply(this,arguments); };
+  window.__adSlotLoaded=function(id){ try{ var h=_adSlides[id]; if(h && h.id && /^gz(Cp|Pf)Ad$/.test(h.id)) h._gzFail=0; }catch(e){} return _ol && _ol.apply(this,arguments); };
+  function adsOn(){ try{ return !!window.AndroidAdBridge && ADS_ENABLED && !isAdFree(); }catch(e){ return false; } }
+  function mountBanner(host, activeFn, boundsFn){
+    var B=window.AndroidAdBridge; if(!B || !adsOn() || host._gzAd) return; host._gzAd=1;
+    var hole=host.querySelector('.gz-adhole'), kind=B.registerBannerSlot?'banner':'native', id='gzbn_'+kind+'_'+(++seq), reg=false, last='';
+    if(kind==='native') hole.className='gz-adhole native';
+    try{ _adSlides[id]=host; }catch(e){}
+    function tick(){
+      if(!host.isConnected){ try{ B.unregisterAdSlot(id); }catch(e){} return; }
+      var act=false; try{ act=!!activeFn(); }catch(e){}
+      if(act && !host._gzFail) host.style.display='';
+      var r=hole.getBoundingClientRect(), bd=boundsFn(), vh=window.innerHeight;
+      var vis=act && r.width>0 && r.height>0 && r.bottom>bd.top+2 && r.top<bd.bottom-2;
+      if(!reg && act && r.width>0){ reg=true; try{ if(kind==='banner') B.registerBannerSlot(id); else B.registerAdSlot(id); }catch(e){} }
+      if(reg){
+        var x=Math.round(r.left), y=Math.round(r.top), w=Math.round(r.width), h=Math.round(r.height), key=x+','+y+','+w+','+h+','+vis+','+bd.top+','+bd.bottom;
+        if(key!==last){ last=key; try{ if(B.updateAdRectClipped) B.updateAdRectClipped(id,x,y,w,h,vis,bd.top,bd.bottom); else B.updateAdRect(id,x,y,w,h,vis); }catch(e){} }
+      }
+      if(act) requestAnimationFrame(tick); else setTimeout(tick,300);
+    }
+    setTimeout(tick,50);
+  }
+  function whenReady(fn,n){ if(window.AndroidAdBridge && typeof ADS_ENABLED!=='undefined') return fn(); if((n||0)<40) setTimeout(function(){ whenReady(fn,(n||0)+1); },250); }
+  whenReady(function(){
+    mountBanner($('gzCpAd'), function(){ return pg.classList.contains('show'); }, function(){ return {top:0,bottom:window.innerHeight}; });
+    mountBanner($('gzPfAd'), function(){ var v=$('profileView'); return v && v.classList.contains('active') && !document.querySelector('.ig-ov.show,.gz-ov,.gz-page'); }, function(){
+      var h=document.querySelector('#app > header'), n=document.querySelector('nav');
+      return { top:h?Math.round(h.getBoundingClientRect().bottom):0, bottom:n?Math.round(n.getBoundingClientRect().top):window.innerHeight };
+    });
+  });
+  var sp=$('pfSharePill'); if(sp) sp.onclick=function(){ var b=$('pfShareBtn'); if(b) b.click(); };
+})();
+</script>
 </body>
 </html>
