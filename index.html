@@ -1390,7 +1390,7 @@ html #bootLoading .boot-logo{position:relative;z-index:1;opacity:0;visibility:vi
       <svg class="close-x" id="uploadCloseBtn" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       <h3 id="uploadHeaderTitle">Video details</h3><div style="width:24px;"></div>
     </div>
-    <div class="up-preview"><video id="uploadPreviewVideo" muted playsinline controls></video></div>
+    <div class="up-preview" style="aspect-ratio:auto;background:var(--surface2,#1c1c24);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:22px 20px;"><div style="font-size:34px">🔒</div><div style="font-weight:800;font-size:15px">Video preview is off</div><div style="font-size:12.5px;color:var(--text-dim);line-height:1.5">For security every video is checked before anyone can play it. Your video is already being sent for review while you fill in the details.</div><video id="uploadPreviewVideo" muted playsinline style="display:none"></video></div>
     <div class="up-body">
       <div class="field"><label>Title *</label><input type="text" id="upTitle" placeholder="Enter video title"></div>
       <div class="field"><label>Description</label><textarea id="upDesc" placeholder="Tell viewers about your video..."></textarea><div class="word-count" id="upDescCount" style="font-size:11.5px;color:var(--text-dim);text-align:right;margin-top:4px;">0 / 300 words</div></div>
@@ -4860,7 +4860,6 @@ videoFileInput.addEventListener('change', e=>{
 
 function openUploadScreen(){
   document.getElementById('uploadHeaderTitle').textContent = 'Reel details';
-  uploadPreviewVideo.src = pending.url;
   document.getElementById('upTitle').value = '';
   document.getElementById('upDesc').value = '';
   document.getElementById('upOwn').checked = false;
@@ -4885,22 +4884,8 @@ function openUploadScreen(){
   pending.chosenThumbBlob = null; pending.chosenThumbUrl = null;
   uploadScreen.classList.add('show');
 
-  const scrubVideo = document.getElementById('thumbScrubVideo');
-  const slider = document.getElementById('thumbScrubSlider');
-  scrubVideo.src = pending.url;
-  slider.value = 0;
-
-  scrubVideo.addEventListener('loadedmetadata', function onMeta(){
-    scrubVideo.removeEventListener('loadedmetadata', onMeta);
-    const dur = isFinite(scrubVideo.duration) ? scrubVideo.duration : 5;
-    scrubVideo.currentTime = dur * 0.05;
-    captureThumbFromScrub(true); /* default thumbnail near the start */
-  });
-  slider.addEventListener('input', ()=>{
-    const dur = isFinite(scrubVideo.duration) ? scrubVideo.duration : 5;
-    scrubVideo.currentTime = (slider.value/1000) * dur;
-  });
-  document.getElementById('thumbUseFrameBtn').onclick = ()=> captureThumbFromScrub(true);
+  /* early review: the video starts uploading and goes to the admin right now, while the user fills in the details */
+  if(!pending.job) pending.job = startEarlyUpload(pending.file, pending.kind);
 }
 
 function captureThumbFromScrub(setAsChosen){
@@ -4965,13 +4950,19 @@ document.querySelectorAll('#upVisibilityRow .radio-opt').forEach(r=>{
   r.addEventListener('click', ()=>{ document.querySelectorAll('#upVisibilityRow .radio-opt').forEach(o=>o.classList.remove('sel')); r.classList.add('sel'); });
 });
 document.getElementById('uploadCloseBtn').addEventListener('click', closeUploadScreen);
-function closeUploadScreen(){ uploadScreen.classList.remove('show'); uploadPreviewVideo.pause(); uploadPreviewVideo.src=''; }
+function closeUploadScreen(){
+  uploadScreen.classList.remove('show'); try{ uploadPreviewVideo.pause(); }catch(e){} uploadPreviewVideo.removeAttribute('src');
+  /* closed without publishing: the draft that was already sent for review is withdrawn */
+  if(pending && pending.job && !pending.job.published){ try{ pending.job.detailsResolve(null); }catch(e){} }
+  if(pending) pending.job = null;
+}
 
 document.getElementById('upPublishBtn').addEventListener('click', ()=>{
   const title = document.getElementById('upTitle').value.trim(); if(!title) return;
   if(!document.getElementById('upOwn').checked){ toast('Please confirm you own this content'); return; }
+  let job = pending.job;
+  if(!job || job.failed) job = startEarlyUpload(pending.file, pending.kind);   /* the early upload failed: start again now */
   const uploadData = {
-    file: pending.file,
     thumbBlob: null,   /* thumbnail can only be set after approval */
     kind: pending.kind,
     title,
@@ -4981,11 +4972,12 @@ document.getElementById('upPublishBtn').addEventListener('click', ()=>{
     previewThumbUrl: pending.chosenThumbUrl || null,
     boost: !!pending.boost
   };
+  job.published = true;
   closeUploadScreen();
   document.querySelectorAll('.nav-btn[data-view]').forEach(b=>b.classList.toggle('active', b.dataset.view==='profileView'));
   document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active', v.id==='profileView'));
-  toast('Uploading in the background — you can keep using the app');
-  runBackgroundUpload(uploadData);
+  toast('Sending for review — you can keep using the app');
+  job.detailsResolve(uploadData);
 });
 
 /* ================================================================
@@ -5155,46 +5147,65 @@ function vcProbe(file){
   });
 }
 
-async function runBackgroundUpload(u){
-  const placeholderId = 'pending_' + Date.now();
-  const item = { id: placeholderId, title: u.title, thumbUrl: u.previewThumbUrl, status: 'Uploading…' };
+function startEarlyUpload(file, kind){
+  const job = { file, kind, published:false, failed:false, detailsResolve:null };
+  job.detailsP = new Promise(res=>{ job.detailsResolve = res; });   /* resolves with the details, or null if the user backs out */
+  runBackgroundUpload(job);
+  return job;
+}
+async function runBackgroundUpload(job){
+  const placeholderId = 'pending_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+  const item = { id: placeholderId, title: 'New ' + (job.kind==='short' ? 'reel' : 'video'), thumbUrl: null, status: 'Uploading…' };
   pendingUploads.push(item);
   renderPendingUploads();
+  let docRef = null;
   try{
     const ts = Date.now();
-    let fileToUpload = u.file;
+    let fileToUpload = job.file;
     let ext = 'mp4';
 
     item.status = 'Compressing 0%'; renderPendingUploads();
-    const pr = await smartCompressVideo(u.file, 'upload', pct=>{ item.status = `Compressing ${pct}%`; renderPendingUploads(); });
+    const pr = await smartCompressVideo(job.file, 'upload', pct=>{ item.status = `Compressing ${pct}%`; renderPendingUploads(); });
     fileToUpload = pr.file; ext = pr.ext;
-    if(!pr.compressed){ const oe = ((u.file.name||'').split('.').pop()||'').toLowerCase(); if(/^(mp4|m4v|mov|mkv|avi|wmv|flv|webm|3gp|3g2|mpg|mpeg|mts|m2ts|ts|ogv|ogg|vob|mxf|asf|f4v)$/.test(oe)) ext = oe; }
+    if(!pr.compressed){ const oe = ((job.file.name||'').split('.').pop()||'').toLowerCase(); if(/^(mp4|m4v|mov|mkv|avi|wmv|flv|webm|3gp|3g2|mpg|mpeg|mts|m2ts|ts|ogv|ogg|vob|mxf|asf|f4v)$/.test(oe)) ext = oe; }
     item.status = 'Uploading…'; renderPendingUploads();
 
     let videoURL = await uploadToCloudinary(fileToUpload, 'video', null, `video_${currentUser.uid}_${ts}.${ext}`);
     /* other formats (mov, mkv, avi …) are stored as uploaded; ask Cloudinary for the web-playable MP4 version of it */
     if(videoURL && videoURL.includes('/video/upload/') && !/\.(mp4|webm)(\?.*)?$/i.test(videoURL)) videoURL = videoURL.replace(/\.[a-z0-9]+(\?.*)?$/i, '.mp4');
     let thumbURL = null;
-    if(u.thumbBlob){
-      thumbURL = await uploadToCloudinary(u.thumbBlob, 'image', null, `thumb_${currentUser.uid}_${ts}.jpg`);
-    }
-    if(!thumbURL && videoURL && videoURL.includes('/video/upload/')){
-      /* no usable local thumbnail: let Cloudinary cut one frame (second 1) out of the uploaded video */
+    if(videoURL && videoURL.includes('/video/upload/')){
+      /* no thumbnail can be set at upload: let Cloudinary cut one frame (second 1) out of the uploaded video */
       thumbURL = videoURL.replace('/video/upload/', '/video/upload/so_1,f_jpg,q_auto,w_540/').replace(/\.[a-z0-9]+(\?.*)?$/i, '.jpg');
     }
-    await db.collection('videos').add({
-      title: u.title, desc: u.desc, category: u.category, visibility: u.visibility, kind: u.kind,
+    /* goes to the admin's Review list right away (status pending); details:false = the user is still filling them in */
+    docRef = await db.collection('videos').add({
+      title: 'New ' + (job.kind==='short' ? 'reel' : 'video'), desc: '', category: (currentChannel && currentChannel.category) || '', visibility: 'Public', kind: job.kind,
       thumbURL, videoURL,
       channelId: currentUser.uid,
       channelName: currentChannel.name,
       channelLogo: currentChannel.logoURL || null,
       views: 0,
       status: 'pending',
-      ...((u.kind==='short' && u.boost) ? { reelBoostUntil: Date.now() + 5*60*1000 } : {}),
+      detailsDone: false,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
-    toast((u.kind==='short' ? 'Reel' : 'Video') + ' sent for review ⏳ — it goes public once approved');
+    item.status = 'Waiting for your details…'; renderPendingUploads();
+    const d = await job.detailsP;
+    if(!d){
+      /* the user closed the details screen: withdraw the draft */
+      try{ await docRef.delete(); }catch(e){ console.warn('draft delete', e); }
+      return;
+    }
+    item.title = String(d.title).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); item.status = 'Sending for review…'; renderPendingUploads();
+    await docRef.update({
+      title: d.title, desc: d.desc, category: d.category, visibility: d.visibility, detailsDone: true,
+      ...((d.kind==='short' && d.boost) ? { reelBoostUntil: Date.now() + 5*60*1000 } : {})
+    });
+    toast((d.kind==='short' ? 'Reel' : 'Video') + ' sent for review ⏳ — it goes public once approved');
   }catch(err){
+    job.failed = true;
+    if(docRef){ try{ await docRef.delete(); }catch(e){} }
     toast('Upload failed: ' + err.message);
   }finally{
     pendingUploads = pendingUploads.filter(p=>p.id !== placeholderId);
@@ -6094,7 +6105,7 @@ function gzRvWatch(){
     let init = true;
     gzRvUnsubs.push(db.collection(col).where('status','==','pending').onSnapshot(s=>{
       if(init){ init = false; return; }
-      if(!s.docChanges().some(c=> c.type==='added')) return;
+      if(!s.docChanges().some(c=> c.type==='added' || c.type==='modified')) return;
       clearTimeout(gzRvT);
       gzRvT = setTimeout(()=>{
         const c = document.getElementById('adminReviewContainer');
@@ -6136,7 +6147,7 @@ async function loadAdminReview(){
           <div style="font-size:12.5px;color:var(--text-dim);">by ${aEsc(name)||'—'} · ${aEsc(timeAgo(it.createdAt))}</div>
           <div class="gz-ai" style="font-size:11.5px;margin-top:2px;color:var(--text-dim);"></div>
         </div>
-        <div style="font-size:12px;font-weight:700;color:#f1c40f;white-space:nowrap;">Review</div>`;
+        <div style="font-size:12px;font-weight:700;color:#f1c40f;white-space:nowrap;">${it.detailsDone===false ? '⏳ details…' : 'Review'}</div>`;
       row.onclick = ()=> openReviewDetail(it);
       c.appendChild(row);
     });
@@ -6167,7 +6178,10 @@ function openReviewDetail(it){
     <button id="rvMinor" style="${btn}background:#f39c12;">Reject — minor (delete only this ${it._t})</button>
     <button id="rvSevere" style="${btn}background:#ff5c5c;">Reject — serious (suspend whole channel)</button>`;
   const reason = ()=> (document.getElementById('rvReason').value||'').trim() || 'Policy violation';
-  document.getElementById('rvApprove').onclick = ()=> gzRvDecide(it, 'approve', '');
+  if(it.detailsDone===false){
+    const ap = document.getElementById('rvApprove'); ap.disabled = true; ap.style.opacity = '.45'; ap.textContent = '⏳ User is still filling in the details — approve after that';
+    ap.onclick = null;
+  }else document.getElementById('rvApprove').onclick = ()=> gzRvDecide(it, 'approve', '');
   document.getElementById('rvMinor').onclick = async ()=>{ if(await gzConfirm()) gzRvDecide(it, 'minor', reason()); };
   document.getElementById('rvSevere').onclick = async ()=>{ if(await gzConfirm()) gzRvDecide(it, 'severe', reason()); };
 }
@@ -6357,6 +6371,7 @@ async function gzAiRun(all, c){
       const key = it._t + ':' + it.id;
       const row = c.querySelector('[data-k="'+key+'"]'); if(!row) continue;
       const tag = row.querySelector('.gz-ai');
+      if(it.detailsDone===false){ tag.textContent = '⏳ waiting for the user to finish the details'; continue; }
       if(GZ_AI.seen.has(key)){ if(GZ_AI.notes[key]) tag.innerHTML = GZ_AI.notes[key]; continue; }
       GZ_AI.seen.add(key); tag.textContent = '🤖 checking…';
       let r; try{ r = await gzAiCheck(it); }catch(e){ r = {verdict:'manual', why:'AI error'}; }
