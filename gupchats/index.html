@@ -1421,7 +1421,7 @@ $('scMusicBtn').onclick=function(){
 $('scMusicX').onclick=function(){ SC.music=null; SC.musicFile=null; stopMusicPrev(); try{ if(SC.type==='video') $('scVid').muted=false; }catch(e){} renderMusicBtn(); };
 
 /* ---------------- chats list ---------------- */
-function peerOf(c){ if(c.isGroup) return {uid:c.id,name:c.name||'Group',logo:c.logo||null,group:true,members:c.members||[]}; var o=(c.members||[]).filter(function(x){ return x!==me.uid; })[0]; var i=(c.info&&c.info[o])||chInfo.get(o)||{}; return {uid:o,name:i.name||'User',logo:i.logo||null}; }
+function peerOf(c){ if(c.isGroup) return {uid:c.id,name:c.name||'Group',logo:c.logo||null,group:true,members:c.members||[]}; var o=(c.members||[]).filter(function(x){ return x!==me.uid; })[0]; var i=(c.info&&c.info[o])||chInfo.get(o)||{}; return {uid:o,name:i.name||'User',logo:i.logo||null,nick:((c.nicks&&c.nicks[o])||'')}; }
 function startChats(){
   if(unsubChats) unsubChats();
   unsubChats = db.collection('chats').where('members','array-contains',me.uid).limit(200).onSnapshot(function(snap){
@@ -1436,12 +1436,12 @@ var pvCache=new Map();
 function renderChats(){
   var q=($('q').value||'').trim().toLowerCase();
   var list=Object.keys(chats).map(function(k){ return chats[k]; }).filter(function(c){ return !(c.isGroup && c.isTemp && c.expiresAt && c.expiresAt<Date.now()); }).sort(function(a,b){ return (ms(b.lastAt)||Date.now())-(ms(a.lastAt)||Date.now()); });
-  if(q) list=list.filter(function(c){ return peerOf(c).name.toLowerCase().indexOf(q)>=0; });
+  if(q) list=list.filter(function(c){ var pp=peerOf(c); return pp.name.toLowerCase().indexOf(q)>=0 || String(pp.nick||'').toLowerCase().indexOf(q)>=0; });
   if(chatFilter==='unread') list=list.filter(function(c){ return ((c.unread||{})[me.uid]||0)>0; }); else if(chatFilter==='groups') list=list.filter(function(c){ return c.isGroup; });
   var html=list.map(function(c){
     var p=peerOf(c), un=((c.unread||{})[me.uid]||0)>0;
     if(p.group) return '<div class="row'+(un?' unread':'')+'" data-grp="'+esc(c.id)+'"><div class="avw">'+av(p.logo,p.name)+'</div><div class="rb"><div class="rn">'+esc(p.name)+tmpTag(c)+'</div><div class="rs" data-pv="'+esc(c.id)+'">…</div></div><div class="rt">'+esc(fmtTime(c.lastAt))+'</div>'+(un?'<div class="ub"></div>':'')+'</div>';
-    return '<div class="row'+(un?' unread':'')+'" data-peer="'+esc(p.uid)+'">'+avw(p.uid,p.logo,p.name)+'<div class="rb"><div class="rn">'+esc(p.name)+'</div><div class="rs" data-pv="'+esc(c.id)+'">…</div></div><div class="rt">'+esc(fmtTime(c.lastAt))+'</div>'+(un?'<div class="ub"></div>':'')+'</div>';
+    return '<div class="row'+(un?' unread':'')+'" data-peer="'+esc(p.uid)+'">'+avw(p.uid,p.logo,p.name)+'<div class="rb"><div class="rn">'+esc(p.nick||p.name)+'</div><div class="rs" data-pv="'+esc(c.id)+'">…</div></div><div class="rt">'+esc(fmtTime(c.lastAt))+'</div>'+(un?'<div class="ub"></div>':'')+'</div>';
   }).join('');
   if(q){
     var inChat=new Set(list.filter(function(c){ return !c.isGroup; }).map(function(c){ return peerOf(c).uid; }));
@@ -1587,7 +1587,7 @@ function gcBannerMount(host, activeFn){
     var r=hole.getBoundingClientRect(), nav=document.querySelector('nav'), hd=document.querySelector('#tMenu .hdr');
     var top=hd?Math.round(hd.getBoundingClientRect().bottom):0, bot=nav?Math.round(nav.getBoundingClientRect().top):window.innerHeight;
     var vis=act && r.width>0 && r.height>0 && r.bottom>top+2 && r.top<bot-2;
-    if(act && !host._fail) host.style.display='';
+    if(act) host.style.display='';
     if(!reg && act && r.width>0){ reg=true; try{ if(kind==='banner') B.registerBannerSlot(id); else B.registerAdSlot(id); }catch(e){} }
     if(reg){
       var x=Math.round(r.left), y=Math.round(r.top), w=Math.round(r.width), h=Math.round(r.height), key=x+','+y+','+w+','+h+','+vis+','+top+','+bot;
@@ -1595,9 +1595,8 @@ function gcBannerMount(host, activeFn){
     }
     if(act) requestAnimationFrame(tick); else setTimeout(tick,300);
   }
-  var _f=window.__adSlotFailed, _l=window.__adSlotLoaded;
-  window.__adSlotFailed=function(i){ if(i===id){ host._fail=1; host.style.display='none'; } if(_f) return _f.apply(this,arguments); };
-  window.__adSlotLoaded=function(i){ if(i===id){ host._fail=0; host.style.display=''; } if(_l) return _l.apply(this,arguments); };
+  window.__adSlotFailed=window.__adSlotFailed||function(i){ if(i===id) host.style.display='none'; };
+  window.__adSlotLoaded=window.__adSlotLoaded||function(i){ if(i===id) host.style.display=''; };
   setTimeout(tick,50);
 }
 
