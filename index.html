@@ -1902,8 +1902,8 @@ function atFn(name){ return AT_API_BASE ? AT_API_BASE.replace(/\/+$/, '') + '/' 
 /* Views are saved straight from the phone (no country). Empty = this built-in behaviour. */
 const AT_VIEWS_BASE = 'https://arain-api.muhammadqasimishtiaq0604.workers.dev';
 /* TURN credentials are cached on the phone for 12 h, so the Netlify "turn" function runs ~2x a day per user instead of on every app open / call */
-function iceCacheGet(){ try{ const o = JSON.parse(localStorage.getItem('at_ice') || 'null'); return (o && o.v && Date.now() - o.t < 12*3600*1000) ? o.v : null; }catch(e){ return null; } }
-function iceCacheSet(v){ try{ localStorage.setItem('at_ice', JSON.stringify({ t: Date.now(), v })); }catch(e){} }
+function iceCacheGet(){ try{ const o = JSON.parse(localStorage.getItem('at_ice2') || 'null'); return (o && o.v && Date.now() - o.t < 12*3600*1000) ? o.v : null; }catch(e){ return null; } }
+function iceCacheSet(v){ try{ localStorage.setItem('at_ice2', JSON.stringify({ t: Date.now(), v })); }catch(e){} }
 /* ---- badges everywhere: any element with data-bduid="<uid>" gets that channel's badges (admin / blue / silver / gold / diamond) ---- */
 (function(){
   const SEL = '[data-bduid]:not([data-bdone])';
@@ -2026,7 +2026,7 @@ function reelPoster(s){
   }
   return BLANK_POSTER;
 }
-function initials(name){ return (name||"?").split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase(); }
+function initials(name){ var s=String(name||"?").replace(/^\s*\u{1F465}\s*/u,""); var r=s.split(" ").filter(Boolean).map(function(w){return Array.from(w)[0];}).slice(0,2).join("").toUpperCase(); return r||"?"; } /* emoji-safe: no broken ? character on group avatars */
 
 /* ================================================================
    CHANNEL BADGES — blue (official referral link) + silver/gold/diamond
@@ -16830,5 +16830,6 @@ document.querySelectorAll('#adminTabs .profile-tab').forEach(function(tab){
 .ch-badge-blue,.ch-badge-admin,.ch-badge-tier{z-index:5!important}
 .pm-crown{z-index:7!important}
 </style>
+<style id="flAiTagFix">.dm-row .tx b .gzai-tag,.dm-row .tx .gzai-tag{display:inline-block!important;width:auto!important;max-width:none;overflow:visible!important;white-space:nowrap;font-size:10px!important;color:#fff!important;padding:1px 6px!important;margin-left:6px}</style>
 </body>
 </html>
