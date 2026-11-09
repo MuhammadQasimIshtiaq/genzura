@@ -1701,6 +1701,7 @@ async function openChat(peerUid){
   if(!c || !c.name){ var ci=null; Object.keys(chats).forEach(function(k){ var x=chats[k]; if(!x.isGroup && (x.members||[]).indexOf(peerUid)>=0 && x.info && x.info[peerUid]) ci=x.info[peerUid]; }); if(ci) c={name:ci.name||'User',logo:ci.logo||null,handle:''}; }
   if(!c || !c.name){ c={name:'…',logo:null,handle:''}; getCh(peerUid).then(function(v){ if(cur && cur.peer && cur.peer.uid===peerUid){ cur.peer.name=v.name; cur.peer.logo=v.logo; try{ $('cName').textContent=v.name; updateHeaderSub(); }catch(e){} } }).catch(function(){}); }
   cur={ id:dmId(me.uid,peerUid), peer:{uid:peerUid,name:c.name,logo:c.logo}, canSend:false };
+  try{ blockedPair(peerUid); }catch(e){}
   markActive(); $('chat').classList.remove('hidden');   /* show the chat first so a small UI error can never block it */
   try{ $('cCallV').classList.remove('hidden'); $('cCallVid').classList.remove('hidden'); $('cName').parentNode.onclick=null; $('cName').parentNode.style.cursor=''; }catch(e){ console.warn(e); }
   try{ $('cName').textContent=c.name; updateHeaderSub(); }catch(e){ console.warn(e); }
@@ -1773,7 +1774,7 @@ async function parseMsg(m, peerUid, chatId){
   return Object.assign(base,{ kind:'other', text:(!m.enc&&m.text)?String(m.text):'🔗 Shared on Gupzy – open Gupzy to view it' });
 }
 async function renderMsgs(snap, tok){
-  if(playingAudio()){ setTimeout(function(){ if(tok===msgTok) renderMsgs(snap,tok); }, 1500); return; }
+  if(playingAudio() && !$('msgs')._seg){ setTimeout(function(){ if(tok===msgTok) renderMsgs(snap,tok); }, 1500); return; }
   var peer=cur && cur.peer; if(!peer) return; var chatId=cur.id;
   var clr0=Number((((chats[chatId]||{}).clearedAt)||{})[me.uid])||0;
   var docs=snap.docs.map(function(d){ var x=d.data({serverTimestamps:'estimate'}); x.id=d.id; return x; }).filter(function(x){ return !goneMsg(chatId,x) && !(clr0 && ms(x.createdAt)<=clr0); });
@@ -1786,7 +1787,8 @@ function paintOut(out,tok,peer,fromCache){
   if(tok!==msgTok || !cur) return;
   var html='', lastDay='', box=$('msgs'), toLoad=[];
   var atBottom = box.scrollHeight-box.scrollTop-box.clientHeight < 120;
-  out.forEach(function(m){
+  var marks=[];
+  out.forEach(function(m){ marks.push(html.length); (function(){
     var day=new Date(m.at||Date.now()).toDateString();
     if(day!==lastDay){ lastDay=day; html+='<div class="tm">'+esc(fmtTime(m.at))+'</div>'; }
     var side=m.mine?'me':'th';
@@ -1796,9 +1798,38 @@ function paintOut(out,tok,peer,fromCache){
     if(m.kind==='post'){ html+='<div class="b '+side+' post" data-post="'+esc(m.postId)+'">'+sn+'<div class="pth" data-pid="'+esc(m.postId)+'"><div class="ph">\uD83D\uDCCE</div></div><div class="pt">'+esc(m.text)+'</div><div class="ps">Tap to view post</div></div>'; return; }
     if(m.media){ mediaSpec.set(m.media.u,m.media); MSGTXT[m.id]={t:(m.media.kind==='img'?'📷 Photo':m.media.kind==='vid'?'🎥 Video':'🎤 Voice message'),n:m.mine?'You':(m.sn||peer.name||''),mine:m.mine,rx:m.rx}; html+='<div class="b '+side+' media" data-mid="'+esc(m.id)+'">'+sn+mediaInner(m.media)+rxHtml(m)+'</div>'; if(m.media.enc && !mediaUrls.has(m.media.u)) toLoad.push(m.media); return; }
     MSGTXT[m.id]={t:m.text,n:m.mine?'You':(m.sn||peer.name||''),mine:m.mine,rx:m.rx}; html+='<div class="b '+side+'" data-mid="'+esc(m.id)+'">'+sn+(m.q?'<div class="rq">'+esc(m.q)+'</div>':'')+esc(m.text)+rxHtml(m)+'</div>';
-  });
+  })(); });
+  var segs=marks.map(function(st,i){ return html.slice(st, i+1<marks.length?marks[i+1]:html.length); });
   if(fromCache && !html) return;
-  box.innerHTML = html || '<div class="empty">'+(cur.group?'Say hi to the group 👋':'Say hi to '+esc(peer.name)+' 👋')+'</div>';
+  if(!html){ box._seg=null; box.innerHTML = '<div class="empty">'+(cur.group?'Say hi to the group 👋':'Say hi to '+esc(peer.name)+' 👋')+'</div>'; }
+  else{
+    /* SPEED: do not rebuild all (up to 150) messages on every update. Keep the unchanged ones (their photos/videos/voice players stay as they are)
+       and redraw only from the first changed message down. Any surprise -> safe full rebuild. */
+    var nOf=function(sg){ var t=document.createElement('template'); t.innerHTML=sg; return t.content.children.length; };
+    var old=box._seg, done=false;
+    try{
+      var tl=document.getElementById('gcTail');
+      if(old && tl && tl.parentNode===box && box._kids===box.children.length){
+        var tot=0; old.forEach(function(o){ tot+=o.n; });
+        if(Array.prototype.indexOf.call(box.children,tl)===tot){
+          var k=0, mx=Math.min(old.length,segs.length);
+          while(k<mx && old[k].s===segs[k]) k++;
+          var off=0; for(var i=0;i<k;i++) off+=old[i].n;
+          var el=box.children[off];
+          while(el && el!==tl){ var nx=el.nextElementSibling; el.remove(); el=nx; }
+          var fresh=segs.slice(k).map(function(sg){ return {s:sg,n:nOf(sg)}; });
+          if(fresh.length) tl.insertAdjacentHTML('beforebegin',fresh.map(function(o){ return o.s; }).join(''));
+          box._seg=old.slice(0,k).concat(fresh); done=true;
+        }
+      }
+    }catch(e){ done=false; }
+    if(!done){
+      var objs=segs.map(function(sg){ return {s:sg,n:nOf(sg)}; });
+      box.innerHTML = segs.join('')+'<i id="gcTail" style="display:none"></i>';
+      box._seg=objs;
+    }
+    box._kids=box.children.length;
+  }
   bindBig(box); fillPostThumbs();
   if(atBottom || out.length<=30) box.scrollTop=box.scrollHeight;
   toLoad.forEach(function(x){
@@ -1816,19 +1847,23 @@ function paintOut(out,tok,peer,fromCache){
 }
 
 /* ---------------- sending (writes the SAME documents Gupzy writes: chats/{id}/messages) ---------------- */
+var _bpCache={};
 async function blockedPair(peerUid){
   if(myBlocked.indexOf(peerUid)>=0) return true;
-  try{ var d=await db.collection('channels').doc(peerUid).get(); return !!(d.exists && (d.data().blockedUids||[]).indexOf(me.uid)>=0); }catch(e){ return false; }
+  var c=_bpCache[peerUid]; if(c && Date.now()-c.t<300000) return c.v;   /* SPEED: ask the server once per 5 min, not on every message */
+  try{ var d=await db.collection('channels').doc(peerUid).get(); var v=!!(d.exists && (d.data().blockedUids||[]).indexOf(me.uid)>=0); _bpCache[peerUid]={v:v,t:Date.now()}; return v; }catch(e){ return false; }
 }
 async function sendMsgG(peer, id, base, payload){
   if(peer.group) return sendGroupMsg(peer, id, base, payload);
   if(await blockedPair(peer.uid)) throw new Error('blocked');
   var env=await encPayload(id, peer.uid, payload);
   var ref=db.collection('chats').doc(id);
-  await ref.collection('messages').add(Object.assign({ from:me.uid, fromName:me.name||'', createdAt:FV.serverTimestamp() }, base, env));
   var info={}; info[me.uid]={name:me.name,logo:me.logo||null}; info[peer.uid]={name:peer.name,logo:peer.logo||null};
   var unread={}; unread[peer.uid]=FV.increment(1);
-  await ref.set({ members:[me.uid,peer.uid], info:info, lastText:(base.type==='text'?'🔒 Message':''), lastType:base.type, lastFrom:me.uid, lastAt:FV.serverTimestamp(), unread:unread },{merge:true});
+  var b1=db.batch();   /* SPEED: one batch = one server round-trip */
+  b1.set(ref.collection('messages').doc(), Object.assign({ from:me.uid, fromName:me.name||'', createdAt:FV.serverTimestamp() }, base, env));
+  b1.set(ref, { members:[me.uid,peer.uid], info:info, lastText:(base.type==='text'?'🔒 Message':''), lastType:base.type, lastFrom:me.uid, lastAt:FV.serverTimestamp(), unread:unread },{merge:true});
+  await b1.commit();
   pushNotify(id);
 }
 function sendErr(err,peer){
@@ -2453,9 +2488,11 @@ async function sendGroupMsg(g, id, base, payload){
   if(members.indexOf(me.uid)<0) throw new Error('notmember');
   var env=await encGroup(id, members, payload);
   var ref=db.collection('chats').doc(id);
-  await ref.collection('messages').add(Object.assign({ from:me.uid, fromName:me.name||'', createdAt:FV.serverTimestamp() }, base, env));
   var un={}; members.forEach(function(u){ if(u!==me.uid) un[u]=FV.increment(1); });
-  await ref.set({ lastText:(base.type==='text'?'🔒 Message':''), lastType:base.type, lastFrom:me.uid, lastAt:FV.serverTimestamp(), unread:un },{merge:true});
+  var b2=db.batch();   /* SPEED: one batch = one server round-trip */
+  b2.set(ref.collection('messages').doc(), Object.assign({ from:me.uid, fromName:me.name||'', createdAt:FV.serverTimestamp() }, base, env));
+  b2.set(ref, { lastText:(base.type==='text'?'🔒 Message':''), lastType:base.type, lastFrom:me.uid, lastAt:FV.serverTimestamp(), unread:un },{merge:true});
+  await b2.commit();
   pushNotify(id);
 }
 async function sysMsg(gid, text){
