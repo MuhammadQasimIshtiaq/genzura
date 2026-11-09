@@ -1510,6 +1510,7 @@ html #bootLoading .boot-logo{position:relative;z-index:1;opacity:0;visibility:vi
       <div class="profile-tab" data-atab="reports">Reports</div>
       <div class="profile-tab" data-atab="promote">Promote</div>
       <div class="profile-tab" data-atab="wheel">🎲 Wheel</div>
+      <div class="profile-tab" data-atab="bluetick">🔵 Blue Tick</div>
     </div>
     <div id="adminAppsContainer" style="padding:8px 0;"></div>
     <div id="adminCreatorsContainer" class="hidden" style="padding:8px 0;"></div>
@@ -1519,6 +1520,7 @@ html #bootLoading .boot-logo{position:relative;z-index:1;opacity:0;visibility:vi
     <div id="adminAppealsContainer" class="hidden" style="padding:8px 0;"></div>
     <div id="adminPromoteContainer" class="hidden" style="padding:16px;"></div>
     <div id="adminWheelContainer" class="hidden" style="padding:16px;"></div>
+    <div id="adminBlueContainer" class="hidden" style="padding:12px 16px;"></div>
   </div>
 
   <!-- report a video -->
@@ -16037,23 +16039,94 @@ async function saveInterests(){
   catch(e){ T('Could not save right now'); }
   saving=false;
 }
-/* ---- blue tick ---- */
+/* ---- blue tick ($2, live USD->PKR, JazzCash/EasyPaisa/Bank in Pakistan, Payoneer international) ---- */
+var PRICE=2, RATE=0, CFG={}, region='', method='', form={txn:'',snd:'',reason:''};
+function isAdm(){ return false; } /* admin tools moved to Admin Panel > Blue Tick */
+async function getRate(force){
+  var c=null; try{ c=JSON.parse(localStorage.getItem('flUsdPkr')||'null'); }catch(e){}
+  if(!force && c && c.r && Date.now()-c.t<1800000) return c.r;
+  try{ var r=await fetch('https://open.er-api.com/v6/latest/USD'); var j=await r.json(); var v=j&&j.rates&&j.rates.PKR;
+    if(v>50&&v<2000){ try{localStorage.setItem('flUsdPkr',JSON.stringify({r:v,t:Date.now()}))}catch(e){} return v; } }catch(e){}
+  return (c&&c.r)||280;
+}
+function val(id){ var e=$(id); return e?e.value.trim():''; }
+function saveForm(){ form.txn=val('fl4Txn')||form.txn; form.snd=val('fl4Snd')||form.snd; form.reason=val('fl4Reason')||form.reason; }
+function mList(){ if(region==='intl') return CFG.payoneer?['payoneer']:[]; return ['jazzcash','easypaisa','bank'].filter(function(k){return CFG[k]}); }
+var MN={jazzcash:'JazzCash',easypaisa:'EasyPaisa',bank:'Bank transfer',payoneer:'Payoneer'};
 async function loadBlue(){
   var u=me(), box=$('fl4Box'); if(!u||!box) return; box.innerHTML=loading();
-  var c=ch(), badges=''; try{ badges=channelBadgeRowHTML(c)||''; }catch(e){}
-  var req=null; try{ var s=await fs().collection('verifyRequests').doc(u.uid).get(); if(s.exists) req=s.data(); }catch(e){}
-  var h='<div class="flp-hero"><big>'+(c.referredByAdmin?'✅':'🔵')+'</big><small>'+(c.referredByAdmin?'Your channel has the official blue tick':'Blue Tick Verification')+'</small>'+(badges?'<div style="margin-top:10px">'+badges+'</div>':'')+'</div>'
-   +'<div class="flp-card"><b>How it works</b><br>The blue tick shows that a channel is real and trusted. Silver, gold and diamond badges come automatically as your followers grow. For the blue tick, send a request and the Gupzy team will review it.</div>';
-  if(c.referredByAdmin) h+='';
-  else if(req) h+='<div class="flp-card"><b>'+(req.status==='approved'?'✅ Approved':req.status==='rejected'?'❌ Not approved':'⏳ Request sent')+'</b><br><small style="color:var(--text-dim)">'+esc(req.reason||'')+'</small></div>';
-  else h+='<textarea class="fl4-ta" id="fl4Reason" maxlength="400" placeholder="Why should your channel be verified? (who you are, links, what you post)"></textarea><button class="flp-go" style="margin-top:14px" data-z="sendblue">Request blue tick</button>';
+  var c=ch(), req=null;
+  var rs=await Promise.all([getRate(), fs().collection('settings').doc('blueTick').get().then(function(s){return s.exists?s.data():{}}).catch(function(){return {}}), fs().collection('verifyRequests').doc(u.uid).get().then(function(s){return s.exists?s.data():null}).catch(function(){return null})]);
+  RATE=rs[0]; CFG=rs[1]||{}; req=rs[2];
+  if(!region) region=(String(c.country||'').toLowerCase()==='pakistan'||!c.country)?'pk':'intl';
+  var ml=mList(); if(ml.indexOf(method)<0) method=ml[0]||'';
+  var pkr=Math.ceil(PRICE*RATE), badges=''; try{ badges=channelBadgeRowHTML(c)||''; }catch(e){}
+  var h='<div class="flp-hero"><big>'+(c.referredByAdmin?'✅':'🔵 $'+PRICE)+'</big><small>'+(c.referredByAdmin?'Your channel has the official blue tick':'One-time fee for the Blue Tick')+'</small>'
+    +(c.referredByAdmin?'':'<div style="margin-top:8px;font-weight:700">≈ Rs '+pkr.toLocaleString()+'</div><small style="display:block;margin-top:2px">1 USD = Rs '+RATE.toFixed(2)+' · live rate, updates automatically</small>')+(badges?'<div style="margin-top:10px">'+badges+'</div>':'')+'</div>';
+  if(!c.referredByAdmin){
+    if(req && req.status!=='rejected'){
+      h+='<div class="flp-card"><b>'+(req.status==='approved'?'✅ Approved':'⏳ Payment under review')+'</b><br><small style="color:var(--text-dim)">'+(req.status==='approved'?'Your blue tick will appear shortly.':'We are checking your payment ('+esc(MN[req.method]||'')+', ID '+esc(req.txnId||'')+'). This usually takes a short while.')+'</small></div>';
+    } else {
+      if(req&&req.status==='rejected') h+='<div class="flp-card" style="border:1px solid #ef4444"><b>❌ Not approved</b><br><small>'+esc(req.rejectReason||'We could not verify your payment.')+'</small><br><button class="flp-go" style="margin-top:10px" data-z="retry">Try again</button></div>';
+      h+='<div class="flp-tabs" style="margin-top:14px"><button class="flp-tab'+(region==='pk'?' on':'')+'" data-z="region" data-r="pk">🇵🇰 Pakistan</button><button class="flp-tab'+(region==='intl'?' on':'')+'" data-z="region" data-r="intl">🌍 International</button></div>';
+      if(!ml.length) h+='<div class="flp-card">Payment details for this option are not set yet. Please check back soon.</div>';
+      else{
+        h+='<div class="fl4-chips" style="margin-top:4px">'+ml.map(function(k){return '<button class="fl4-chip'+(method===k?' on':'')+'" data-z="method" data-m="'+k+'">'+MN[k]+'</button>';}).join('')+'</div>';
+        var amt=region==='intl'?('$'+PRICE+' USD'):('Rs '+pkr.toLocaleString());
+        h+='<div class="flp-card"><b>Send exactly '+amt+'</b><br>'+MN[method]+(method==='payoneer'?' email / ID:':' account:')+'<div class="flp-lk" style="margin-top:8px;color:var(--text)">'+esc(CFG[method])+(CFG.title&&method!=='payoneer'?'<br>Title: '+esc(CFG.title):'')+'</div><button class="flp-go" style="margin-top:10px" data-z="copy" data-v="'+esc(CFG[method])+'">Copy</button></div>'
+          +'<input class="fl4-ta" id="fl4Txn" style="min-height:0" placeholder="Transaction ID" value="'+esc(form.txn)+'" maxlength="80">'
+          +'<input class="fl4-ta" id="fl4Snd" style="min-height:0" placeholder="Sender name / number" value="'+esc(form.snd)+'" maxlength="80">'
+          +'<textarea class="fl4-ta" id="fl4Reason" maxlength="400" placeholder="Tell us about your channel (who you are, links, what you post)">'+esc(form.reason)+'</textarea>'
+          +'<div style="margin-top:10px;font-size:14px;color:var(--text-dim)">Payment screenshot (optional)</div><input type="file" id="fl4Proof" accept="image/*" style="margin-top:6px;max-width:100%">'
+          +'<button class="flp-go" style="margin-top:16px" data-z="sendblue">I have paid — submit</button>';
+      }
+    }
+  }
+  if(isAdm()) h+='<div class="flp-card" style="margin-top:22px"><b>🛠 Admin: payment details</b>'
+    +['jazzcash:JazzCash number','easypaisa:EasyPaisa number','bank:Bank (name / IBAN)','payoneer:Payoneer email','title:Account title'].map(function(p){var k=p.split(':')[0];return '<input class="fl4-ta" style="min-height:0;margin-top:8px" id="fl4A_'+k+'" placeholder="'+p.split(':')[1]+'" value="'+esc(CFG[k]||'')+'" maxlength="120">';}).join('')
+    +'<button class="flp-go" style="margin-top:10px" data-z="admsave">Save payment details</button></div><div id="fl4Adm"></div>';
   box.innerHTML=h;
+  if(isAdm()) loadAdm();
+}
+async function loadAdm(){
+  var box=$('fl4Adm'); if(!box) return;
+  try{
+    var q=await fs().collection('verifyRequests').where('status','==','pending').limit(30).get(), h='<div style="margin-top:18px;font-weight:800">Pending requests</div>';
+    if(q.empty) h+='<div class="flp-card">No pending requests.</div>';
+    q.forEach(function(d){ var x=d.data();
+      h+='<div class="flp-card"><b>'+esc(x.name||'')+'</b> <small>@'+esc(x.channelId||'')+' · '+(x.followers||0)+' followers</small><br>'+esc(MN[x.method]||x.method||'')+' · '+(x.region==='intl'?'$'+x.priceUsd:'Rs '+x.amountPkr)+'<br>Txn: <b>'+esc(x.txnId||'')+'</b> · From: '+esc(x.sender||'')+'<br><small>'+esc(x.reason||'')+'</small>'
+       +(x.proofURL?'<br><a href="'+esc(x.proofURL)+'" target="_blank" style="color:var(--accent2)">View screenshot</a>':'')
+       +'<div class="flp-two"><button class="flp-go" style="background:#16a34a" data-z="admok" data-u="'+esc(d.id)+'">Approve</button><button class="flp-go" style="background:#ef4444" data-z="admno" data-u="'+esc(d.id)+'">Reject</button></div></div>'; });
+    box.innerHTML=h;
+  }catch(e){ box.innerHTML='<div class="flp-card">Could not load requests.</div>'; }
+}
+async function admAct(uid,ok){
+  if(!isAdm()||saving) return; var why=''; if(!ok){ why=(prompt('Reason for rejecting?')||'').trim(); if(!why) return; }
+  saving=true; var FV=firebase.firestore.FieldValue;
+  try{
+    if(ok) await fs().collection('channels').doc(uid).update({referredByAdmin:true});
+    await fs().collection('verifyRequests').doc(uid).update(ok?{status:'approved',reviewedAt:FV.serverTimestamp()}:{status:'rejected',rejectReason:why.slice(0,200),reviewedAt:FV.serverTimestamp()});
+    T(ok?'Blue tick given ✅':'Request rejected');
+  }catch(e){ T('Failed: '+(e.message||'error')); }
+  saving=false; loadAdm();
+}
+async function admSave(){
+  if(!isAdm()||saving) return; saving=true; var d={updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+  ['jazzcash','easypaisa','bank','payoneer','title'].forEach(function(k){ d[k]=val('fl4A_'+k); });
+  try{ await fs().collection('settings').doc('blueTick').set(d); T('Payment details saved'); }catch(e){ T('Could not save'); }
+  saving=false; loadBlue();
 }
 async function sendBlue(){
-  var u=me(), t=$('fl4Reason'); if(!u||!t||saving) return; var r=t.value.trim(); if(r.length<10){ T('Please write a little more'); return; }
-  saving=true; var c=ch();
-  try{ await fs().collection('verifyRequests').doc(u.uid).set({uid:u.uid,name:c.name||'',channelId:c.channelId||'',followers:c.subscriberCount||0,reason:r.slice(0,400),status:'pending',createdAt:firebase.firestore.FieldValue.serverTimestamp()}); T('Request sent'); }
-  catch(e){ T('Could not send. Publish the new Firebase rules first.'); }
+  var u=me(); if(!u||saving) return; saveForm();
+  var txn=val('fl4Txn'), snd=val('fl4Snd'), reason=val('fl4Reason');
+  if(txn.length<4||snd.length<3||reason.length<10){ T('Please fill transaction ID, sender and channel details'); return; }
+  saving=true; var c=ch(), proof='', f=$('fl4Proof')&&$('fl4Proof').files[0];
+  T('Submitting…');
+  if(f){ try{ proof=await uploadToCloudinary(f,'image',document.createElement('div'),'proof_'+u.uid+'_'+Date.now()+'.jpg'); if(typeof proof!=='string') proof=''; }catch(e){ proof=''; } }
+  var d={uid:u.uid,name:(c.name||'').slice(0,60),channelId:c.channelId||'',followers:c.subscriberCount||0,reason:reason.slice(0,400),status:'pending',region:region,method:method,priceUsd:PRICE,amountPkr:Math.ceil(PRICE*RATE),rate:RATE,txnId:txn.slice(0,80),sender:snd.slice(0,80),createdAt:firebase.firestore.FieldValue.serverTimestamp()};
+  if(proof) d.proofURL=proof;
+  try{ await fs().collection('verifyRequests').doc(u.uid).set(d); form={txn:'',snd:'',reason:''}; T('Submitted. We will verify your payment.'); }
+  catch(e){ T('Could not submit. Please try again.'); }
   saving=false; loadBlue();
 }
 function render(){
@@ -16072,6 +16145,13 @@ pg.addEventListener('click',function(e){
   else if(a==='chip'){ var c=el.getAttribute('data-c'), i=chips.indexOf(c); if(i>=0) chips.splice(i,1); else if(chips.length<5) chips.push(c); else T('Max 5 interests'); drawInterests(); }
   else if(a==='saveint') saveInterests();
   else if(a==='sendblue') sendBlue();
+  else if(a==='region'){ saveForm(); region=el.getAttribute('data-r'); method=''; loadBlue(); }
+  else if(a==='method'){ saveForm(); method=el.getAttribute('data-m'); loadBlue(); }
+  else if(a==='copy'){ var v=el.getAttribute('data-v')||''; try{navigator.clipboard.writeText(v).then(function(){T('Copied')},function(){T(v)})}catch(x){T(v)} }
+  else if(a==='retry'){ var uu=me(); if(uu) fs().collection('verifyRequests').doc(uu.uid).delete().then(loadBlue).catch(function(){T('Try again later')}); }
+  else if(a==='admsave') admSave();
+  else if(a==='admok') admAct(el.getAttribute('data-u'),true);
+  else if(a==='admno') admAct(el.getAttribute('data-u'),false);
 });
 document.addEventListener('click',function(e){ if(pg.classList.contains('show') && e.target.closest && e.target.closest('nav .nav-btn')) close(); },true);
 var ob=window.__gzBack; window.__gzBack=function(){ if(pg.classList.contains('show')){ close(); return true; } return ob?ob.apply(this,arguments):false; };
@@ -16083,6 +16163,103 @@ async function update(){
 window.flMore2={saved:function(){open('saved')},followers:function(){open('followers')},warn:function(){open('warn')},interests:function(){open('interests')},blue:function(){open('blue')},update:update,
   rate:function(){ window.open('https://play.google.com/store/apps/details?id=com.gupzy.app','_blank'); },
   tip:function(){ hideAll(); if(typeof window.openTipOwner==='function') window.openTipOwner(); else T('Tip jar is not available right now'); }};
+})();
+</script>
+
+<!-- ===== ADMIN PANEL: Blue Tick tab ===== -->
+<script id="flBlueAdminJs">
+(function(){
+var $=function(i){return document.getElementById(i)}, box=$('adminBlueContainer'), busy=false;
+if(!box) return;
+var MN={jazzcash:'JazzCash',easypaisa:'EasyPaisa',bank:'Bank transfer',payoneer:'Payoneer'};
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function fs(){return firebase.firestore();}
+function T(m){ try{toast(m)}catch(e){} }
+function av(c){ return '<div class="flp-av">'+(c.logoURL?'<img src="'+esc(c.logoURL)+'" alt="">':esc(((c.name||'?').trim().charAt(0)||'?').toUpperCase()))+'</div>'; }
+function val(id){ var e=$(id); return e?e.value.trim():''; }
+function build(){
+  box.innerHTML='<div class="flp-card"><b>➕ Custom blue tick</b><br><small style="color:var(--text-dim)">Type a channel ID (example: muhammadqasim) and give or remove the blue tick directly.</small>'
+   +'<input class="fl4-ta" id="flbId" style="min-height:0;margin-top:10px" placeholder="Channel ID  (without @)" autocapitalize="off" autocomplete="off">'
+   +'<div class="flp-two"><button class="flp-go" style="background:#16a34a" data-b="give">🔵 Give blue tick</button><button class="flp-go" style="background:#ef4444" data-b="take">Remove blue tick</button></div></div>'
+   +'<div style="margin:18px 2px 6px;font-weight:800">💳 Pending payment requests</div><div id="flbPend"></div>'
+   +'<div style="margin:18px 2px 6px;font-weight:800">✅ Channels with blue tick</div><div id="flbList"></div>'
+   +'<div class="flp-card" style="margin-top:18px"><b>🛠 Payment details shown to users ($2)</b>'
+   +['jazzcash:JazzCash number','easypaisa:EasyPaisa number','bank:Bank (name / IBAN)','payoneer:Payoneer email','title:Account title'].map(function(p){var k=p.split(':')[0];return '<input class="fl4-ta" style="min-height:0;margin-top:8px" id="flbC_'+k+'" placeholder="'+p.split(':')[1]+'" maxlength="120">';}).join('')
+   +'<button class="flp-go" style="margin-top:10px" data-b="savecfg">Save payment details</button></div>';
+  loadCfg(); loadPend(); loadList();
+}
+async function loadCfg(){ try{ var s=await fs().collection('settings').doc('blueTick').get(), d=s.exists?s.data():{}; ['jazzcash','easypaisa','bank','payoneer','title'].forEach(function(k){ var e=$('flbC_'+k); if(e) e.value=d[k]||''; }); }catch(e){} }
+async function saveCfg(){
+  if(busy) return; busy=true; var d={updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+  ['jazzcash','easypaisa','bank','payoneer','title'].forEach(function(k){ d[k]=val('flbC_'+k); });
+  try{ await fs().collection('settings').doc('blueTick').set(d); T('Payment details saved'); }catch(e){ T('Could not save'); }
+  busy=false;
+}
+async function loadPend(){
+  var el=$('flbPend'); if(!el) return;
+  try{
+    var q=await fs().collection('verifyRequests').where('status','==','pending').limit(30).get(), h='';
+    if(q.empty) h='<div class="flp-card">No pending requests.</div>';
+    q.forEach(function(d){ var x=d.data();
+      h+='<div class="flp-card"><b>'+esc(x.name||'')+'</b> <small>@'+esc(x.channelId||'')+' · '+(x.followers||0)+' followers</small><br>'+esc(MN[x.method]||x.method||'')+' · '+(x.region==='intl'?'$'+x.priceUsd:'Rs '+x.amountPkr)+'<br>Txn: <b>'+esc(x.txnId||'')+'</b> · From: '+esc(x.sender||'')+'<br><small>'+esc(x.reason||'')+'</small>'
+       +(x.proofURL?'<br><a href="'+esc(x.proofURL)+'" target="_blank" style="color:var(--accent2)">View screenshot</a>':'')
+       +'<div class="flp-two"><button class="flp-go" style="background:#16a34a" data-b="ok" data-u="'+esc(d.id)+'">Approve</button><button class="flp-go" style="background:#ef4444" data-b="no" data-u="'+esc(d.id)+'">Reject</button></div></div>'; });
+    el.innerHTML=h;
+  }catch(e){ el.innerHTML='<div class="flp-card">Could not load requests.</div>'; }
+}
+async function loadList(){
+  var el=$('flbList'); if(!el) return;
+  try{
+    var q=await fs().collection('channels').where('referredByAdmin','==',true).limit(100).get(), h='';
+    if(q.empty) h='<div class="flp-card">No channel has the blue tick yet.</div>';
+    q.forEach(function(d){ var c=d.data();
+      h+='<div class="flp-r" style="cursor:default">'+av(c)+'<div class="nm">'+esc(c.name||'—')+'<small>@'+esc(c.channelId||'')+'</small></div><button class="flp-go" style="width:auto;padding:9px 14px;font-size:14px;background:#ef4444" data-b="rm" data-u="'+esc(d.id)+'" data-n="'+esc(c.name||'')+'">Remove</button></div>'; });
+    el.innerHTML=h;
+  }catch(e){ el.innerHTML='<div class="flp-card">Could not load the list.</div>'; }
+}
+async function resolve(inp){
+  inp=String(inp||'').trim().replace(/^@/,''); if(!inp||inp.indexOf('/')>=0) return null;
+  var uid=null, tries=[inp]; if(inp.toLowerCase()!==inp) tries.push(inp.toLowerCase());
+  for(var i=0;i<tries.length&&!uid;i++){ try{ var s=await fs().collection('channelIds').doc(tries[i]).get(); if(s.exists) uid=s.data().ownerUid; }catch(e){} }
+  if(!uid){ try{ var s2=await fs().collection('channels').doc(inp).get(); if(s2.exists) uid=inp; }catch(e){} }
+  if(!uid) return null;
+  var c=await fs().collection('channels').doc(uid).get(); return c.exists?{uid:uid,c:c.data()}:null;
+}
+async function setTick(uid,name,on){
+  if(busy) return; busy=true; var FV=firebase.firestore.FieldValue;
+  try{
+    await fs().collection('channels').doc(uid).update({referredByAdmin:on?true:FV.delete()});
+    if(on){ try{ var r=fs().collection('verifyRequests').doc(uid), s=await r.get(); if(s.exists&&s.data().status==='pending') await r.update({status:'approved',reviewedAt:FV.serverTimestamp()}); }catch(e){} }
+    T(on?('🔵 Blue tick given to '+name):('Blue tick removed from '+name));
+  }catch(e){ T('Failed: '+(e.message||'error')); }
+  busy=false; loadPend(); loadList();
+}
+async function custom(on){
+  var inp=val('flbId'); if(!inp){ T('Type a channel ID first'); return; }
+  var r=await resolve(inp); if(!r){ T('No channel found with this ID'); return; }
+  var name=r.c.name||inp;
+  if(on&&r.c.referredByAdmin){ T(name+' already has the blue tick'); return; }
+  if(!on&&!r.c.referredByAdmin){ T(name+' does not have a blue tick'); return; }
+  if(!confirm((on?'Give blue tick to ':'Remove blue tick from ')+name+' (@'+(r.c.channelId||inp)+')?')) return;
+  await setTick(r.uid,name,on); var e=$('flbId'); if(e) e.value='';
+}
+async function reject(uid){
+  if(busy) return; var why=(prompt('Reason for rejecting?')||'').trim(); if(!why) return;
+  busy=true;
+  try{ await fs().collection('verifyRequests').doc(uid).update({status:'rejected',rejectReason:why.slice(0,200),reviewedAt:firebase.firestore.FieldValue.serverTimestamp()}); T('Request rejected'); }catch(e){ T('Failed'); }
+  busy=false; loadPend();
+}
+box.addEventListener('click',function(e){
+  var el=e.target.closest('[data-b]'); if(!el) return; var a=el.getAttribute('data-b'), u=el.getAttribute('data-u');
+  if(a==='give') custom(true); else if(a==='take') custom(false);
+  else if(a==='ok') setTick(u,'channel',true);
+  else if(a==='no') reject(u);
+  else if(a==='rm'){ if(confirm('Remove blue tick from '+(el.getAttribute('data-n')||'this channel')+'?')) setTick(u,el.getAttribute('data-n')||'channel',false); }
+  else if(a==='savecfg') saveCfg();
+});
+document.querySelectorAll('#adminTabs .profile-tab').forEach(function(tab){
+  tab.addEventListener('click',function(){ var w=tab.dataset.atab==='bluetick'; box.classList.toggle('hidden',!w); if(w) build(); });
+});
 })();
 </script>
 
