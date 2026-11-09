@@ -1511,6 +1511,7 @@ html #bootLoading .boot-logo{position:relative;z-index:1;opacity:0;visibility:vi
       <div class="profile-tab" data-atab="promote">Promote</div>
       <div class="profile-tab" data-atab="wheel">🎲 Wheel</div>
       <div class="profile-tab" data-atab="bluetick">🔵 Blue Tick</div>
+      <div class="profile-tab" data-atab="premium">👑 Premium</div>
     </div>
     <div id="adminAppsContainer" style="padding:8px 0;"></div>
     <div id="adminCreatorsContainer" class="hidden" style="padding:8px 0;"></div>
@@ -1521,6 +1522,7 @@ html #bootLoading .boot-logo{position:relative;z-index:1;opacity:0;visibility:vi
     <div id="adminPromoteContainer" class="hidden" style="padding:16px;"></div>
     <div id="adminWheelContainer" class="hidden" style="padding:16px;"></div>
     <div id="adminBlueContainer" class="hidden" style="padding:12px 16px;"></div>
+    <div id="adminPremiumContainer" class="hidden" style="padding:12px 16px;"></div>
   </div>
 
   <!-- report a video -->
@@ -2040,6 +2042,7 @@ function avatarBadgeOverlayHTML(ch, channelId){
   }
   const tier = getFollowerTier(ch.subscriberCount);
   if(tier) html += `<div class="ch-badge-tier ${tier}">A</div>`;
+  try{ if(window.GZPM) html += window.GZPM.avatarHTML(ch); }catch(e){}   /* Premium: animated ring + crown/star */
   return html;
 }
 /* dedicated badge row for the channel page — follower-tier only, never the blue badge (blue always stays on the avatar) */
@@ -2055,12 +2058,12 @@ async function applyChannelBadgeToAvatar(channelId, avatarEl){
   try{
     if(!_channelBadgeCache[channelId]){
       _channelBadgeCache[channelId] = db.collection('channels').doc(channelId).get()
-        .then(doc=> doc.exists ? { referredByAdmin: doc.data().referredByAdmin, subscriberCount: doc.data().subscriberCount } : null)
+        .then(doc=> doc.exists ? { referredByAdmin: doc.data().referredByAdmin, subscriberCount: doc.data().subscriberCount, premiumUntil: doc.data().premiumUntil, pm: doc.data().pm } : null)
         .catch(()=>{ delete _channelBadgeCache[channelId]; return null; });
     }
     const chData = await _channelBadgeCache[channelId];
     if(!chData || !document.body.contains(avatarEl)) return;
-    if(avatarEl.querySelector('.ch-badge-blue,.ch-badge-admin,.ch-badge-tier')) return; /* already has its badges */
+    if(avatarEl.querySelector('.ch-badge-blue,.ch-badge-admin,.ch-badge-tier,.pm-ring,.pm-crown')) return; /* already has its badges */
     const html = avatarBadgeOverlayHTML(chData, channelId);
     if(html){ avatarEl.classList.add('has-badge'); avatarEl.insertAdjacentHTML('beforeend', html); }
   }catch(e){ /* badge is cosmetic — fail silently */ }
@@ -2157,6 +2160,7 @@ auth.onAuthStateChanged(async (user)=>{
   }else{
     stopFeedListeners();
     currentUser = null; currentChannel = null;
+    try{ window.GZPM && window.GZPM.applyOwn(null); }catch(e){}
     window.__isAdminUser = false;
     try{ resetProfileUI(); }catch(e){}
     showScreen('app'); // guest browsing — no forced login, sign-in is only asked for restricted actions
@@ -2634,6 +2638,7 @@ async function loadOrCreateChannelFlow(){
     const doc = await db.collection('channels').doc(currentUser.uid).get();
     if(doc.exists){
       currentChannel = doc.data();
+      try{ window.GZPM && window.GZPM.applyOwn(currentChannel); }catch(e){}
       if(!currentChannel.channelId){
         showScreen('setChannelIdScreen');
         return;
@@ -2938,6 +2943,7 @@ function startFeedListeners(){
       if(!__live()) return;
       if(doc.exists){
         currentChannel = doc.data();
+        try{ window.GZPM && window.GZPM.applyOwn(currentChannel); }catch(e){}
         applyChannelToUI();
         renderEarnTab();
       }
@@ -15650,7 +15656,7 @@ var ACT={
  earnings:function(){ closeMenu(); try{openEarnLite()}catch(e){} }, coins:function(){ window.flCoins&&window.flCoins.openCoins(); },
  settings:function(){clk('privacyPolicyBtn')}, interests:function(){ window.flMore2.interests(); }, switchacc:function(){clk('switchAccountBtn')},
  pcomp:function(){ window.flMore&&window.flMore.openComp(); },
- bluetick:function(){ window.flMore2.blue(); }, sub:function(){ window.flMore2.tip(); }, dash:function(){clk('studioBtn')}, refs:function(){ window.flMore?window.flMore.openRefs():soon('Referrals'); },
+ bluetick:function(){ window.flMore2.blue(); }, premium:function(){ if(window.gzPremium) window.gzPremium.open(); else soon('Premium'); }, sub:function(){ window.flMore2.tip(); }, dash:function(){clk('studioBtn')}, refs:function(){ window.flMore?window.flMore.openRefs():soon('Referrals'); },
  help:function(){clk('contactUsBtn')}, warn:function(){ window.flMore2.warn(); }, upd:function(){ window.flMore2.update(); }, rate:function(){ window.flMore2.rate(); },
  logout:function(){clk('signOutBtn')},
  admin:function(){clk('adminPanelBtn')}, perm:function(){clk('permBtn')}, bak:function(){clk('e2eeBackupBtn')}, rest:function(){clk('e2eeRestoreBtn')},
@@ -15675,7 +15681,7 @@ function openMenu(){
   +item('perm',I.bell,'Notifications &amp; permissions')+item('bak',I.lock,'Chat backup')+item('rest',I.lock,'Restore chat backup')
   +(adm&&!adm.classList.contains('hidden')?item('admin',I.shield,'Admin Panel'):'')
   +'<div class="flm-sec">CREATOR</div>'
-  +item('bluetick',I.tick,'Blue Tick Verification')+item('sub',I.tick,'Subscription')+item('dash',I.bar,'Creator Dashboard')+item('refs',I.gift,'Referrals')
+  +item('premium',I.star,'👑 Gupzy Premium · $3/month')+item('bluetick',I.tick,'Blue Tick Verification')+item('sub',I.tick,'Subscription')+item('dash',I.bar,'Creator Dashboard')+item('refs',I.gift,'Referrals')
   +'<div class="flm-sec">SUPPORT</div>'
   +item('help',I.help,'Support / Help ticket')+item('warn',I.flag,'Warnings')+item('upd',I.dl,'App Update')+item('rate',I.star,'Rate Us')
   +item('about',I.info,'About Us')+item('terms',I.doc,'Terms &amp; Condition')+item('copyr',I.doc,'Copyright &amp; Policy')+item('shareapp',I.gift,'Share Gupzy')
@@ -16392,6 +16398,390 @@ box.addEventListener('click',function(e){
 });
 document.querySelectorAll('#adminTabs .profile-tab').forEach(function(tab){
   tab.addEventListener('click',function(){ var w=tab.dataset.atab==='bluetick'; box.classList.toggle('hidden',!w); if(w) build(); });
+});
+})();
+</script>
+
+
+<!-- ===================================================================
+     👑 GUPZY PREMIUM  ($3 / month)
+     - channels/{uid}.premiumUntil  (ms timestamp)  -> premium is active while it is in the future
+     - channels/{uid}.pm            {border, badge, theme, chatTheme, icon}  (own choices, only shown while premium is active)
+     - premiumRequests/{uid}        manual payment request (JazzCash / EasyPaisa / Bank / Payoneer), approved by admin
+     - settings/premium             optional payment details (falls back to settings/blueTick)
+     =================================================================== -->
+<style id="gzPmCss">
+/* ---- animated avatar ring + crown ---- */
+.pm-ring{position:absolute;inset:-4px;border-radius:50%;pointer-events:none;z-index:2;
+  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3.5px),#000 calc(100% - 3px));mask:radial-gradient(farthest-side,transparent calc(100% - 3.5px),#000 calc(100% - 3px));
+  animation:pmSpin 3.2s linear infinite}
+.pm-b-gold{background:conic-gradient(#fff3b0,#f5c542,#b7791f,#f5c542,#fff3b0);filter:drop-shadow(0 0 4px rgba(245,197,66,.85))}
+.pm-b-rainbow{background:conic-gradient(#ff3b6b,#ffb800,#2fd573,#2bb5ff,#8a5cff,#ff3b6b);animation-duration:2.4s}
+.pm-b-neon{background:conic-gradient(#00f0ff,#ff2bd6,#00f0ff);filter:drop-shadow(0 0 5px #00f0ff);animation-duration:2.8s}
+.pm-b-fire{background:conic-gradient(#ffdd55,#ff7a00,#e11d1d,#ff7a00,#ffdd55);filter:drop-shadow(0 0 5px rgba(255,98,0,.9));animation-duration:2s}
+.pm-b-ice{background:conic-gradient(#ffffff,#7dd3fc,#3b82f6,#7dd3fc,#ffffff);filter:drop-shadow(0 0 4px rgba(96,165,250,.9));animation-duration:3.6s}
+@keyframes pmSpin{to{transform:rotate(360deg)}}
+.pm-crown{position:absolute;top:-11px;left:50%;transform:translateX(-50%);font-size:13px;line-height:1;z-index:4;pointer-events:none;filter:drop-shadow(0 1px 1px rgba(0,0,0,.4))}
+.avatar-big .pm-crown,.pf-avatar .pm-crown{font-size:20px;top:-16px}
+.pm-nb{display:inline-block;margin-left:4px;font-size:.85em;line-height:1;vertical-align:baseline}
+@media (prefers-reduced-motion:reduce){.pm-ring{animation:none}}
+
+/* ---- premium page ---- */
+#gzPmPage{position:fixed;left:0;right:0;top:0;bottom:60px;z-index:9400;background:var(--bg);color:var(--text);overflow-y:auto;-webkit-overflow-scrolling:touch;display:none;padding:calc(env(safe-area-inset-top,0px) + 10px) 16px 28px}
+#gzPmPage.show{display:block}
+.pmx-hero{border-radius:22px;padding:24px 18px;text-align:center;color:#2b1d00;background:linear-gradient(135deg,#fff1b8,#f5c542 55%,#d4a017);box-shadow:0 8px 24px rgba(212,160,23,.28)}
+.pmx-hero big{display:block;font-size:46px;font-weight:900;letter-spacing:-1px}
+.pmx-hero small{font-size:14px;font-weight:600;opacity:.8}
+.pmx-sec{margin:22px 2px 8px;font-size:17px;font-weight:800}
+.pmx-feat{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border:1px solid var(--border);border-radius:16px;background:var(--surface);margin-top:10px}
+.pmx-feat .e{font-size:24px;line-height:1.1}
+.pmx-feat b{display:block;font-size:15px}.pmx-feat span{display:block;font-size:13px;color:var(--text-dim);margin-top:2px;line-height:1.4}
+.pmx-grid{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px}
+.pmx-opt{display:flex;flex-direction:column;align-items:center;gap:7px;width:84px;padding:10px 4px;border:2px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.pmx-opt.on{border-color:#d4a017;background:rgba(245,197,66,.16)}
+.pmx-av{position:relative;width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#7b5cff,#ff5c8a);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800}
+.pmx-av img{width:100%;height:100%;border-radius:50%;object-fit:cover}
+.pmx-sw{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;color:#fff;font-weight:900}
+.pmx-note{font-size:12.5px;color:var(--text-dim);line-height:1.45;margin-top:8px}
+.pmx-chat{width:56px;height:44px;border-radius:12px;padding:6px;display:flex;flex-direction:column;gap:4px;justify-content:center;border:1px solid rgba(0,0,0,.08)}
+.pmx-chat i{display:block;height:9px;border-radius:6px;width:62%}.pmx-chat i.m{align-self:flex-end}
+.pmx-lock{opacity:.55;pointer-events:none}
+</style>
+<div id="gzPmPage"></div>
+<script id="gzPremiumJs">
+(function(){
+var PRICE=3, DAYS=30;
+var BORDERS=[['gold','Royal Gold'],['rainbow','Rainbow'],['neon','Neon'],['fire','Fire'],['ice','Ice'],['none','No border']];
+var BADGES=[['crown','👑','Crown'],['star','⭐','Star'],['none','—','Hidden']];
+var THEMES=[['default','Classic','#ec2b8e','#4a5cff'],['gold','Royal Gold','#d4a017','#b7791f'],['violet','Violet','#8b5cf6','#6d28d9'],['ocean','Ocean','#0ea5e9','#2563eb'],['emerald','Emerald','#10b981','#047857'],['sunset','Sunset','#f97316','#e11d48']];
+var CHATS=[['default','Classic','#0866ff','#f0f2f5'],['midnight','Midnight','#6c5ce7','#1f2337'],['gold','Black Gold','#e0a81d','#2a2418'],['rose','Rose','#ff4d8d','#ffe0ea'],['ocean','Ocean','#0ea5e9','#d3ecfb'],['forest','Forest','#16a34a','#1c2b23'],['sunset','Sunset','#f97316','#fff3e6']];
+var ICONS=[['classic','Classic'],['gold','Gold'],['dark','Dark Premium'],['rainbow','Rainbow']];
+function ids(a){ return a.map(function(x){return x[0]}); }
+function pick(v,list,def){ return ids(list).indexOf(v)>=0?v:def; }
+var $=function(i){return document.getElementById(i)};
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function fs(){return firebase.firestore();}
+function me(){ try{return firebase.auth().currentUser}catch(e){return null} }
+function T(m){ try{toast(m)}catch(e){} }
+function curCh(){ try{return currentChannel||null}catch(e){return null} }
+
+/* ================= shared helpers (also used by badges everywhere) ================= */
+var G=window.GZPM={
+  PRICE:PRICE,
+  active:function(c){ return !!(c && Number(c.premiumUntil)>Date.now()); },
+  emoji:function(c){ if(!G.active(c)) return ''; var b=pick(c.pm&&c.pm.badge,BADGES,'crown'); return b==='crown'?'👑':b==='star'?'⭐':''; },
+  avatarHTML:function(c){
+    if(!G.active(c)) return '';
+    var b=pick(c.pm&&c.pm.border,BORDERS,'gold'), e=G.emoji(c), h='';
+    if(b!=='none') h+='<div class="pm-ring pm-b-'+b+'"></div>';
+    if(e) h+='<div class="pm-crown">'+e+'</div>';
+    return h;
+  },
+  nameBadge:function(c){ var e=G.emoji(c); return e?'<span class="pm-nb" title="Gupzy Premium">'+e+'</span>':''; },
+  applyOwn:applyOwn
+};
+
+/* ================= own look: app theme colours + app icon ================= */
+var origIcons=null, iconCache={};
+function drawIcon(id,size){
+  var k=id+size; if(iconCache[k]) return iconCache[k];
+  var cv=document.createElement('canvas'); cv.width=cv.height=size; var x=cv.getContext('2d'), r=size*.22;
+  x.beginPath(); x.moveTo(r,0); x.arcTo(size,0,size,size,r); x.arcTo(size,size,0,size,r); x.arcTo(0,size,0,0,r); x.arcTo(0,0,size,0,r); x.closePath(); x.clip();
+  var g;
+  if(id==='gold'){ g=x.createLinearGradient(0,0,size,size); g.addColorStop(0,'#fff1b8'); g.addColorStop(.5,'#f5c542'); g.addColorStop(1,'#b7791f'); }
+  else if(id==='dark'){ g=x.createLinearGradient(0,0,size,size); g.addColorStop(0,'#26262f'); g.addColorStop(1,'#07070a'); }
+  else { g=x.createLinearGradient(0,0,size,size); ['#ff3b6b','#ffb800','#2fd573','#2bb5ff','#8a5cff'].forEach(function(c,i,a){ g.addColorStop(i/(a.length-1),c); }); }
+  x.fillStyle=g; x.fillRect(0,0,size,size);
+  if(id==='dark'){ x.lineWidth=size*.035; x.strokeStyle='#d4a017'; x.strokeRect(size*.06,size*.06,size*.88,size*.88); }
+  var tg=x.createLinearGradient(0,size*.2,0,size*.85);
+  if(id==='dark'){ tg.addColorStop(0,'#fff1b8'); tg.addColorStop(1,'#d4a017'); x.fillStyle=tg; } else x.fillStyle=(id==='gold'?'#3a2a00':'#fff');
+  x.font='900 '+Math.round(size*.62)+'px "Segoe UI",Roboto,Arial,sans-serif'; x.textAlign='center'; x.textBaseline='middle'; x.fillText('G',size/2,size*.55);
+  return (iconCache[k]=cv.toDataURL('image/png'));
+}
+function setIcon(id){
+  try{
+    var links=document.querySelectorAll('link[rel~="icon"],link[rel="apple-touch-icon"]');
+    if(!origIcons){ origIcons=[].map.call(links,function(l){ return {el:l,href:l.getAttribute('href')}; }); }
+    var tc=document.querySelector('meta[name="theme-color"]');
+    if(id==='classic'||!id){
+      origIcons.forEach(function(o){ o.el.setAttribute('href',o.href); });
+      if(tc) tc.setAttribute('content','#ffffff');
+      if(window.__pmManifest0){ var m0=document.querySelector('link[rel="manifest"]'); if(m0) m0.setAttribute('href',window.__pmManifest0); }
+      return;
+    }
+    var u192=drawIcon(id,192), u512=drawIcon(id,512);
+    origIcons.forEach(function(o){ o.el.setAttribute('href',u192); if(o.el.getAttribute('rel')==='icon') o.el.setAttribute('type','image/png'); });
+    if(tc) tc.setAttribute('content',id==='dark'?'#0a0a0e':id==='gold'?'#d4a017':'#ffffff');
+    /* new installs / "Add to home screen" pick the icon from the manifest */
+    var ml=document.querySelector('link[rel="manifest"]');
+    if(ml){ if(!window.__pmManifest0) window.__pmManifest0=ml.getAttribute('href');
+      fetch(window.__pmManifest0).then(function(r){return r.json()}).then(function(m){
+        m.icons=[{src:u192,sizes:'192x192',type:'image/png',purpose:'any'},{src:u512,sizes:'512x512',type:'image/png',purpose:'any'}];
+        try{ m.start_url=new URL(m.start_url||'./',new URL(window.__pmManifest0,location.href)).href; m.scope=new URL(m.scope||'./',new URL(window.__pmManifest0,location.href)).href; }catch(e){}
+        ml.setAttribute('href',URL.createObjectURL(new Blob([JSON.stringify(m)],{type:'application/manifest+json'})));
+      }).catch(function(){});
+    }
+  }catch(e){}
+}
+function applyOwn(c){
+  var on=G.active(c), p=(on&&c.pm)||{};
+  var th=THEMES.filter(function(t){return t[0]===p.theme})[0], st=document.documentElement.style;
+  if(on && th && th[0]!=='default'){ st.setProperty('--accent',th[2]); st.setProperty('--accent2',th[3]); }
+  else { st.removeProperty('--accent'); st.removeProperty('--accent2'); }
+  setIcon(on?pick(p.icon,ICONS,'classic'):'classic');
+  try{ if(on) localStorage.setItem('gz_pm_own',JSON.stringify({u:c.premiumUntil,t:p.theme||'',i:p.icon||''})); else localStorage.removeItem('gz_pm_own'); }catch(e){}
+}
+/* instant look on the next app start (before the profile finishes loading) */
+try{ var o=JSON.parse(localStorage.getItem('gz_pm_own')||'null'); if(o && Number(o.u)>Date.now()) applyOwn({premiumUntil:o.u,pm:{theme:o.t,icon:o.i}}); }catch(e){}
+
+/* ================= names in DMs ================= */
+var nbCache={};
+function getPm(uid){
+  if(!nbCache[uid]) nbCache[uid]=fs().collection('channels').doc(uid).get().then(function(d){ var x=d.exists?d.data():{}; return {premiumUntil:x.premiumUntil,pm:x.pm}; }).catch(function(){ delete nbCache[uid]; return null; });
+  return nbCache[uid];
+}
+var nbQueued=false;
+function scanNames(){
+  nbQueued=false;
+  document.querySelectorAll('#dmList .dm-row').forEach(function(row){
+    var av=row.querySelector('[data-bduid]'), nm=row.querySelector('.tx b'); if(!av||!nm) return;
+    var uid=av.getAttribute('data-bduid'); if(!uid) return;
+    getPm(uid).then(function(c){ if(!c||!G.active(c)||nm.querySelector('.pm-nb')) return; nm.insertAdjacentHTML('beforeend',G.nameBadge(c)); });
+  });
+}
+try{ new MutationObserver(function(){ if(!nbQueued){ nbQueued=true; setTimeout(scanNames,120); } }).observe(document.body,{childList:true,subtree:true}); }catch(e){}
+
+/* ================= Premium page ================= */
+var pg=$('gzPmPage'), RATE=0, CFG={}, region='', method='', form={txn:'',snd:''}, months=1, busy=false, req=null, chD=null;
+var MN={jazzcash:'JazzCash',easypaisa:'EasyPaisa',bank:'Bank transfer',payoneer:'Payoneer'};
+function navB(){ var n=document.querySelector('nav'); return n?Math.max(0,Math.round(window.innerHeight-n.getBoundingClientRect().top)):60; }
+function open(){
+  if(!me()){ T('Please log in first'); return; }
+  ['flPage4','flPage2','flPage','flMenu'].forEach(function(i){ var e=$(i); if(e) e.classList.remove('show'); });
+  pg.style.bottom=navB()+'px'; pg.classList.add('show'); pg.scrollTop=0; load();
+}
+function close(){ pg.classList.remove('show'); }
+async function getRate(){
+  var c=null; try{ c=JSON.parse(localStorage.getItem('flUsdPkr')||'null'); }catch(e){}
+  if(c&&c.r&&Date.now()-c.t<1800000) return c.r;
+  try{ var r=await fetch('https://open.er-api.com/v6/latest/USD'), j=await r.json(), v=j&&j.rates&&j.rates.PKR; if(v>50&&v<2000){ try{localStorage.setItem('flUsdPkr',JSON.stringify({r:v,t:Date.now()}))}catch(e){} return v; } }catch(e){}
+  return (c&&c.r)||280;
+}
+function mList(){ if(region==='intl') return CFG.payoneer?['payoneer']:[]; return ['jazzcash','easypaisa','bank'].filter(function(k){return CFG[k]}); }
+async function load(){
+  var u=me(); if(!u) return; pg.innerHTML='<div class="flp-card">Loading…</div>';
+  var rs=await Promise.all([
+    getRate(),
+    fs().collection('channels').doc(u.uid).get().then(function(s){return s.exists?s.data():null}).catch(function(){return null}),
+    fs().collection('settings').doc('premium').get().then(function(s){return s.exists?s.data():null}).catch(function(){return null}),
+    fs().collection('settings').doc('blueTick').get().then(function(s){return s.exists?s.data():null}).catch(function(){return null}),
+    fs().collection('premiumRequests').doc(u.uid).get().then(function(s){return s.exists?s.data():null}).catch(function(){return null})
+  ]);
+  RATE=rs[0]; chD=rs[1]||curCh()||{}; CFG=(rs[2]&&(rs[2].jazzcash||rs[2].easypaisa||rs[2].bank||rs[2].payoneer))?rs[2]:(rs[3]||{}); req=rs[4];
+  try{ if(curCh()){ currentChannel.premiumUntil=chD.premiumUntil; currentChannel.pm=chD.pm; } }catch(e){}
+  if(!region) region=(String(chD.country||'').toLowerCase()==='pakistan'||!chD.country)?'pk':'intl';
+  var ml=mList(); if(ml.indexOf(method)<0) method=ml[0]||'';
+  draw();
+}
+function opt(kind,id,on,inner,label){ return '<button class="pmx-opt'+(on?' on':'')+'" data-p="'+kind+'" data-v="'+id+'">'+inner+'<span>'+esc(label)+'</span></button>'; }
+function draw(){
+  var c=chD||{}, on=G.active(c), p=c.pm||{}, left=on?Math.ceil((c.premiumUntil-Date.now())/86400000):0;
+  var tot=PRICE*months, pkr=Math.ceil(tot*RATE), pkr1=Math.ceil(PRICE*RATE);
+  var logo=c.logoURL?'<img src="'+esc(c.logoURL)+'" alt="">':esc(((c.name||'?').trim().charAt(0)||'?').toUpperCase());
+  var h='<div class="flp-h"><button data-p="back">‹</button><h1>Gupzy Premium</h1></div>';
+  h+='<div class="pmx-hero"><big>'+(on?'👑 Active':'$'+PRICE+'<span style="font-size:20px"> / month</span>')+'</big><small>'
+    +(on?'Valid until '+new Date(c.premiumUntil).toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'})+' · '+left+' day'+(left===1?'':'s')+' left':'≈ Rs '+pkr1.toLocaleString()+' · per month')+'</small></div>';
+
+  /* features */
+  h+='<div class="pmx-sec">🎨 Personalization &amp; UI/UX</div>'
+   +'<div class="pmx-feat"><div class="e">🎨</div><div><b>Custom app icons &amp; themes</b><span>Colourful, gold or dark premium app icon and your own app and chat themes.</span></div></div>'
+   +'<div class="pmx-feat"><div class="e">💍</div><div><b>Animated profile borders</b><span>A glowing, animated ring around your profile picture that stands out across the whole app.</span></div></div>'
+   +'<div class="pmx-feat"><div class="e">👑</div><div><b>Special chat badges</b><span>An exclusive crown or star badge next to your name in DMs.</span></div></div>';
+
+  if(on){
+    h+='<div class="pmx-sec">Animated profile border</div><div class="pmx-grid">'
+      +BORDERS.map(function(b){ return opt('border',b[0],pick(p.border,BORDERS,'gold')===b[0],'<div class="pmx-av">'+(b[0]==='none'?'':'<div class="pm-ring pm-b-'+b[0]+'"></div>')+logo+'</div>',b[1]); }).join('')+'</div>';
+    h+='<div class="pmx-sec">Chat badge</div><div class="pmx-grid">'
+      +BADGES.map(function(b){ return opt('badge',b[0],pick(p.badge,BADGES,'crown')===b[0],'<div class="pmx-sw" style="background:var(--surface2);font-size:22px">'+b[1]+'</div>',b[2]); }).join('')+'</div>';
+    h+='<div class="pmx-sec">App theme</div><div class="pmx-grid">'
+      +THEMES.map(function(t){ return opt('theme',t[0],(p.theme||'default')===t[0],'<div class="pmx-sw" style="background:linear-gradient(135deg,'+t[2]+','+t[3]+')"></div>',t[1]); }).join('')+'</div>';
+    h+='<div class="pmx-sec">Chat theme</div><div class="pmx-grid">'
+      +CHATS.map(function(t){ return opt('chatTheme',t[0],(p.chatTheme||'default')===t[0],'<div class="pmx-chat" style="background:'+(/^(midnight|gold|forest)$/.test(t[0])?'#10121c':'#fff')+'"><i style="background:'+t[3]+'"></i><i class="m" style="background:'+t[2]+'"></i></div>',t[1]); }).join('')+'</div>'
+      +'<div class="pmx-note">Chat themes show in Gupchats and in your chats.</div>';
+    h+='<div class="pmx-sec">App icon</div><div class="pmx-grid">'
+      +ICONS.map(function(t){ return opt('icon',t[0],pick(p.icon,ICONS,'classic')===t[0],'<img alt="" style="width:44px;height:44px;border-radius:11px" src="'+(t[0]==='classic'?(origIcons&&origIcons[0]?origIcons[0].href:'./icon-192.png'):drawIcon(t[0],96))+'">',t[1]); }).join('')+'</div>'
+      +'<div class="pmx-note">Changes the icon in the browser tab and for new “Add to Home Screen” installs. An app that is already installed on your phone keeps its launcher icon (this is a phone limitation).</div>';
+  }
+
+  /* payment / renew */
+  h+='<div class="pmx-sec">'+(on?'Renew Premium':'Get Premium')+'</div>';
+  var pend=req&&req.status==='pending', rej=req&&req.status==='rejected';
+  if(pend){
+    h+='<div class="flp-card"><b>⏳ Payment under review</b><br><small style="color:var(--text-dim)">We are checking your payment ('+esc(MN[req.method]||'')+', ID '+esc(req.txnId||'')+'). Premium starts as soon as it is approved.</small></div>';
+  } else {
+    if(rej) h+='<div class="flp-card" style="border:1px solid #ef4444"><b>❌ Not approved</b><br><small>'+esc(req.rejectReason||'We could not verify your payment.')+'</small></div>';
+    if(req&&req.status==='approved'&&!on) h+='<div class="flp-card"><small style="color:var(--text-dim)">Your last Premium month has ended. Renew below to continue.</small></div>';
+    var ml=mList();
+    h+='<div style="font-weight:700;margin-top:6px">How many months?</div><div class="fl4-chips" style="margin-top:8px">'+[1,2,3,6,12].map(function(n){ return '<button class="fl4-chip'+(months===n?' on':'')+'" data-p="months" data-n="'+n+'">'+n+' month'+(n>1?'s':'')+' · $'+(PRICE*n)+'</button>'; }).join('')+'</div>';
+    h+='<div class="flp-tabs" style="margin-top:14px"><button class="flp-tab'+(region==='pk'?' on':'')+'" data-p="region" data-r="pk">🇵🇰 Pakistan</button><button class="flp-tab'+(region==='intl'?' on':'')+'" data-p="region" data-r="intl">🌍 International</button></div>';
+    if(!ml.length) h+='<div class="flp-card">Payment details for this option are not set yet. Please check back soon.</div>';
+    else{
+      var amt=region==='intl'?('$'+tot+' USD'):('Rs '+pkr.toLocaleString());
+      h+='<div class="fl4-chips" style="margin-top:4px">'+ml.map(function(k){return '<button class="fl4-chip'+(method===k?' on':'')+'" data-p="method" data-m="'+k+'">'+MN[k]+'</button>';}).join('')+'</div>'
+        +'<div class="flp-card"><b>Send exactly '+amt+' for '+months+' month'+(months>1?'s':'')+'</b><br>'+MN[method]+(method==='payoneer'?' email / ID:':' account:')+'<div class="flp-lk" style="margin-top:8px;color:var(--text)">'+esc(CFG[method])+(CFG.title&&method!=='payoneer'?'<br>Title: '+esc(CFG.title):'')+'</div><button class="flp-go" style="margin-top:10px" data-p="copy" data-v="'+esc(CFG[method])+'">Copy</button></div>'
+        +'<input class="fl4-ta" id="pmxTxn" style="min-height:0" placeholder="Transaction ID" value="'+esc(form.txn)+'" maxlength="80">'
+        +'<input class="fl4-ta" id="pmxSnd" style="min-height:0" placeholder="Sender name / number" value="'+esc(form.snd)+'" maxlength="80">'
+        +'<div style="margin-top:10px;font-size:14px;color:var(--text-dim)">Payment screenshot (optional)</div><input type="file" id="pmxProof" accept="image/*" style="margin-top:6px;max-width:100%">'
+        +'<button class="flp-go" style="margin-top:16px" data-p="send">I have paid — submit</button>'
+        +'<div class="pmx-note">Each month = 30 days from approval. Renewing while active adds the new days on top of the days you still have.</div>';
+    }
+  }
+  pg.innerHTML=h;
+}
+function val(id){ var e=$(id); return e?e.value.trim():''; }
+async function savePm(patch){
+  var u=me(); if(!u||busy) return; busy=true;
+  var pm=Object.assign({},(chD&&chD.pm)||{},patch);
+  try{
+    await fs().collection('channels').doc(u.uid).set({pm:pm},{merge:true});
+    chD.pm=pm; try{ if(curCh()) currentChannel.pm=pm; }catch(e){}
+    applyOwn(chD); try{ delete _channelBadgeCache[u.uid]; }catch(e){} try{ applyChannelToUI(); }catch(e){}
+    T('Saved ✓');
+  }catch(e){ T('Could not save'); }
+  busy=false; var y=pg.scrollTop; draw(); pg.scrollTop=y;
+}
+async function send(){
+  var u=me(); if(!u||busy) return;
+  var txn=val('pmxTxn'), snd=val('pmxSnd'); form.txn=txn; form.snd=snd;
+  if(txn.length<4||snd.length<3){ T('Please fill transaction ID and sender'); return; }
+  busy=true; T('Submitting…');
+  var proof='', f=$('pmxProof')&&$('pmxProof').files[0];
+  if(f){ try{ proof=await uploadToCloudinary(f,'image',document.createElement('div'),'pmproof_'+u.uid+'_'+Date.now()+'.jpg'); if(typeof proof!=='string') proof=''; }catch(e){ proof=''; } }
+  var c=chD||{}, d={uid:u.uid,name:(c.name||'').slice(0,60),channelId:c.channelId||'',status:'pending',region:region,method:method,priceUsd:PRICE*months,amountPkr:Math.ceil(PRICE*months*RATE),rate:RATE,txnId:txn.slice(0,80),sender:snd.slice(0,80),days:DAYS*months,createdAt:firebase.firestore.FieldValue.serverTimestamp()};
+  if(proof) d.proofURL=proof;
+  try{ if(req&&req.status!=='pending'){ await fs().collection('premiumRequests').doc(u.uid).delete(); }
+    await fs().collection('premiumRequests').doc(u.uid).set(d); form={txn:'',snd:''}; req=d; T('Submitted. We will verify your payment.'); }
+  catch(e){ T('Could not submit. Please try again.'); }
+  busy=false; draw();
+}
+pg.addEventListener('click',function(e){
+  var el=e.target.closest('[data-p]'); if(!el) return; var a=el.getAttribute('data-p');
+  if(a==='back') close();
+  else if(a==='region'){ form.txn=val('pmxTxn')||form.txn; form.snd=val('pmxSnd')||form.snd; region=el.getAttribute('data-r'); method=''; var ml=mList(); method=ml[0]||''; draw(); }
+  else if(a==='method'){ form.txn=val('pmxTxn')||form.txn; form.snd=val('pmxSnd')||form.snd; method=el.getAttribute('data-m'); draw(); }
+  else if(a==='copy'){ var v=el.getAttribute('data-v')||''; try{navigator.clipboard.writeText(v).then(function(){T('Copied')},function(){T(v)})}catch(x){T(v)} }
+  else if(a==='months'){ form.txn=val('pmxTxn')||form.txn; form.snd=val('pmxSnd')||form.snd; months=parseInt(el.getAttribute('data-n'),10)||1; draw(); }
+  else if(a==='send') send();
+  else if(a==='border'||a==='badge'||a==='theme'||a==='chatTheme'||a==='icon'){ var o={}; o[a]=el.getAttribute('data-v'); savePm(o); }
+});
+document.addEventListener('click',function(e){ if(pg.classList.contains('show') && e.target.closest && e.target.closest('nav .nav-btn')) close(); },true);
+var ob=window.__gzBack; window.__gzBack=function(){ if(pg.classList.contains('show')){ close(); return true; } return ob?ob.apply(this,arguments):false; };
+window.gzPremium={open:open,close:close};
+/* deep link: https://gupzy.com/?premium=1 (used by the "Get Premium" button inside Gupchats) */
+try{ if(/[?&]premium=1/.test(location.search)){ var tries=0, iv=setInterval(function(){ if(me()){ clearInterval(iv); open(); } else if(++tries>40) clearInterval(iv); },500); } }catch(e){}
+})();
+</script>
+
+<!-- ===== ADMIN PANEL: Premium tab ===== -->
+<script id="gzPremiumAdminJs">
+(function(){
+var $=function(i){return document.getElementById(i)}, box=$('adminPremiumContainer'), busy=false, DAY=86400000;
+if(!box) return;
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function fs(){return firebase.firestore();}
+function T(m){ try{toast(m)}catch(e){} }
+function val(id){ var e=$(id); return e?e.value.trim():''; }
+var MN={jazzcash:'JazzCash',easypaisa:'EasyPaisa',bank:'Bank transfer',payoneer:'Payoneer'};
+function av(c){ return '<div class="flp-av">'+(c.logoURL?'<img src="'+esc(c.logoURL)+'" alt="">':esc(((c.name||'?').trim().charAt(0)||'?').toUpperCase()))+'</div>'; }
+function fmt(ms){ return new Date(ms).toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'}); }
+function build(){
+  box.innerHTML='<div class="flp-card"><b>➕ Give / extend Premium</b><br><small style="color:var(--text-dim)">Type a channel ID (without @) and the number of days.</small>'
+   +'<input class="fl4-ta" id="pmaId" style="min-height:0;margin-top:10px" placeholder="Channel ID" autocapitalize="off" autocomplete="off">'
+   +'<input class="fl4-ta" id="pmaDays" type="number" style="min-height:0;margin-top:8px" value="30" min="1" max="3650">'
+   +'<div class="flp-two"><button class="flp-go" style="background:#16a34a" data-a="give">👑 Give Premium</button><button class="flp-go" style="background:#ef4444" data-a="take">Remove</button></div></div>'
+   +'<div style="margin:18px 2px 6px;font-weight:800">💳 Pending payment requests</div><div id="pmaPend"></div>'
+   +'<div style="margin:18px 2px 6px;font-weight:800">👑 Active Premium members</div><div id="pmaList"></div>'
+   +'<div class="flp-card" style="margin-top:18px"><b>🛠 Premium payment details</b><br><small style="color:var(--text-dim)">Leave empty to reuse the Blue Tick payment details.</small>'
+   +['jazzcash:JazzCash number','easypaisa:EasyPaisa number','bank:Bank (name / IBAN)','payoneer:Payoneer email','title:Account title'].map(function(p){var k=p.split(':')[0];return '<input class="fl4-ta" style="min-height:0;margin-top:8px" id="pmaC_'+k+'" placeholder="'+p.split(':')[1]+'" maxlength="120">';}).join('')
+   +'<button class="flp-go" style="margin-top:10px" data-a="savecfg">Save payment details</button></div>';
+  loadCfg(); loadPend(); loadList();
+}
+async function loadCfg(){ try{ var s=await fs().collection('settings').doc('premium').get(), d=s.exists?s.data():{}; ['jazzcash','easypaisa','bank','payoneer','title'].forEach(function(k){ var e=$('pmaC_'+k); if(e) e.value=d[k]||''; }); }catch(e){} }
+async function saveCfg(){
+  if(busy) return; busy=true; var d={updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+  ['jazzcash','easypaisa','bank','payoneer','title'].forEach(function(k){ d[k]=val('pmaC_'+k); });
+  try{ await fs().collection('settings').doc('premium').set(d); T('Payment details saved'); }catch(e){ T('Could not save'); }
+  busy=false;
+}
+async function loadPend(){
+  var el=$('pmaPend'); if(!el) return;
+  try{
+    var q=await fs().collection('premiumRequests').where('status','==','pending').limit(30).get(), h='';
+    if(q.empty) h='<div class="flp-card">No pending requests.</div>';
+    q.forEach(function(d){ var x=d.data();
+      h+='<div class="flp-card"><b>'+esc(x.name||'')+'</b> <small>@'+esc(x.channelId||'')+'</small><br>'+esc(MN[x.method]||x.method||'')+' · '+(x.region==='intl'?'$'+x.priceUsd:'Rs '+x.amountPkr)+'<br>Txn: <b>'+esc(x.txnId||'')+'</b> · From: '+esc(x.sender||'')
+       +(x.proofURL?'<br><a href="'+esc(x.proofURL)+'" target="_blank" rel="noopener" style="color:var(--accent2)">View screenshot</a>':'')
+       +'<div class="flp-two"><button class="flp-go" style="background:#16a34a" data-a="ok" data-u="'+esc(d.id)+'" data-d="'+(x.days||30)+'">Approve +'+(x.days||30)+' days</button><button class="flp-go" style="background:#ef4444" data-a="no" data-u="'+esc(d.id)+'">Reject</button></div></div>'; });
+    el.innerHTML=h;
+  }catch(e){ el.innerHTML='<div class="flp-card">Could not load requests.</div>'; }
+}
+async function loadList(){
+  var el=$('pmaList'); if(!el) return;
+  try{
+    var q=await fs().collection('channels').where('premiumUntil','>',Date.now()).limit(100).get(), h='';
+    if(q.empty) h='<div class="flp-card">No active Premium members yet.</div>';
+    q.forEach(function(d){ var c=d.data();
+      h+='<div class="flp-r" style="cursor:default">'+av(c)+'<div class="nm">'+esc(c.name||'—')+'<small>@'+esc(c.channelId||'')+' · until '+fmt(c.premiumUntil)+'</small></div><button class="flp-go" style="width:auto;padding:9px 14px;font-size:14px;background:#ef4444" data-a="rm" data-u="'+esc(d.id)+'">Remove</button></div>'; });
+    el.innerHTML=h;
+  }catch(e){ el.innerHTML='<div class="flp-card">Could not load the list.</div>'; }
+}
+async function resolve(inp){
+  inp=String(inp||'').trim().replace(/^@/,''); if(!inp||inp.indexOf('/')>=0) return null;
+  var uid=null, tries=[inp]; if(inp.toLowerCase()!==inp) tries.push(inp.toLowerCase());
+  for(var i=0;i<tries.length&&!uid;i++){ try{ var s=await fs().collection('channelIds').doc(tries[i]).get(); if(s.exists) uid=s.data().ownerUid; }catch(e){} }
+  if(!uid) return null;
+  var c=await fs().collection('channels').doc(uid).get(); return c.exists?{uid:uid,c:c.data()}:null;
+}
+/* adds `days` on top of whatever is left (never shortens), approves the payment request if there is one */
+async function grant(uid,days,name){
+  if(busy) return; busy=true; var FV=firebase.firestore.FieldValue;
+  try{
+    var s=await fs().collection('channels').doc(uid).get(), cur=(s.exists&&Number(s.data().premiumUntil))||0;
+    var until=Math.max(Date.now(),cur)+days*DAY;
+    await fs().collection('channels').doc(uid).update({premiumUntil:until});
+    try{ var r=fs().collection('premiumRequests').doc(uid), rs=await r.get(); if(rs.exists&&rs.data().status==='pending') await r.update({status:'approved',until:until,reviewedAt:FV.serverTimestamp()}); }catch(e){}
+    T('👑 Premium until '+fmt(until)+(name?' · '+name:''));
+  }catch(e){ T('Failed: '+(e.message||'error')); }
+  busy=false; loadPend(); loadList();
+}
+async function revoke(uid){
+  if(busy) return; busy=true;
+  try{ await fs().collection('channels').doc(uid).update({premiumUntil:0}); T('Premium removed'); }catch(e){ T('Failed: '+(e.message||'error')); }
+  busy=false; loadList();
+}
+async function reject(uid){
+  var why=(prompt('Reason for rejecting? (the user will see it)')||'').trim(); if(!why||busy) return; busy=true;
+  try{ await fs().collection('premiumRequests').doc(uid).update({status:'rejected',rejectReason:why.slice(0,200),reviewedAt:firebase.firestore.FieldValue.serverTimestamp()}); T('Request rejected'); }catch(e){ T('Failed'); }
+  busy=false; loadPend();
+}
+box.addEventListener('click',function(e){
+  var el=e.target.closest('[data-a]'); if(!el) return; var a=el.getAttribute('data-a'), u=el.getAttribute('data-u');
+  if(a==='give'||a==='take'){
+    var inp=val('pmaId'); if(!inp){ T('Type a channel ID first'); return; }
+    resolve(inp).then(function(r){
+      if(!r){ T('No channel found with this ID'); return; }
+      var nm=r.c.name||inp;
+      if(a==='give'){ var d=parseInt(val('pmaDays'),10); if(!(d>=1&&d<=3650)){ T('Enter days (1–3650)'); return; } if(confirm('Give '+d+' day(s) of Premium to '+nm+'?')) grant(r.uid,d,nm).then(function(){ var x=$('pmaId'); if(x) x.value=''; }); }
+      else if(confirm('Remove Premium from '+nm+'?')) revoke(r.uid);
+    });
+  }
+  else if(a==='ok') grant(u,parseInt(el.getAttribute('data-d'),10)||30,'');
+  else if(a==='no') reject(u);
+  else if(a==='rm'){ if(confirm('Remove Premium from this member?')) revoke(u); }
+  else if(a==='savecfg') saveCfg();
+});
+document.querySelectorAll('#adminTabs .profile-tab').forEach(function(tab){
+  tab.addEventListener('click',function(){ var w=tab.dataset.atab==='premium'; box.classList.toggle('hidden',!w); if(w) build(); });
 });
 })();
 </script>

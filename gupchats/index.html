@@ -547,7 +547,7 @@ function av(logo,name,cls){ var inner = /^https?:\/\//.test(logo||'') ? '<img sr
 /* avatar + online dot + story ring */
 function avw(uid,logo,name,cls){
   var g=storyGroup(uid), rc=g?(hasUnseen(g)?' ring':' ring seen'):'';
-  return '<div class="avw'+rc+'">'+av(logo,name,cls)+(isOnline(uid)?'<i class="od"></i>':'')+'</div>';
+  return '<div class="avw'+rc+'" data-pmu="'+esc(uid||'')+'">'+av(logo,name,cls)+(isOnline(uid)?'<i class="od"></i>':'')+'</div>';
 }
 function ms(t){ return (t && t.toMillis) ? t.toMillis() : (typeof t==='number'?t:0); }
 function dmId(a,b){ return a<b ? a+'_'+b : b+'_'+a; }
@@ -1643,6 +1643,7 @@ function openSettings(){
    +row('stUser','@','Username',me.handle?'@'+esc(me.handle):'Set in Gupzy')
    +'<div class="stSec">Preferences</div>'
    +(native?row('stNot','🔔','Notifications &amp; sounds','Get notified when a friend messages you'):'')
+   +row('stPm','👑','Gupzy Premium',(window.gcPm&&window.gcPm.active(me)?'Active · chat themes, badge &amp; more':'$3/month · chat themes, animated border, badge'))
    +row('stBk','☁️','Chat backup',backupState==='on'?'On – same backup as Gupzy':'Off – tap to turn on')
    +row('stPriv','🔒','Privacy &amp; safety','Messages are end-to-end encrypted')
    +'<div class="stSec">Safety</div>'
@@ -1664,6 +1665,7 @@ function openSettings(){
   p.querySelector('#stAct').onclick=function(e){ if(e.target===cb) return; setAct(!cb.checked); };
   p.querySelector('#stUser').onclick=function(){ toast('Change your username in Gupzy → Edit profile'); };
   var nb=p.querySelector('#stNot'); if(nb) nb.onclick=function(){ try{ window.AndroidPush.request('notif'); }catch(e){} setTimeout(saveNativeToken,1500); };
+  p.querySelector('#stPm').onclick=function(){ if(window.gcPm) window.gcPm.sheet(); };
   p.querySelector('#stBk').onclick=function(){ backupSheet(false); };
   p.querySelector('#stPriv').onclick=function(){
     var bg=sheet('<div class="sh-t">Privacy &amp; safety</div><p class="sh-p">Messages, photos and voice messages are end-to-end encrypted. Only you and your friend can read them.</p><p class="sh-p">If off, “Active status” also hides when others are online and their last seen.</p><button class="btn gray" style="width:100%;padding:13px" id="pvClose">Close</button>');
@@ -3274,6 +3276,127 @@ var t=document.querySelector('#chat .top');if(t){t.style.cursor='pointer'}
   document.head.appendChild(st);
   window.gzAiRowHTML=function(){ return '<div class="row" data-gzai="1"><div class="avw"><div class="gzai-av">\u2728</div></div><div class="rb"><div class="rn">Gupzy AI<span class="gzai-tag">AI</span></div><div class="rs">Ask me anything</div></div></div>'; };
   var l=document.getElementById('chatList'); if(l) l.addEventListener('click',function(e){ if(e.target.closest('[data-gzai]') && window.gzAiOpen) window.gzAiOpen(); });
+})();
+</script>
+
+<style id="gcPmCss">
+.pm-ring{position:absolute;inset:-3px;border-radius:50%;pointer-events:none;z-index:2;
+  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3.5px),#000 calc(100% - 3px));mask:radial-gradient(farthest-side,transparent calc(100% - 3.5px),#000 calc(100% - 3px));animation:pmSpin 3.2s linear infinite}
+.pm-b-gold{background:conic-gradient(#fff3b0,#f5c542,#b7791f,#f5c542,#fff3b0);filter:drop-shadow(0 0 4px rgba(245,197,66,.85))}
+.pm-b-rainbow{background:conic-gradient(#ff3b6b,#ffb800,#2fd573,#2bb5ff,#8a5cff,#ff3b6b);animation-duration:2.4s}
+.pm-b-neon{background:conic-gradient(#00f0ff,#ff2bd6,#00f0ff);filter:drop-shadow(0 0 5px #00f0ff);animation-duration:2.8s}
+.pm-b-fire{background:conic-gradient(#ffdd55,#ff7a00,#e11d1d,#ff7a00,#ffdd55);filter:drop-shadow(0 0 5px rgba(255,98,0,.9));animation-duration:2s}
+.pm-b-ice{background:conic-gradient(#ffffff,#7dd3fc,#3b82f6,#7dd3fc,#ffffff);filter:drop-shadow(0 0 4px rgba(96,165,250,.9));animation-duration:3.6s}
+@keyframes pmSpin{to{transform:rotate(360deg)}}
+.pm-crown{position:absolute;top:-10px;left:50%;transform:translateX(-50%);font-size:12px;line-height:1;z-index:4;pointer-events:none;filter:drop-shadow(0 1px 1px rgba(0,0,0,.4))}
+.pm-nb{display:inline-block;margin-left:4px;font-size:.85em;line-height:1}
+.avw{position:relative}
+@media (prefers-reduced-motion:reduce){.pm-ring{animation:none}}
+.pmg{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0}
+.pmo{display:flex;flex-direction:column;align-items:center;gap:6px;width:76px;padding:8px 4px;border:2px solid var(--border);border-radius:14px;background:var(--surface);color:var(--text);font-size:12px;font-weight:700;font-family:inherit}
+.pmo.on{border-color:#d4a017;background:rgba(245,197,66,.16)}
+.pmc{width:52px;height:40px;border-radius:10px;padding:6px;display:flex;flex-direction:column;gap:4px;justify-content:center;border:1px solid rgba(0,0,0,.08)}
+.pmc i{display:block;height:8px;border-radius:6px;width:62%}.pmc i.m{align-self:flex-end}
+</style>
+<script id="gcPremium">
+(function(){
+var BORDERS=['gold','rainbow','neon','fire','ice','none'], BADGES=['crown','star','none'];
+/* id, name, my bubble, my text, their bubble, their text, chat background, dim text, dark? */
+var CT={
+ default:['Classic'],
+ midnight:['Midnight','linear-gradient(135deg,#7c5cff,#4a5cff)','#fff','#1f2337','#f1f1f7','#0f1220','#9aa0b8',1],
+ gold:['Black Gold','linear-gradient(135deg,#f5d36b,#c8921b)','#2b1d00','#2a2418','#f6ead0','#14110a','#b9a77a',1],
+ rose:['Rose','#ff4d8d','#fff','#ffe0ea','#4a1030','#fff0f5','#a35a77',0],
+ ocean:['Ocean','#0ea5e9','#fff','#d3ecfb','#0b3a54','#e8f6ff','#5b8aa6',0],
+ forest:['Forest','#16a34a','#fff','#1c2b23','#e7f5ec','#0e1a14','#7fa68e',1],
+ sunset:['Sunset','linear-gradient(135deg,#f97316,#ef4444)','#fff','#ffffff','#3a1d10','linear-gradient(180deg,#fff3e6,#ffe0e0)','#a8745c',0]
+};
+function g(i){ return document.getElementById(i); }
+function active(c){ return !!(c && Number(c.premiumUntil)>Date.now()); }
+function emoji(c){ if(!active(c)) return ''; var b=BADGES.indexOf(c.pm&&c.pm.badge)>=0?c.pm.badge:'crown'; return b==='crown'?'👑':b==='star'?'⭐':''; }
+function ringHTML(c){ if(!active(c)) return ''; var b=BORDERS.indexOf(c.pm&&c.pm.border)>=0?c.pm.border:'gold', e=emoji(c), h=''; if(b!=='none') h+='<div class="pm-ring pm-b-'+b+'"></div>'; if(e) h+='<div class="pm-crown">'+e+'</div>'; return h; }
+
+/* ---- premium info of other people (cached 10 min) ---- */
+var cache={};
+function getPm(uid){
+  var o=cache[uid]; if(o && Date.now()-o.t<600000) return o.p;
+  var p=db.collection('channels').doc(uid).get().then(function(d){ var x=d.exists?d.data():{}; return {premiumUntil:x.premiumUntil,pm:x.pm}; }).catch(function(){ delete cache[uid]; return null; });
+  cache[uid]={t:Date.now(),p:p}; return p;
+}
+/* ---- put ring / crown / name badge on whatever the app has drawn ---- */
+var q=false;
+function decorate(){
+  q=false; if(typeof me==='undefined'||!me) return;
+  document.querySelectorAll('.avw[data-pmu]').forEach(function(el){
+    var u=el.getAttribute('data-pmu'); if(!u) return;
+    getPm(u).then(function(c){ var has=el.querySelector('.pm-ring,.pm-crown'); if(!c||!active(c)){ if(has){ [].forEach.call(el.querySelectorAll('.pm-ring,.pm-crown'),function(n){ n.remove(); }); } return; } if(!has) el.insertAdjacentHTML('beforeend',ringHTML(c)); });
+  });
+  document.querySelectorAll('.row[data-peer] .rn').forEach(function(el){
+    var u=el.closest('.row').getAttribute('data-peer'); if(!u) return;
+    getPm(u).then(function(c){ if(!c||!active(c)||el.querySelector('.pm-nb')) return; el.insertAdjacentHTML('beforeend','<span class="pm-nb">'+emoji(c)+'</span>'); });
+  });
+  var hn=g('cName'); if(hn && typeof cur!=='undefined' && cur && cur.peer && !cur.group && cur.peer.uid){
+    getPm(cur.peer.uid).then(function(c){ if(!c||!active(c)||hn.querySelector('.pm-nb')||!cur||!cur.peer) return; hn.insertAdjacentHTML('beforeend','<span class="pm-nb">'+emoji(c)+'</span>'); });
+  }
+}
+try{ new MutationObserver(function(){ if(!q){ q=true; setTimeout(decorate,120); } }).observe(document.body,{childList:true,subtree:true}); }catch(e){}
+
+/* ---- my chat theme ---- */
+function applyTheme(c){
+  var st=g('gcPmTheme'); if(!st){ st=document.createElement('style'); st.id='gcPmTheme'; document.head.appendChild(st); }
+  var id=active(c)&&c.pm&&CT[c.pm.chatTheme]?c.pm.chatTheme:'default', t=CT[id];
+  if(id==='default'){ st.textContent=''; return; }
+  var css='#chat,#chat #msgs{background:'+t[5]+'}'
+   +'#msgs .b.me,#msgs .b.me.media{background:'+t[1]+'!important;color:'+t[2]+'!important}'
+   +'#msgs .b.th{background:'+t[3]+'!important;color:'+t[4]+'!important}'
+   +'#msgs .tm{color:'+t[6]+'!important}';
+  if(t[7]) css+='#chat .top,#composer{background:'+(id==='gold'?'#14110a':id==='forest'?'#0e1a14':'#0f1220')+';color:'+t[4]+';border-color:rgba(255,255,255,.1)}#chat .top .rs{color:'+t[6]+'}#composer textarea{background:'+t[3]+';color:'+t[4]+'}#composer .iconbtn,#chat .top .iconbtn{color:'+t[4]+'}';
+  st.textContent=css;
+}
+var started=false;
+function start(){
+  if(started||typeof me==='undefined'||!me) return; started=true;
+  db.collection('channels').doc(me.uid).onSnapshot(function(d){
+    var x=d.exists?d.data():{}; me.premiumUntil=x.premiumUntil; me.pm=x.pm;
+    cache[me.uid]={t:Date.now(),p:Promise.resolve({premiumUntil:x.premiumUntil,pm:x.pm})};
+    applyTheme(me); [].forEach.call(document.querySelectorAll('.pm-ring,.pm-crown,.pm-nb'),function(n){ n.remove(); }); decorate();
+  },function(){});
+}
+setInterval(function(){ if(!started) start(); },700);
+
+/* ---- Settings > Premium ---- */
+function save(patch){
+  var pm=Object.assign({},me.pm||{},patch);
+  return db.collection('channels').doc(me.uid).set({pm:pm},{merge:true}).then(function(){ toast('Saved ✓'); }).catch(function(){ toast('Could not save'); });
+}
+function sheetUi(){
+  var on=active(me), h='<div class="sh-t">👑 Gupzy Premium</div>';
+  if(on){
+    var d=new Date(me.premiumUntil).toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'});
+    h+='<p class="sh-p">Active until <b>'+d+'</b></p><div class="sh-p" style="font-weight:700">Chat theme</div><div class="pmg">'
+      +Object.keys(CT).map(function(k){ var t=CT[k], sel=((me.pm&&me.pm.chatTheme)||'default')===k, dark=t[7];
+        return '<button class="pmo'+(sel?' on':'')+'" data-ct="'+k+'"><div class="pmc" style="background:'+(dark?t[5]:'#fff')+'"><i style="background:'+(t[3]||'#f0f2f5')+'"></i><i class="m" style="background:'+(t[1]||'#0866ff')+'"></i></div>'+esc(t[0])+'</button>'; }).join('')
+      +'</div><p class="sh-p" style="font-size:13px;color:var(--dim)">Your animated border and crown/star badge are chosen in Gupzy → Menu → Gupzy Premium.</p>';
+  } else {
+    h+='<p class="sh-p">Stand out in every chat for <b>$3 / month</b>:</p>'
+      +'<p class="sh-p">🎨 Custom chat themes &amp; app icons<br>💍 Animated glowing profile border<br>👑 Exclusive crown / star badge next to your name in DMs</p>'
+      +'<button class="btn" style="width:100%;padding:13px" id="pmGet">Get Premium · $3/month</button>';
+  }
+  h+='<button class="btn gray" style="width:100%;padding:13px;margin-top:8px" id="pmClose">Close</button>';
+  return h;
+}
+function sheetOpen(){
+  if(typeof sheet!=='function') return;
+  var bg=sheet(sheetUi());
+  bg.onclick=function(e){
+    if(e.target===bg){ bg.remove(); return; }
+    var b=e.target.closest('[data-ct]');
+    if(b){ save({chatTheme:b.getAttribute('data-ct')}).then(function(){ var y=bg.querySelector('.sh-t'); setTimeout(function(){ bg.remove(); sheetOpen(); },250); }); return; }
+    if(e.target.closest('#pmClose')) bg.remove();
+    if(e.target.closest('#pmGet')){ bg.remove(); try{ openExt('https://gupzy.com/?premium=1'); }catch(x){ window.open('https://gupzy.com/?premium=1','_blank'); } }
+  };
+}
+window.gcPm={active:active,sheet:sheetOpen};
 })();
 </script>
 </body>
