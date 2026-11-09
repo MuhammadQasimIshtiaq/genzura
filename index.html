@@ -16529,6 +16529,8 @@ function applyOwn(c){
   if(on && th && th[0]!=='default'){ st.setProperty('--accent',th[2]); st.setProperty('--accent2',th[3]); }
   else { st.removeProperty('--accent'); st.removeProperty('--accent2'); }
   setIcon(on?pick(p.icon,ICONS,'classic'):'classic');
+  /* Android app: also switch the real home-screen icon (needs the updated APK; older APKs simply skip this) */
+  try{ if(c && window.AndroidAuth && typeof AndroidAuth.setAppIcon==='function'){ var want=on?pick(p.icon,ICONS,'classic'):'classic'; if(AndroidAuth.getAppIcon()!==want) AndroidAuth.setAppIcon(want); } }catch(e){}
   try{ if(on) localStorage.setItem('gz_pm_own',JSON.stringify({u:c.premiumUntil,t:p.theme||'',i:p.icon||''})); else localStorage.removeItem('gz_pm_own'); }catch(e){}
 }
 /* instant look on the next app start (before the profile finishes loading) */
@@ -16610,7 +16612,7 @@ function draw(){
       +'<div class="pmx-note">Chat themes show in Gupchats and in your chats.</div>';
     h+='<div class="pmx-sec">App icon</div><div class="pmx-grid">'
       +ICONS.map(function(t){ return opt('icon',t[0],pick(p.icon,ICONS,'classic')===t[0],'<img alt="" style="width:44px;height:44px;border-radius:11px" src="'+(t[0]==='classic'?(origIcons&&origIcons[0]?origIcons[0].href:'./icon-192.png'):drawIcon(t[0],96))+'">',t[1]); }).join('')+'</div>'
-      +'<div class="pmx-note">Changes the icon in the browser tab and for new “Add to Home Screen” installs. An app that is already installed on your phone keeps its launcher icon (this is a phone limitation).</div>';
+      +'<div class="pmx-note">In the Gupzy Android app this changes your home-screen icon (the phone may take a few seconds to refresh it). On the website it changes the browser-tab icon and new “Add to Home Screen” installs.</div>';
   }
 
   /* payment / renew */
