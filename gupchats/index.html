@@ -368,8 +368,15 @@ html #boot img{position:relative;z-index:1;opacity:0;visibility:visible!importan
 </style>
 </head>
 <body>
+<style id="gzCallBoot">html.gz-callboot #boot{display:none!important}html.gz-callboot,html.gz-callboot body{background:#0b1220!important}</style>
+<script>/* opened from an incoming-call tap (Answer / notification): no splash, no white flash - go straight to the dark call screen */
+(function(){try{var a=window.AndroidCall,c=false;
+ try{ if(a){ if(typeof a.hasPendingAnswer==='function' && a.hasPendingAnswer()) c=true; else if(typeof a.isNativeRinging==='function' && a.isNativeRinging()) c=true; } }catch(e){}
+ try{ if(/[?&](call|answer|incoming)=/.test(location.search)) c=true; }catch(e){}
+ if(c){ document.documentElement.classList.add('gz-callboot'); window.__gzCallBoot=1; }
+}catch(e){}})();</script>
 <div id="boot"><img src="/gupchats/gupchats-emblem.png" alt=""></div>
-<script src="/gz-weave-splash.js"></script><script>try{GzWeave("boot")}catch(e){}</script>
+<script src="/gz-weave-splash.js"></script><script>try{ if(!window.__gzCallBoot) GzWeave("boot"); }catch(e){}</script>
 <script>setTimeout(function(){var b=document.getElementById("boot");if(b&&!b.querySelector("button")){var t=document.createElement("button");t.textContent="Slow connection – tap to retry";t.style.cssText="position:absolute;bottom:18%;border:0;background:#0866ff;color:#fff;padding:12px 24px;border-radius:22px;font-size:16px";t.onclick=function(){location.reload()};b.appendChild(t)}},15000)</script>
 
 <div id="login" class="screen hidden">
@@ -559,7 +566,7 @@ function fmtTime(t){
   return d.toLocaleDateString([], {month:'short',day:'numeric'});
 }
 function fmtDur(s){ s=Math.max(0,Math.round(s||0)); return Math.floor(s/60)+':'+('0'+(s%60)).slice(-2); }
-function show(id){ var bt=document.getElementById('boot'); if(bt){ setTimeout(function(){ bt.classList.add('out'); setTimeout(function(){ bt.remove(); },300); }, Math.max(0,1500-performance.now())); } ['login','nochannel','app'].forEach(function(x){ $(x).classList.toggle('hidden', x!==id); }); }
+function show(id){ var bt=document.getElementById('boot'); if(bt && window.__gzCallBoot){ bt.remove(); bt=null; } if(bt){ setTimeout(function(){ bt.classList.add('out'); setTimeout(function(){ bt.remove(); },300); }, Math.max(0,1500-performance.now())); } ['login','nochannel','app'].forEach(function(x){ $(x).classList.toggle('hidden', x!==id); }); }
 function safeUrl(u){ return typeof u==='string' && /^https:\/\/res\.cloudinary\.com\//.test(u); }
 
 /* small in-page confirm (alert/confirm are not reliable inside a WebView) */
@@ -2087,6 +2094,7 @@ function refreshCallUI(){
   $('gcbFlip').classList.toggle('hidden',!CL.cam);
 }
 function showCallUI(peer,type,status){
+  try{ var b0=document.getElementById('boot'); if(b0) b0.remove(); }catch(e){}
   $('gccAv').innerHTML=av(peer.logo,peer.name); $('gccName').textContent=callNick(peer)||peer.name||'Unknown'; setSt(status);
   $('gcBack').classList.add('hidden');
   $('gcCall').classList.toggle('ads',!!(window.AndroidAds && window.AndroidAds.updateCallBanner)); startBanner();
