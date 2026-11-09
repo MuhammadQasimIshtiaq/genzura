@@ -15522,7 +15522,7 @@ var ACT={
  profile:function(){closeMenu(); var b=document.querySelector('nav .nav-btn[data-view="profileView"]'); if(b)b.click(); window.scrollTo(0,0);},
  mail:function(){ var b=$('dmBtn'); if(b){closeMenu(); b.click();} else soon('Messages'); },
  bell:function(){ var b=document.querySelector('nav .nav-btn[data-view="notifView"]'); closeMenu(); if(b) b.click(); },
- copy:function(){ var u=refLink(); try{navigator.clipboard.writeText(u).then(function(){toast('Referral link copied')},function(){toast(u)})}catch(e){toast(u)} },
+ copy:function(){ var u=refLink(); if(!u){ toast('Gupzy is coming soon on Google Play'); return; } try{navigator.clipboard.writeText(u).then(function(){toast('Referral link copied')},function(){toast(u)})}catch(e){toast(u)} },
  streak:function(){ if(window.flCoins){ if(window.__flW&&window.__flW.lastClaimDay===Math.floor((Date.now()+18000000)/86400000)) window.flCoins.openStreaks(); else window.flCoins.claim(); } }, saved:function(){ window.flMore2.saved(); }, followers:function(){ window.flMore2.followers(); },
  videos:function(){ closeMenu(); var b=document.querySelector('nav .nav-btn[data-view="profileView"]'); if(b)b.click(); var tb=document.querySelector('#profileTabs [data-ptab="reels"]'); if(tb) tb.click(); },
  analytics:function(){ closeMenu(); try{openATStudioApp('')}catch(e){} },
@@ -15537,14 +15537,14 @@ var ACT={
  about:function(){clk('aboutUsBtn')}, terms:function(){clk('termsBtn')}, copyr:function(){clk('copyrightBtn')}, shareapp:function(){clk('shareAppBtn')}, del:function(){clk('deleteAccountBtn')},
  wa:function(){ window.open('https://wa.me/?text='+encodeURIComponent('Join me on Gupzy: '+refLink()),'_blank'); }
 };
-function refLink(){ try{ if(typeof buildAppShareLink==='function') return buildAppShareLink(); }catch(e){} return location.origin+location.pathname; }
+function refLink(){ try{ if(typeof buildPlayShareLink==='function') return buildPlayShareLink(); }catch(e){} return ''; } /* Google Play link; empty = coming soon */
 function tile(a,ic,lb,col){ return '<button class="flm-t" data-m="'+a+'" style="background:'+col[0]+';color:'+col[1]+'">'+ic+'<span>'+lb+'</span></button>'; }
 function item(a,ic,lb,cls){ return '<div class="flm-i '+(cls||'')+'" data-m="'+a+'"><span class="flm-ic">'+ic+'</span><span>'+lb+'</span><span class="ch">›</span></div>'; }
 function openMenu(){
   var c=ch()||{}, av=$('profileAvatarBig'), adm=$('adminPanelBtn');
   var h='<div class="flm-h"><h1>Menu</h1><div><button data-m="mail" aria-label="Messages">'+I.mail+'</button><button data-m="bell" aria-label="Notifications">'+I.bell+'</button></div></div>'
   +'<div class="flm-me" data-m="profile"><div class="avatar-big pf-avatar" style="'+esc(av?av.getAttribute('style')||'':'')+'">'+(av?av.innerHTML:'')+'</div><div><b>'+esc(t('profileName'))+'</b><small>'+esc(t('pfFollowers'))+' followers · View your profile</small></div><span class="ch">›</span></div>'
-  +'<div class="flm-lbl">Referral link</div><button class="flm-copy" data-m="copy"><span>Copy link</span>'+I.copy+'</button>'
+  +'<div class="flm-lbl">Referral link</div><button class="flm-copy" data-m="copy"><span>'+(refLink()?'Copy link':'Coming soon on Google Play')+'</span>'+I.copy+'</button>'
   +'<div class="flm-streak" data-m="streak"><span style="color:#f1aa0f">'+I.fire.replace('<svg','<svg width="28" height="28" style="stroke:currentColor;fill:none;stroke-width:2"')+'</span><div><b>'+(window.flCoins?window.flCoins.streakTitle():'Claim today’s streak')+'</b><small>'+(window.flCoins?window.flCoins.streakText():'Daily coins')+'</small></div><span class="ch">›</span></div>'
   +'<div class="flm-grid">'
   +tile('saved',I.save,'Saved',['rgba(124,92,255,.16)','#8b6cff'])+tile('followers',I.users,'Followers',['rgba(59,130,246,.16)','#3b82f6'])+tile('videos',I.vid,'Videos',['rgba(236,72,153,.16)','#ec4899'])
@@ -15560,7 +15560,7 @@ function openMenu(){
   +item('help',I.help,'Support / Help ticket')+item('warn',I.flag,'Warnings')+item('upd',I.dl,'App Update')+item('rate',I.star,'Rate Us')
   +item('about',I.info,'About Us')+item('terms',I.doc,'Terms &amp; Condition')+item('copyr',I.doc,'Copyright &amp; Policy')+item('shareapp',I.gift,'Share Gupzy')
   +item('del',I.trash,'Delete my account','red')+item('logout',I.out,'Log Out','red')
-  +'<div class="flm-inv"><b>Invite Friends</b><small>Help your friends discover Gupzy</small><br><button data-m="wa">💬 Share on WhatsApp</button></div>';
+  +'';
   menu.innerHTML=h; menu.style.bottom=navTop()+'px'; menu.classList.add('show'); menu.scrollTop=0;
 }
 function closeMenu(){ menu.classList.remove('show'); }
@@ -15759,7 +15759,7 @@ function actCompletion(a){
 }
 
 /* ---------- referrals ---------- */
-function refLink(){ try{ if(typeof buildAppShareLink==='function') return buildAppShareLink(); }catch(e){} return location.origin+location.pathname; }
+function refLink(){ try{ if(typeof buildPlayShareLink==='function') return buildPlayShareLink(); }catch(e){} return ''; } /* Google Play link; empty = coming soon */
 async function loadRefs(){
   var u=me(), box=$('flRefList'), cnt=$('flRefCnt'); if(!u||!box) return;
   try{
@@ -15799,7 +15799,7 @@ function render(){
     loadBoard();
   } else if(cur==='refs'){
     pg.innerHTML=head('Referrals')+'<div class="flp-hero"><big id="flRefCnt">0</big><small>friends joined with your link</small></div>'
-      +'<div class="flp-lk">'+esc(refLink())+'</div><div class="flp-two"><button class="flp-go" data-q="copy">Copy link</button><button class="flp-go" data-q="share" style="background:#16a34a">Share</button></div>'
+      +'<div class="flp-lk">'+(refLink()?esc(refLink()):'🚀 Coming soon on Google Play')+'</div><div class="flp-two"><button class="flp-go" data-q="copy">Copy link</button><button class="flp-go" data-q="share" style="background:#16a34a">Share</button></div>'
       +'<div style="margin-top:20px;font-weight:800;font-size:16px">Joined through you</div><div id="flRefList"><div class="flp-card">Loading…</div></div>';
     loadRefs();
   } else if(cur==='comp'){
@@ -15813,7 +15813,7 @@ pg.addEventListener('click',function(e){
   if(a==='back') close();
   else if(a==='tab'){ board=el.getAttribute('data-b'); render(); }
   else if(a==='ch') goChannel(el.getAttribute('data-u'),el.getAttribute('data-n'),el.getAttribute('data-l'));
-  else if(a==='copy'){ var l=refLink(); try{navigator.clipboard.writeText(l).then(function(){toastS('Referral link copied')},function(){toastS(l)})}catch(x){toastS(l)} }
+  else if(a==='copy'){ var l=refLink(); if(!l){ toastS('Gupzy is coming soon on Google Play'); return; } try{navigator.clipboard.writeText(l).then(function(){toastS('Referral link copied')},function(){toastS(l)})}catch(x){toastS(l)} }
   else if(a==='share'){ hideAll(); try{ shareArainTube(); }catch(x){} }
   else if(a==='act'){ if(el.getAttribute('data-d')) return; actCompletion(el.getAttribute('data-a')); }
 });
@@ -15957,6 +15957,7 @@ window.flBoost={open:open,close:close};
 
 <!-- ===== SAVED / FOLLOWERS / WARNINGS / INTERESTS / BLUE TICK / UPDATE (step 6) ===== -->
 <style id="flMore2Css">
+#toast{position:fixed!important;z-index:100001!important;bottom:calc(84px + env(safe-area-inset-bottom,0px))!important}
 #flPage4{position:fixed;left:0;right:0;top:0;bottom:60px;z-index:9400;background:var(--bg);color:var(--text);overflow-y:auto;-webkit-overflow-scrolling:touch;display:none;padding:calc(env(safe-area-inset-top,0px) + 10px) 16px 28px}
 #flPage4.show{display:block}
 .fl4-chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
@@ -16035,8 +16036,9 @@ function drawInterests(){
 }
 async function saveInterests(){
   var u=me(); if(!u||saving) return; saving=true;
-  try{ await fs().collection('channels').doc(u.uid).update({interests:chips}); try{currentChannel.interests=chips.slice()}catch(e){} T('Interests saved'); }
-  catch(e){ T('Could not save right now'); }
+  var b=pg.querySelector('[data-z="saveint"]'); if(b){ b.textContent='Saving…'; b.disabled=true; }
+  try{ await fs().collection('channels').doc(u.uid).update({interests:chips}); try{currentChannel.interests=chips.slice()}catch(e){} T('Interests saved ✓'); if(b){ b.textContent='Saved ✓'; b.disabled=false; setTimeout(function(){ if(b) b.textContent='Save interests'; },1800); } }
+  catch(e){ T('Could not save: '+((e&&e.message)||'error')); if(b){ b.textContent='Save interests'; b.disabled=false; } }
   saving=false;
 }
 /* ---- blue tick ($2, live USD->PKR, JazzCash/EasyPaisa/Bank in Pakistan, Payoneer international) ---- */
@@ -16161,7 +16163,7 @@ async function update(){
   setTimeout(function(){ location.reload(); },600);
 }
 window.flMore2={saved:function(){open('saved')},followers:function(){open('followers')},warn:function(){open('warn')},interests:function(){open('interests')},blue:function(){open('blue')},update:update,
-  rate:function(){ window.open('https://play.google.com/store/apps/details?id=com.gupzy.app','_blank'); },
+  rate:function(){ var u=''; try{ u=GUPZY_PLAY_URL||''; }catch(e){} if(!u){ T('Gupzy is coming soon on Google Play'); return; } window.open(u,'_blank'); },
   tip:function(){ hideAll(); if(typeof window.openTipOwner==='function') window.openTipOwner(); else T('Tip jar is not available right now'); }};
 })();
 </script>
@@ -16171,6 +16173,17 @@ window.flMore2={saved:function(){open('saved')},followers:function(){open('follo
 (function(){
 var $=function(i){return document.getElementById(i)}, box=$('adminBlueContainer'), busy=false;
 if(!box) return;
+function ask(o){ return new Promise(function(res){
+  var ov=document.createElement('div'); ov.style.cssText='position:fixed;left:0;top:0;right:0;bottom:0;z-index:100000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:24px';
+  var bs='flex:1;border:0;border-radius:12px;padding:13px;font-size:16px;font-weight:800;cursor:pointer;color:#fff;';
+  ov.innerHTML='<div style="background:var(--bg);color:var(--text);border-radius:20px;padding:22px;width:100%;max-width:340px;box-shadow:0 10px 40px rgba(0,0,0,.4)"><div style="font-size:19px;font-weight:800;margin-bottom:8px">'+esc(o.title)+'</div><div style="color:var(--text-dim);font-size:15px;line-height:1.45">'+esc(o.msg||'')+'</div>'
+   +(o.input?'<textarea id="flAskIn" maxlength="200" style="width:100%;box-sizing:border-box;margin-top:12px;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);padding:12px;font-size:15px;font-family:inherit;min-height:80px" placeholder="'+esc(o.ph||'')+'"></textarea>':'')
+   +'<div style="display:flex;gap:10px;margin-top:18px"><button data-a="n" style="'+bs+'background:#6b7280">Cancel</button><button data-a="y" style="'+bs+'background:'+(o.danger?'#ef4444':'#16a34a')+'">'+esc(o.ok||'OK')+'</button></div></div>';
+  ov.addEventListener('click',function(e){ var b=e.target.closest('[data-a]'); if(!b) return;
+    if(b.getAttribute('data-a')==='y'){ if(o.input){ var v=(ov.querySelector('#flAskIn').value||'').trim(); if(!v){ ov.querySelector('#flAskIn').focus(); return; } ov.remove(); res(v); } else { ov.remove(); res(true); } }
+    else { ov.remove(); res(o.input?'':false); } });
+  document.body.appendChild(ov);
+}); }
 var MN={jazzcash:'JazzCash',easypaisa:'EasyPaisa',bank:'Bank transfer',payoneer:'Payoneer'};
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function fs(){return firebase.firestore();}
@@ -16240,11 +16253,11 @@ async function custom(on){
   var name=r.c.name||inp;
   if(on&&r.c.referredByAdmin){ T(name+' already has the blue tick'); return; }
   if(!on&&!r.c.referredByAdmin){ T(name+' does not have a blue tick'); return; }
-  if(!confirm((on?'Give blue tick to ':'Remove blue tick from ')+name+' (@'+(r.c.channelId||inp)+')?')) return;
+  if(!(await ask({title:on?'Give blue tick?':'Remove blue tick?',msg:'Do you really want to '+(on?'give the blue tick to ':'remove the blue tick from ')+name+' (@'+(r.c.channelId||inp)+')?',ok:on?'Give':'Remove',danger:!on}))) return;
   await setTick(r.uid,name,on); var e=$('flbId'); if(e) e.value='';
 }
 async function reject(uid){
-  if(busy) return; var why=(prompt('Reason for rejecting?')||'').trim(); if(!why) return;
+  if(busy) return; var why=await ask({title:'Reject request',msg:'Write the reason. The user will see it.',input:true,ph:'Reason…',ok:'Reject',danger:true}); if(!why) return;
   busy=true;
   try{ await fs().collection('verifyRequests').doc(uid).update({status:'rejected',rejectReason:why.slice(0,200),reviewedAt:firebase.firestore.FieldValue.serverTimestamp()}); T('Request rejected'); }catch(e){ T('Failed'); }
   busy=false; loadPend();
@@ -16254,7 +16267,7 @@ box.addEventListener('click',function(e){
   if(a==='give') custom(true); else if(a==='take') custom(false);
   else if(a==='ok') setTick(u,'channel',true);
   else if(a==='no') reject(u);
-  else if(a==='rm'){ if(confirm('Remove blue tick from '+(el.getAttribute('data-n')||'this channel')+'?')) setTick(u,el.getAttribute('data-n')||'channel',false); }
+  else if(a==='rm'){ var nm=el.getAttribute('data-n')||'this channel'; ask({title:'Remove blue tick?',msg:'Do you really want to remove the blue tick from '+nm+'?',ok:'Remove',danger:true}).then(function(y){ if(y) setTick(u,nm,false); }); }
   else if(a==='savecfg') saveCfg();
 });
 document.querySelectorAll('#adminTabs .profile-tab').forEach(function(tab){
