@@ -11835,6 +11835,7 @@ function openATStudioApp(tab){
       var a=document.createElement('textarea'); a.value=t; a.style.cssText='position:fixed;opacity:0'; document.body.appendChild(a); a.select(); try{ document.execCommand('copy'); }catch(e){} a.remove();
     });
   }
+  window.openTipOwner=openTipOwner;
   function openTipOwner(){
     if(!needAuth()) return; closeMenu();
     db.collection('tipJars').doc(uid()).get().then(function(d){
@@ -15520,15 +15521,15 @@ var ACT={
  mail:function(){ var b=$('dmBtn'); if(b){closeMenu(); b.click();} else soon('Messages'); },
  bell:function(){ var b=document.querySelector('nav .nav-btn[data-view="notifView"]'); closeMenu(); if(b) b.click(); },
  copy:function(){ var u=refLink(); try{navigator.clipboard.writeText(u).then(function(){toast('Referral link copied')},function(){toast(u)})}catch(e){toast(u)} },
- streak:function(){ if(window.flCoins){ if(window.__flW&&window.__flW.lastClaimDay===Math.floor((Date.now()+18000000)/86400000)) window.flCoins.openStreaks(); else window.flCoins.claim(); } }, saved:function(){soon('Saved')}, followers:function(){soon('Followers list')},
+ streak:function(){ if(window.flCoins){ if(window.__flW&&window.__flW.lastClaimDay===Math.floor((Date.now()+18000000)/86400000)) window.flCoins.openStreaks(); else window.flCoins.claim(); } }, saved:function(){ window.flMore2.saved(); }, followers:function(){ window.flMore2.followers(); },
  videos:function(){ closeMenu(); var b=document.querySelector('nav .nav-btn[data-view="profileView"]'); if(b)b.click(); var tb=document.querySelector('#profileTabs [data-ptab="reels"]'); if(tb) tb.click(); },
  analytics:function(){ closeMenu(); try{openATStudioApp('')}catch(e){} },
  leader:function(){ window.flMore?window.flMore.openBoard():soon('Leaderboard'); }, streaks:function(){ window.flCoins&&window.flCoins.openStreaks(); }, blocked:function(){clk('blockedListBtn')},
  earnings:function(){ closeMenu(); try{openEarnLite()}catch(e){} }, coins:function(){ window.flCoins&&window.flCoins.openCoins(); },
- settings:function(){clk('privacyPolicyBtn')}, interests:function(){soon('Your interests')}, switchacc:function(){clk('switchAccountBtn')},
+ settings:function(){clk('privacyPolicyBtn')}, interests:function(){ window.flMore2.interests(); }, switchacc:function(){clk('switchAccountBtn')},
  pcomp:function(){ window.flMore&&window.flMore.openComp(); },
- bluetick:function(){soon('Blue Tick Verification')}, sub:function(){soon('Subscription')}, dash:function(){clk('studioBtn')}, refs:function(){ window.flMore?window.flMore.openRefs():soon('Referrals'); },
- help:function(){clk('contactUsBtn')}, warn:function(){soon('Warnings')}, upd:function(){soon('App Update')}, rate:function(){soon('Rate Us')},
+ bluetick:function(){ window.flMore2.blue(); }, sub:function(){ window.flMore2.tip(); }, dash:function(){clk('studioBtn')}, refs:function(){ window.flMore?window.flMore.openRefs():soon('Referrals'); },
+ help:function(){clk('contactUsBtn')}, warn:function(){ window.flMore2.warn(); }, upd:function(){ window.flMore2.update(); }, rate:function(){ window.flMore2.rate(); },
  logout:function(){clk('signOutBtn')},
  admin:function(){clk('adminPanelBtn')}, perm:function(){clk('permBtn')}, bak:function(){clk('e2eeBackupBtn')}, rest:function(){clk('e2eeRestoreBtn')},
  about:function(){clk('aboutUsBtn')}, terms:function(){clk('termsBtn')}, copyr:function(){clk('copyrightBtn')}, shareapp:function(){clk('shareAppBtn')}, del:function(){clk('deleteAccountBtn')},
@@ -15949,6 +15950,139 @@ document.addEventListener('click',function(e){ if(pg.classList.contains('show') 
 var ob=window.__gzBack; window.__gzBack=function(){ if(pg.classList.contains('show')){ close(); return true; } return ob?ob.apply(this,arguments):false; };
 try{ firebase.auth().onAuthStateChanged(function(){ myPosts=[]; postsLoaded=false; }); }catch(e){}
 window.flBoost={open:open,close:close};
+})();
+</script>
+
+<!-- ===== SAVED / FOLLOWERS / WARNINGS / INTERESTS / BLUE TICK / UPDATE (step 6) ===== -->
+<style id="flMore2Css">
+#flPage4{position:fixed;left:0;right:0;top:0;bottom:60px;z-index:9400;background:var(--bg);color:var(--text);overflow-y:auto;-webkit-overflow-scrolling:touch;display:none;padding:calc(env(safe-area-inset-top,0px) + 10px) 16px 28px}
+#flPage4.show{display:block}
+.fl4-chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.fl4-chip{border:2px solid var(--border);border-radius:22px;padding:10px 16px;font-size:15px;font-weight:600;background:var(--surface);color:var(--text);cursor:pointer;font-family:inherit}
+.fl4-chip.on{border-color:var(--accent2);background:rgba(74,92,255,.16);color:var(--accent2)}
+.fl4-ta{width:100%;box-sizing:border-box;margin-top:12px;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);padding:12px;font-size:15px;font-family:inherit;min-height:90px;resize:vertical}
+</style>
+<div id="flPage4"></div>
+<script id="flMore2Js">
+(function(){
+var $=function(i){return document.getElementById(i)}, pg=$('flPage4'), cur='', tabF='followers', chips=[], saving=false;
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function fs(){return firebase.firestore();}
+function me(){ try{return firebase.auth().currentUser}catch(e){return null} }
+function T(m){ try{toast(m)}catch(e){} }
+function ch(){ try{return currentChannel||{}}catch(e){return {}} }
+function av(c){ return '<div class="flp-av">'+(c.logoURL?'<img src="'+esc(c.logoURL)+'" alt="">':esc(((c.name||'?').trim().charAt(0)||'?').toUpperCase()))+'</div>'; }
+function navB(){ var n=document.querySelector('nav'); return n?Math.max(0,Math.round(window.innerHeight-n.getBoundingClientRect().top)):60; }
+function hideAll(){ ['flPage4','flPage2','flPage','flMenu'].forEach(function(i){ var e=$(i); if(e) e.classList.remove('show'); }); cur=''; }
+function open(k){ cur=k; pg.style.bottom=navB()+'px'; pg.classList.add('show'); render(); pg.scrollTop=0; }
+function close(){ pg.classList.remove('show'); cur=''; }
+function head(t){ return '<div class="flp-h"><button data-z="back">‹</button><h1>'+t+'</h1></div>'; }
+function goCh(u,n,l){ hideAll(); try{ openChannelScreen(u,n||'',l||''); }catch(e){} }
+function loading(){ return '<div class="flp-card">Loading…</div>'; }
+function chRow(c,id,sub){ return '<div class="flp-r" data-z="ch" data-u="'+esc(id)+'" data-n="'+esc(c.name||'')+'" data-l="'+esc(c.logoURL||'')+'">'+av(c)+'<div class="nm">'+esc(c.name||'Gupzy user')+'<small>'+esc(sub||('@'+(c.channelId||'')))+'</small></div></div>'; }
+
+/* ---- followers / following ---- */
+async function loadFollowers(){
+  var u=me(), box=$('fl4Box'); if(!u||!box) return; box.innerHTML=loading();
+  try{
+    var field=tabF==='followers'?'channelId':'subscriberId', other=tabF==='followers'?'subscriberId':'channelId';
+    var q=await fs().collection('subscriptions').where(field,'==',u.uid).limit(150).get(), ids=[];
+    q.forEach(function(d){ var x=d.data(); if(x[other]) ids.push(x[other]); });
+    var cnt=$('fl4Cnt'); if(cnt) cnt.textContent=ids.length+(ids.length>=150?'+':'');
+    if(!ids.length){ box.innerHTML='<div class="flp-card">'+(tabF==='followers'?'No followers yet. Share your link to grow!':'You are not following anyone yet.')+'</div>'; return; }
+    var cs=await Promise.all(ids.slice(0,60).map(function(id){ return fs().collection('channels').doc(id).get().then(function(s){return s.exists?s.data():null}).catch(function(){return null}); }));
+    var h=''; cs.forEach(function(c,i){ if(c) h+=chRow(c,ids[i]); }); box.innerHTML=h||'<div class="flp-card">Nothing to show.</div>';
+  }catch(e){ box.innerHTML='<div class="flp-card">Could not load the list.</div>'; }
+}
+/* ---- saved posts ---- */
+var savedPosts={};
+async function loadSaved(){
+  var u=me(), box=$('fl4Box'); if(!u||!box) return; box.innerHTML=loading();
+  try{
+    var q=await fs().collection('saves').where('uid','==',u.uid).limit(60).get(), rows=[]; q.forEach(function(d){ rows.push(d.data()); });
+    rows.sort(function(a,b){ return ((b.createdAt&&b.createdAt.seconds)||0)-((a.createdAt&&a.createdAt.seconds)||0); });
+    if(!rows.length){ box.innerHTML='<div class="flp-card">Nothing saved yet. Tap the bookmark on any post to save it.</div>'; return; }
+    var ps=await Promise.all(rows.map(function(r){ return fs().collection('posts').doc(r.postId).get().then(function(s){return s.exists?Object.assign({id:s.id},s.data()):null}).catch(function(){return null}); }));
+    var h=''; savedPosts={};
+    ps.forEach(function(p){ if(!p) return; savedPosts[p.id]=p; var m=p.media&&p.media[0], uu=(typeof m==='string'?m:(m&&(m.thumb||m.url||m.src)))||p.thumbURL||p.imageURL||'', isImg=uu&&!/\.(mp4|webm|mov)(\?|$)/i.test(uu);
+      h+='<div class="flp-r" data-z="post" data-id="'+esc(p.id)+'"><div class="flp-av" style="border-radius:12px;width:56px;height:56px">'+(isImg?'<img src="'+esc(uu)+'" alt="">':'🎬')+'</div><div class="nm">'+esc((p.caption||'Post').slice(0,70))+'<small>'+esc(p.name||p.channelName||'')+'</small></div></div>'; });
+    box.innerHTML=h||'<div class="flp-card">Saved posts are no longer available.</div>';
+  }catch(e){ box.innerHTML='<div class="flp-card">Could not load saved posts.</div>'; }
+}
+/* ---- warnings ---- */
+async function loadWarn(){
+  var u=me(), box=$('fl4Box'); if(!u||!box) return; box.innerHTML=loading();
+  var c=ch(), h='';
+  if(c.suspended) h+='<div class="flp-card" style="border:1px solid #ef4444"><b>⛔ Account suspended</b><br>'+esc(c.suspendReason||'Your account breaks the Gupzy rules.')+'</div>';
+  try{
+    var r=await Promise.all([
+      fs().collection('videos').where('channelId','==',u.uid).where('status','==','rejected').limit(30).get().catch(function(){return null}),
+      fs().collection('posts').where('uid','==',u.uid).where('status','==','rejected').limit(30).get().catch(function(){return null})]);
+    var n=0;
+    [['Reel',r[0]],['Post',r[1]]].forEach(function(p){ if(!p[1]) return; p[1].forEach(function(d){ var x=d.data(); n++;
+      h+='<div class="flp-card"><b>⚠️ '+p[0]+' removed</b><br>'+esc((x.title||x.caption||'').slice(0,80))+'<br><small style="color:var(--text-dim)">Reason: '+esc(x.rejectReason||'Breaks community rules')+'</small></div>'; }); });
+    if(!h) h='<div class="flp-card">✅ No warnings. Your account is in good standing.</div>';
+  }catch(e){ if(!h) h='<div class="flp-card">Could not load warnings.</div>'; }
+  box.innerHTML=h;
+}
+/* ---- interests ---- */
+function drawInterests(){
+  var cats; try{ cats=CATEGORIES }catch(e){ cats=[] }
+  var el=$('fl4Box'); if(!el) return;
+  el.innerHTML='<div class="fl4-chips">'+cats.map(function(c){ return '<button class="fl4-chip'+(chips.indexOf(c)>=0?' on':'')+'" data-z="chip" data-c="'+esc(c)+'">'+esc(c)+'</button>'; }).join('')+'</div><button class="flp-go" style="margin-top:20px" data-z="saveint">Save interests</button>';
+}
+async function saveInterests(){
+  var u=me(); if(!u||saving) return; saving=true;
+  try{ await fs().collection('channels').doc(u.uid).update({interests:chips}); try{currentChannel.interests=chips.slice()}catch(e){} T('Interests saved'); }
+  catch(e){ T('Could not save right now'); }
+  saving=false;
+}
+/* ---- blue tick ---- */
+async function loadBlue(){
+  var u=me(), box=$('fl4Box'); if(!u||!box) return; box.innerHTML=loading();
+  var c=ch(), badges=''; try{ badges=channelBadgeRowHTML(c)||''; }catch(e){}
+  var req=null; try{ var s=await fs().collection('verifyRequests').doc(u.uid).get(); if(s.exists) req=s.data(); }catch(e){}
+  var h='<div class="flp-hero"><big>'+(c.referredByAdmin?'✅':'🔵')+'</big><small>'+(c.referredByAdmin?'Your channel has the official blue tick':'Blue Tick Verification')+'</small>'+(badges?'<div style="margin-top:10px">'+badges+'</div>':'')+'</div>'
+   +'<div class="flp-card"><b>How it works</b><br>The blue tick shows that a channel is real and trusted. Silver, gold and diamond badges come automatically as your followers grow. For the blue tick, send a request and the Gupzy team will review it.</div>';
+  if(c.referredByAdmin) h+='';
+  else if(req) h+='<div class="flp-card"><b>'+(req.status==='approved'?'✅ Approved':req.status==='rejected'?'❌ Not approved':'⏳ Request sent')+'</b><br><small style="color:var(--text-dim)">'+esc(req.reason||'')+'</small></div>';
+  else h+='<textarea class="fl4-ta" id="fl4Reason" maxlength="400" placeholder="Why should your channel be verified? (who you are, links, what you post)"></textarea><button class="flp-go" style="margin-top:14px" data-z="sendblue">Request blue tick</button>';
+  box.innerHTML=h;
+}
+async function sendBlue(){
+  var u=me(), t=$('fl4Reason'); if(!u||!t||saving) return; var r=t.value.trim(); if(r.length<10){ T('Please write a little more'); return; }
+  saving=true; var c=ch();
+  try{ await fs().collection('verifyRequests').doc(u.uid).set({uid:u.uid,name:c.name||'',channelId:c.channelId||'',followers:c.subscriberCount||0,reason:r.slice(0,400),status:'pending',createdAt:firebase.firestore.FieldValue.serverTimestamp()}); T('Request sent'); }
+  catch(e){ T('Could not send. Publish the new Firebase rules first.'); }
+  saving=false; loadBlue();
+}
+function render(){
+  if(cur==='followers'){ pg.innerHTML=head('Followers')+'<div class="flp-hero"><big id="fl4Cnt">0</big><small>'+(tabF==='followers'?'followers':'following')+'</small></div><div class="flp-tabs" style="margin-top:14px"><button class="flp-tab'+(tabF==='followers'?' on':'')+'" data-z="ftab" data-b="followers">Followers</button><button class="flp-tab'+(tabF==='following'?' on':'')+'" data-z="ftab" data-b="following">Following</button></div><div id="fl4Box"></div>'; loadFollowers(); }
+  else if(cur==='saved'){ pg.innerHTML=head('Saved')+'<div id="fl4Box"></div>'; loadSaved(); }
+  else if(cur==='warn'){ pg.innerHTML=head('Warnings')+'<div id="fl4Box"></div>'; loadWarn(); }
+  else if(cur==='interests'){ chips=(ch().interests||[]).slice(); pg.innerHTML=head('Your interests')+'<div class="flp-card">Pick up to 5 topics you love.</div><div id="fl4Box"></div>'; drawInterests(); }
+  else if(cur==='blue'){ pg.innerHTML=head('Blue Tick Verification')+'<div id="fl4Box"></div>'; loadBlue(); }
+}
+pg.addEventListener('click',function(e){
+  var el=e.target.closest('[data-z]'); if(!el) return; var a=el.getAttribute('data-z');
+  if(a==='back') close();
+  else if(a==='ch') goCh(el.getAttribute('data-u'),el.getAttribute('data-n'),el.getAttribute('data-l'));
+  else if(a==='ftab'){ tabF=el.getAttribute('data-b'); render(); }
+  else if(a==='post'){ var p=savedPosts[el.getAttribute('data-id')]; hideAll(); try{ openPost(p); }catch(x){} }
+  else if(a==='chip'){ var c=el.getAttribute('data-c'), i=chips.indexOf(c); if(i>=0) chips.splice(i,1); else if(chips.length<5) chips.push(c); else T('Max 5 interests'); drawInterests(); }
+  else if(a==='saveint') saveInterests();
+  else if(a==='sendblue') sendBlue();
+});
+document.addEventListener('click',function(e){ if(pg.classList.contains('show') && e.target.closest && e.target.closest('nav .nav-btn')) close(); },true);
+var ob=window.__gzBack; window.__gzBack=function(){ if(pg.classList.contains('show')){ close(); return true; } return ob?ob.apply(this,arguments):false; };
+async function update(){
+  T('Updating to the latest version…');
+  try{ var rs=await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(function(r){return r.update()})); var ks=await caches.keys(); await Promise.all(ks.filter(function(k){return /^gupzy-shell/.test(k)}).map(function(k){return caches.delete(k)})); }catch(e){}
+  setTimeout(function(){ location.reload(); },600);
+}
+window.flMore2={saved:function(){open('saved')},followers:function(){open('followers')},warn:function(){open('warn')},interests:function(){open('interests')},blue:function(){open('blue')},update:update,
+  rate:function(){ window.open('https://play.google.com/store/apps/details?id=com.gupzy.app','_blank'); },
+  tip:function(){ hideAll(); if(typeof window.openTipOwner==='function') window.openTipOwner(); else T('Tip jar is not available right now'); }};
 })();
 </script>
 
