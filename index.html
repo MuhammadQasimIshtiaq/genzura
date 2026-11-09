@@ -15527,6 +15527,22 @@ document.addEventListener('pointerdown',function(e){
 .flm-inv b{font-size:22px;display:block}.flm-inv small{color:var(--text-dim);font-size:15px}
 .flm-inv button{margin-top:14px;display:inline-flex;align-items:center;gap:8px;border:0;border-radius:12px;background:var(--accent2);color:#fff;font-weight:700;font-size:16px;padding:12px 18px;cursor:pointer}
 </style>
+<style id="gzDeskPages">
+/* desktop (sidebar layout): Menu / Coins / Followers... pages open inside the main area (right of the sidebar, under the header), centered */
+@media (min-width:900px){
+  #flMenu,#flPage,#flPage2,#flPage3{left:var(--gz-pl,230px)!important;right:var(--gz-pr,0px)!important;top:var(--gz-pt,56px)!important;bottom:0!important;padding-left:max(16px,calc((100% - 680px)/2))!important;padding-right:max(16px,calc((100% - 680px)/2))!important;}
+}
+</style>
+<script>
+(function(){
+  function sync(){ try{
+    var app=document.getElementById('app'), nav=document.querySelector('#app > nav'), hd=document.querySelector('#app > header'); if(!app||!nav||!hd) return;
+    var a=app.getBoundingClientRect(), n=nav.getBoundingClientRect(), h=hd.getBoundingClientRect(), st=document.documentElement.style;
+    st.setProperty('--gz-pl',Math.round(n.right)+'px'); st.setProperty('--gz-pr',Math.max(0,Math.round(window.innerWidth-a.right))+'px'); st.setProperty('--gz-pt',Math.round(h.bottom)+'px');
+  }catch(e){} }
+  sync(); window.addEventListener('resize',sync); setInterval(sync,1500);
+})();
+</script>
 <div id="flMenu"></div>
 <script id="flJs">
 (function(){
