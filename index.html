@@ -7328,6 +7328,7 @@ if('serviceWorker' in navigator){
   const $ = id => document.getElementById(id);
   const RING_MS = 45000;
   let C = null;                 // active call state
+  let GG = null;                // active GROUP call state (see GROUP CALLS below)
   let incoming = null;          // ringing incoming call
   const seenCalls = new Set();  // call ids already handled on this phone
   let incomingUnsub = null;
@@ -7630,7 +7631,7 @@ if('serviceWorker' in navigator){
   async function startCall(peer, type){
     if(!requireAuth()) return;
     if(await blockedEither(peer.id)){ toast('Call unavailable'); return; }
-    if(C || incoming){ toast('You are already in a call'); return; }
+    if(C || incoming || GG){ toast('You are already in a call'); return; }
     try{ if(window.__gz && !(await window.__gz.callGate(peer))) return; }catch(e){}
     if(!currentChannel){ toast('Create your channel first'); return; }
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ toast('Calls are not supported on this device'); return; }
@@ -7706,7 +7707,7 @@ if('serviceWorker' in navigator){
     seenCalls.add(id);
     if(isBlockedUid(d.callerId)){ db.collection('calls').doc(id).update({ status:'declined' }).catch(()=>{}); return; }
     try{ if(window.__gz && window.__gz.dndBlocks(d.callerId)){ window.__gz.noteMissed(d.callerName); db.collection('calls').doc(id).update({ status:'declined', reason:'dnd' }).catch(()=>{}); return; } }catch(e){}
-    if(C || incoming){ db.collection('calls').doc(id).update({ status:'busy' }).catch(()=>{}); return; }
+    if(C || incoming || GG){ db.collection('calls').doc(id).update({ status:'busy' }).catch(()=>{}); return; }
     incoming = { id, d, locked: deviceLocked() };
     applyLockMode();
     prewarmCall(incoming);
@@ -7949,7 +7950,235 @@ if('serviceWorker' in navigator){
     v.classList.remove('cl-hide'); vd.classList.remove('cl-hide');
   }
 
-  window.__calls = { setupChannelButtons, startCall };
+  /* ================= GROUP CALLS (mesh WebRTC: up to 6 voice / 4 video) =================
+     groupCalls/{groupId} = {type:'voice'|'video', startedBy, startedAt, participants:[uid...], beat:{uid:ms}, updatedAt}   (join order = array order)
+     groupCalls/{groupId}/sig/* = offer / answer / ice between two members (read + deleted by the receiver)
+     chats/{groupId}.liveCall = {by, type, at}  -> every member's phone sees the "call in progress" banner + ring
+     Same documents as Gupchats, so a group call started here can be joined from Gupchats and the other way round. */
+  const GFV = firebase.firestore.FieldValue;
+  const GG_BEAT_MS = 20000, GG_STALE_MS = 75000;
+  const ggDur = s => { s = Math.max(0, Math.round(s || 0)); return Math.floor(s/60) + ':' + ('0' + (s % 60)).slice(-2); };
+  const ggAtMs = lc => { const a = lc && lc.at; return a && a.toMillis ? a.toMillis() : (typeof a === 'number' ? a : Date.now()); };
+  const ggIsLive = c => !!(c && c.isGroup && c.liveCall && c.liveCall.by && (Date.now() - ggAtMs(c.liveCall)) < 6*3600*1000);
+  const ggRef = ()=> db.collection('groupCalls').doc(GG.gid);
+  const ggSig = (to, kind, data)=> GG ? ggRef().collection('sig').add(Object.assign({ from: currentUser.uid, to, kind, at: Date.now() }, data)).catch(()=>{}) : undefined;
+  const ggSys = (gid, text)=> db.collection('chats').doc(gid).collection('messages').add({ type:'sys', text, from: currentUser.uid, fromName: (currentChannel && currentChannel.name) || 'Someone', createdAt: GFV.serverTimestamp() }).catch(()=>{});
+  const ggNative = (fn, a, b)=>{ try{ const x = window.AndroidCall; if(x && x[fn]) return (a === undefined) ? x[fn]() : ((b === undefined) ? x[fn](a) : x[fn](a, b)); }catch(e){} };
+
+  const GG_CSS = `
+#ggBanner{padding:9px 14px;background:#12a150;color:#fff;font-weight:700;font-size:14.5px;text-align:center;cursor:pointer;flex:none}
+#ggCall{position:fixed;inset:0;z-index:6002;display:flex;flex-direction:column;background:linear-gradient(160deg,#0b1220,#16254a 60%,#0866ff);color:#fff;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+#ggCall .ggtop{padding:14px 16px 6px;text-align:center}
+#ggTitle{font-size:18px;font-weight:800}#ggSub{font-size:13px;opacity:.8;margin-top:2px}
+#ggGrid{flex:1;min-height:0;display:grid;gap:8px;padding:8px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));grid-auto-rows:1fr;overflow:auto}
+.ggt{position:relative;border-radius:16px;overflow:hidden;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;min-height:120px}
+.ggt video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+.ggt.me video{transform:scaleX(-1)}
+.ggt .ggav{width:64px;height:64px;border-radius:50%;overflow:hidden;font-size:24px;font-weight:700;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.2)}
+.ggt .ggav img{width:100%;height:100%;object-fit:cover}
+.ggt .ggn{position:absolute;left:8px;bottom:6px;font-size:13px;font-weight:700;text-shadow:0 1px 3px #000;z-index:2}
+.ggt .ggst{position:absolute;right:8px;top:6px;font-size:12px;z-index:2;opacity:.9;text-shadow:0 1px 3px #000}
+#ggCall .ggbar{display:flex;justify-content:center;gap:14px;padding:12px}
+#ggCall .ggbar button{width:56px;height:56px;border-radius:50%;border:0;font-size:24px;background:rgba(255,255,255,.2);color:#fff;cursor:pointer;padding:0}
+#ggCall .ggbar button.on{background:#fff;color:#000}
+#ggCall .ggbar button.end{background:#e5362b;color:#fff}
+#ggPill{position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);left:50%;transform:translateX(-50%);z-index:6003;background:#1fb855;color:#fff;font-weight:700;font-size:14px;padding:8px 16px;border-radius:999px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35);white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
+#ggRing{position:fixed;inset:0;z-index:6004;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center}
+#ggRing .rbx{background:var(--surface,#1c1c24);color:var(--text,#fff);border-radius:20px;padding:22px;width:min(88%,360px);text-align:center}
+#ggRing .rb2{display:flex;gap:10px;margin-top:16px}
+#ggRing .rb2 button{flex:1;padding:12px;border:0;border-radius:14px;font-size:16px;font-weight:700;cursor:pointer}`;
+
+  (function ggBuild(){
+    const st = document.createElement('style'); st.id = 'ggCss'; st.textContent = GG_CSS; document.head.appendChild(st);
+    const d = document.createElement('div'); d.id = 'ggCall'; d.className = 'cl-hide';
+    d.innerHTML = '<div class="ggtop"><div id="ggTitle"></div><div id="ggSub"></div></div><div id="ggGrid"></div>'
+      + '<div class="ggbar"><button id="ggMic" type="button" aria-label="Mute microphone">🎙️</button>'
+      + '<button id="ggCam" type="button" class="cl-hide" aria-label="Camera">📷</button>'
+      + '<button id="ggSpk" type="button" class="on" aria-label="Speaker">🔊</button>'
+      + '<button id="ggMin" type="button" aria-label="Minimize">⬇️</button>'
+      + '<button id="ggEnd" type="button" class="end" aria-label="Leave call">📞</button></div>';
+    document.body.appendChild(d);
+    const p = document.createElement('div'); p.id = 'ggPill'; p.className = 'cl-hide'; document.body.appendChild(p);
+  })();
+
+  function ggTile(uid, mine){
+    const G = GG; let el = $('ggt_' + uid); if(el) return el;
+    const i = (G.chat.info && G.chat.info[uid]) || {}, nm = mine ? 'You' : (i.name || 'User');
+    el = document.createElement('div'); el.className = 'ggt' + (mine ? ' me' : ''); el.id = 'ggt_' + uid;
+    el.innerHTML = '<div class="ggav">' + avHtml(nm, i.logo || null) + '</div><video autoplay playsinline webkit-playsinline' + (mine ? ' muted' : '') + ' style="display:none"></video><div class="ggn">' + esc(nm) + '</div><div class="ggst">' + (mine ? '' : 'connecting…') + '</div>';
+    $('ggGrid').appendChild(el); return el;
+  }
+  function ggShowStream(uid, stream, mine){
+    const el = ggTile(uid, mine), v = el.querySelector('video'); v.srcObject = stream;
+    const hasV = ()=> stream.getVideoTracks().some(t=> t.readyState === 'live' && t.enabled !== false && !t.muted);
+    const upd = ()=>{ v.style.display = (hasV() && (mine ? (GG && GG.sendVideo) : true)) ? 'block' : 'none'; };
+    stream.getVideoTracks().forEach(t=>{ t.onunmute = upd; t.onmute = upd; t.onended = upd; });
+    stream.onaddtrack = upd; upd();
+    const p = v.play(); if(p && p.catch) p.catch(()=>{});
+  }
+  function ggCount(){
+    if(!GG) return;
+    const n = Object.keys(GG.pcs).length + 1, t = n + ' in call' + (GG.t0 ? ' · ' + ggDur((Date.now() - GG.t0) / 1000) : '');
+    $('ggSub').textContent = t; $('ggPill').textContent = '📞 ' + (GG.chat.name || 'Group') + ' · ' + t + ' · tap to return';
+  }
+  function ggPlayAll(){ document.querySelectorAll('#ggGrid video').forEach(v=>{ if(v.srcObject && v.paused){ const p = v.play(); if(p && p.catch) p.catch(()=>{}); } }); }
+  function ggShow(){ if(!GG) return; GG.mini = false; $('ggCall').classList.remove('cl-hide'); $('ggPill').classList.add('cl-hide'); ggPlayAll(); }
+  function ggPeer(uid){
+    const G = GG; if(G.pcs[uid]) return G.pcs[uid];
+    const pc = new RTCPeerConnection(callCfg()), P = { uid, pc, pend:[] };
+    G.local.getTracks().forEach(t=> pc.addTrack(t, G.local));
+    pc.onicecandidate = e=>{ if(e.candidate) ggSig(uid, 'ice', { c: JSON.stringify(e.candidate) }); };
+    pc.ontrack = e=>{ ggShowStream(uid, e.streams[0] || new MediaStream([e.track]), false); const st = document.querySelector('#ggt_' + uid + ' .ggst'); if(st) st.textContent = ''; };
+    pc.onconnectionstatechange = ()=>{
+      if(GG !== G || G.pcs[uid] !== P) return;
+      const st = document.querySelector('#ggt_' + uid + ' .ggst');
+      if(pc.connectionState === 'connected'){ if(st) st.textContent = ''; if(!G.t0) G.t0 = Date.now(); }
+      else if(pc.connectionState === 'disconnected'){ if(st) st.textContent = 'reconnecting…'; }
+      else if(pc.connectionState === 'failed'){ ggDrop(uid); setTimeout(()=>{ if(GG === G && G.order) ggSync(G.order); }, 1500); }
+    };
+    G.pcs[uid] = P; ggTile(uid, false); ggCount(); return P;
+  }
+  function ggDrop(uid){
+    const G = GG; if(!G) return; const P = G.pcs[uid];
+    if(P){ try{ P.pc.close(); }catch(e){} delete G.pcs[uid]; }
+    const el = $('ggt_' + uid); if(el) el.remove(); ggCount();
+  }
+  async function ggOffer(uid){
+    const G = GG; if(!G) return; const P = ggPeer(uid);
+    try{ const o = await P.pc.createOffer(); await P.pc.setLocalDescription(o); ggSig(uid, 'offer', { sdp: o.sdp }); }catch(e){}
+  }
+  /* participants changed: whoever joined LATER offers to the earlier ones (so two phones never offer to each other at the same time) */
+  function ggSync(parts){
+    const G = GG; if(!G) return; G.order = parts; const mi = parts.indexOf(currentUser.uid); if(mi < 0) return;
+    parts.forEach((u, i)=>{ if(u === currentUser.uid || G.pcs[u]) return; if(i < mi) ggOffer(u); });
+    Object.keys(G.pcs).forEach(u=>{ if(parts.indexOf(u) < 0) ggDrop(u); });
+    ggCount();
+  }
+  async function ggHandle(d){
+    const G = GG; if(!G) return; const u = d.from; if(!u || u === currentUser.uid) return;
+    let P = G.pcs[u];
+    if(d.kind === 'offer'){
+      if(P && (P.pc.remoteDescription || P.pc.signalingState !== 'stable')){ ggDrop(u); P = null; }
+      P = ggPeer(u);
+      try{
+        await P.pc.setRemoteDescription({ type:'offer', sdp:d.sdp });
+        P.pend.splice(0).forEach(c=>{ P.pc.addIceCandidate(c).catch(()=>{}); });
+        const a = await P.pc.createAnswer(); await P.pc.setLocalDescription(a); ggSig(u, 'answer', { sdp:a.sdp });
+      }catch(e){}
+    }else if(d.kind === 'answer'){
+      if(!P) return;
+      try{ await P.pc.setRemoteDescription({ type:'answer', sdp:d.sdp }); P.pend.splice(0).forEach(c=>{ P.pc.addIceCandidate(c).catch(()=>{}); }); }catch(e){}
+    }else if(d.kind === 'ice'){
+      let cand; try{ cand = JSON.parse(d.c); }catch(e){ return; }
+      P = P || ggPeer(u);
+      if(P.pc.remoteDescription) P.pc.addIceCandidate(cand).catch(()=>{}); else P.pend.push(cand);
+    }
+  }
+  /* a phone that crashed / lost network never calls "leave": its heartbeat stops changing, so the others remove it after ~75 s.
+     (Only used for people who send a heartbeat, and only after my own heartbeat write worked, so it can never kick anybody by mistake.) */
+  function ggReap(){
+    const G = GG; if(!G || !G.beatOk || !G.beat) return;
+    const now = Date.now(), me0 = currentUser.uid, dead = [];
+    (G.order || []).forEach(u=>{ if(u === me0) return; const s = G.seen[u]; if(s && s.v !== undefined && now - s.at > GG_STALE_MS) dead.push(u); });
+    if(dead.length) ggRef().update({ participants: GFV.arrayRemove.apply(GFV, dead), updatedAt: Date.now() }).catch(()=>{});
+  }
+  async function ggStart(c, type){
+    if(!requireAuth()) return;
+    if(!c || !c.isGroup){ toast('Group not found'); return; }
+    const gid = c.id;
+    if(GG){ if(GG.gid === gid) ggShow(); else toast('You are already in a group call'); return; }
+    if(C || incoming){ toast('Finish your current call first'); return; }
+    if(!currentChannel){ toast('Create your channel first'); return; }
+    if(!window.RTCPeerConnection || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ toast('Calls are not supported on this device'); return; }
+    type = (type === 'video') ? 'video' : 'voice';
+    const me0 = currentUser.uid;
+    const G = GG = { gid, chat:c, type, pcs:{}, unsubs:[], q:Promise.resolve(), order:[], sendVideo:false, t0:0, ended:false, mini:false, seen:{}, beat:null, beatOk:false, tick:0, lastTick:Date.now() };
+    let starting = false;
+    try{
+      const ref = db.collection('groupCalls').doc(gid), sn = await ref.get(), d = sn.exists ? sn.data() : null, parts = (d && d.participants) || [];
+      if(GG !== G) return;
+      if(parts.length && ggIsLive(c)){ G.type = type = d.type || type; } else starting = true;
+      const lim = G.type === 'video' ? 4 : 6;
+      if(!starting && parts.indexOf(me0) < 0 && parts.length >= lim){ GG = null; toast('This call is full (' + lim + ' people max)'); return; }
+      await loadIce().catch(()=>{});
+      let stream; try{ stream = await getMediaRobust(G.type === 'video' ? 'video' : 'audio'); }catch(e){ GG = null; toast(mediaErr(e)); return; }
+      if(GG !== G){ stream.getTracks().forEach(t=> t.stop()); return; }
+      G.local = stream; G.sendVideo = stream.getVideoTracks().length > 0;
+      /* clear old signalling addressed to me, then register */
+      try{ const old = await ref.collection('sig').where('to', '==', me0).get(); await Promise.all(old.docs.map(x=> x.ref.delete())); }catch(e){}
+      if(starting){
+        await ref.set({ type:G.type, startedBy:me0, startedAt:Date.now(), participants:[me0], updatedAt:Date.now() });
+        await db.collection('chats').doc(gid).update({ liveCall:{ by:me0, type:G.type, at:GFV.serverTimestamp() } }).catch(()=>{});
+        ggSys(gid, ((currentChannel && currentChannel.name) || 'Someone') + ' started a group ' + (G.type === 'video' ? 'video' : 'voice') + ' call 📞');
+        try{ if(window.atPush) window.atPush({ kind:'groupcall', chatId:gid }); }catch(e){}
+      }else{
+        await ref.update({ participants: GFV.arrayUnion(me0), updatedAt: Date.now() });
+      }
+    }catch(e){ if(GG === G) ggTeardown(); toast('Could not start the call: ' + (e && e.message || e)); return; }
+    if(GG !== G) return;
+    /* UI */
+    $('ggTitle').textContent = (c.name || 'Group') + ' · ' + (G.type === 'video' ? 'video' : 'voice'); $('ggGrid').innerHTML = '';
+    $('ggCam').classList.toggle('cl-hide', !G.sendVideo);
+    ['ggMic', 'ggCam'].forEach(id=>{ $(id).classList.remove('on'); }); $('ggMic').textContent = '🎙️'; $('ggSpk').classList.add('on');
+    $('ggCall').classList.remove('cl-hide'); $('ggPill').classList.add('cl-hide'); ggShowStream(me0, G.local, true); ggCount();
+    ggNative('callStarted', G.sendVideo, c.name || 'Group call');
+    [0, 500, 1500].forEach(t=> setTimeout(()=>{ if(GG === G) nativeSpeaker(true); }, t));
+    G.timer = setInterval(()=>{
+      const now = Date.now();
+      if(now - G.lastTick > 4000) Object.keys(G.seen).forEach(k=>{ G.seen[k].at = now; });   /* this phone was frozen (background / lock): do not blame the others */
+      G.lastTick = now; ggCount(); ggPlayAll(); if(++G.tick % 10 === 0) ggReap();
+    }, 1000);
+    const ref2 = db.collection('groupCalls').doc(gid);
+    const beat = ()=>{ if(GG !== G) return; ref2.update({ ['beat.' + me0]: Date.now() }).then(()=>{ G.beatOk = true; }).catch(()=>{ G.beatOk = false; }); };
+    beat(); G.beatT = setInterval(beat, GG_BEAT_MS);
+    G.unsubs.push(ref2.onSnapshot(sn=>{
+      if(GG !== G) return; const d = sn.data(); if(!d) return;
+      const parts = d.participants || [], now = Date.now(); G.beat = d.beat || {};
+      if(parts.indexOf(me0) < 0){   /* someone removed me by mistake (e.g. my heartbeat was late) -> put me back */
+        if(now - (G.rejoinAt || 0) > 8000){ G.rejoinAt = now; ref2.update({ participants: GFV.arrayUnion(me0), updatedAt: Date.now() }).catch(()=>{}); }
+        return;
+      }
+      parts.forEach(u=>{ if(u === me0) return; const b = G.beat[u], s = G.seen[u]; if(!s) G.seen[u] = { v:b, at:now }; else if(s.v !== b){ s.v = b; s.at = now; } });
+      ggSync(parts);
+    }));
+    G.unsubs.push(ref2.collection('sig').where('to', '==', me0).onSnapshot(sn=>{
+      if(GG !== G) return;
+      const ch = sn.docChanges().filter(x=> x.type === 'added').map(x=> x.doc).sort((a, b)=> (a.data().at || 0) - (b.data().at || 0));
+      ch.forEach(doc=>{ const dd = doc.data(); doc.ref.delete().catch(()=>{}); G.q = G.q.then(()=> ggHandle(dd)); });
+    }));
+  }
+  function ggTeardown(){
+    const G = GG; if(!G) return; G.ended = true; clearInterval(G.timer); clearInterval(G.beatT);
+    G.unsubs.forEach(u=>{ try{ u(); }catch(e){} });
+    Object.keys(G.pcs).forEach(u=>{ try{ G.pcs[u].pc.close(); }catch(e){} });
+    if(G.local) G.local.getTracks().forEach(t=>{ try{ t.stop(); }catch(e){} });
+    ggNative('release'); $('ggCall').classList.add('cl-hide'); $('ggPill').classList.add('cl-hide'); $('ggGrid').innerHTML = ''; GG = null;
+  }
+  async function ggLeave(){
+    const G = GG; if(!G) return; const gid = G.gid, secs = G.t0 ? (Date.now() - G.t0) / 1000 : 0, me0 = currentUser && currentUser.uid; ggTeardown();
+    if(!me0) return;
+    try{
+      const ref = db.collection('groupCalls').doc(gid);
+      await ref.update({ participants: GFV.arrayRemove(me0), updatedAt: Date.now() });
+      const sn = await ref.get();
+      if(sn.exists && !(sn.data().participants || []).length){
+        await db.collection('chats').doc(gid).update({ liveCall: GFV.delete() }).catch(()=>{});
+        ggSys(gid, '📞 Group call ended' + (secs > 5 ? ' · ' + ggDur(secs) : ''));
+      }
+    }catch(e){}
+  }
+  $('ggEnd').addEventListener('click', ggLeave);
+  $('ggMin').addEventListener('click', ()=>{ if(!GG) return; GG.mini = true; $('ggCall').classList.add('cl-hide'); $('ggPill').classList.remove('cl-hide'); ggCount(); });
+  $('ggPill').addEventListener('click', ggShow);
+  $('ggMic').addEventListener('click', function(){ if(!GG || !GG.local) return; let off = false; GG.local.getAudioTracks().forEach(t=>{ t.enabled = !t.enabled; off = !t.enabled; }); this.classList.toggle('on', off); this.textContent = off ? '🔇' : '🎙️'; });
+  $('ggCam').addEventListener('click', function(){ if(!GG || !GG.local) return; let off = false; GG.local.getVideoTracks().forEach(t=>{ t.enabled = !t.enabled; off = !t.enabled; }); this.classList.toggle('on', off); const l = document.querySelector('#ggt_' + currentUser.uid + ' video'); if(l) l.style.display = off ? 'none' : 'block'; });
+  $('ggSpk').addEventListener('click', function(){ const on = !this.classList.contains('on'); this.classList.toggle('on', on); nativeSpeaker(on); });
+  $('ggCall').addEventListener('pointerdown', ggPlayAll, { passive:true });
+  document.addEventListener('visibilitychange', ()=>{ if(GG && !document.hidden){ const now = Date.now(); Object.keys(GG.seen).forEach(k=>{ GG.seen[k].at = now; }); GG.lastTick = now; ggPlayAll(); } });
+  window.addEventListener('pagehide', ()=>{ if(GG) ggLeave(); });
+  auth.onAuthStateChanged(u=>{ if(!u && GG) ggTeardown(); });
+
+  window.__calls = { setupChannelButtons, startCall, groupStart: ggStart, groupActive: ()=> GG ? GG.gid : null, busy: ()=> !!(C || incoming || GG) };
 })();
 </script>
 <script>
@@ -8657,6 +8886,7 @@ R.insertAdjacentHTML('beforeend',
  `<div class="ig-ov" id="igDm"><div class="ig-ov-h"><button class="ig-x" id="dmBack">${ic.back.replace('<svg','<svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"')}</button><h3>Messages</h3><button class="ig-x" id="dmNew" aria-label="New message">${ic.edit.replace('<svg','<svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"')}</button></div><div id="dmTabs"><button data-t="all" class="on">All</button><button data-t="friends">👥 Friends</button><button data-t="follow">Following</button><button data-t="unread" class="dsk">Unread</button><button data-t="groups" class="dsk">Groups</button></div><div class="ig-ov-b" id="dmList"></div></div>
   <div class="ig-ov" id="igNc" style="z-index:81"><div class="ig-ov-h"><button class="ig-x" id="ncBack">${ic.back.replace('<svg','<svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"')}</button><h3>New message</h3><span></span></div><input class="dm-search" id="ncQ" placeholder="Search by name…" autocomplete="off"><div class="ig-ov-b" id="ncList"></div></div>
   <div class="ig-ov" id="igChat"><div class="dm-head"><button class="ic" id="chatBack">${ic.back}</button><div class="who" id="chatWho"></div><button class="ic" id="chatAud" aria-label="Voice call">${ic.phone}</button><button class="ic" id="chatVid" aria-label="Video call">${ic.video}</button></div>
+   <div id="ggBanner" class="cl-hide"></div>
    <div id="dmMsgs"></div>
    <div class="dm-bar" id="dmBar"><button id="dmImg" aria-label="Photo">${ic.img}</button><div class="in"><input type="text" id="dmIn" placeholder="Message…" maxlength="2000" autocomplete="off"><button id="dmMic" aria-label="Voice message">${ic.mic}</button><button class="snd hidden" id="dmSend">Send</button><button class="hidden" id="dmSch" aria-label="Schedule message" style="background:none;border:0;font-size:20px;padding:0 6px;cursor:pointer">🕒</button></div>
     <div class="dm-rec"><button id="dmRecX" aria-label="Cancel">${ic.trash}</button><span class="rd"></span><span class="tm" id="dmTm">0:00</span><button class="sendr" id="dmRecS" aria-label="Send">${ic.send}</button></div></div>
@@ -8973,7 +9203,7 @@ function openChat0(p){
   if(p.group&&chats[p.id]&&chats[p.id].isTemp&&chats[p.id].expiresAt&&chats[p.id].expiresAt<Date.now()){toast('This vibe group has expired ⏳');return;}
   if(!p.group && isBlockedUid(p.id)){toast('You blocked this user. Unblock to message.');return;}
   if(!currentChannel){toast('Create your channel first');return;}
-  $('igChat').classList.remove('gz-ai');peer=p;openId=p.group?p.id:cidOf(me(),p.id);try{ if(!p.group&&!p.ai) blockedMe(p.id); }catch(e){}$('chatAud').style.display=$('chatVid').style.display=p.group?'none':'';
+  $('igChat').classList.remove('gz-ai');peer=p;openId=p.group?p.id:cidOf(me(),p.id);try{ if(!p.group&&!p.ai) blockedMe(p.id); }catch(e){}$('chatAud').style.display=$('chatVid').style.display='';
   $('chatWho').innerHTML=avbox(p.name,p.logo,36,p.group?'':p.id)+`<div style="min-width:0"><b id="dmWho">${esc(p.group?p.name:window.__gzLN(p.id,p.name))}</b><small id="dmTyp"></small></div>`;
   $('dmMsgs').innerHTML='';msgs=[];clr=0;$('igChat').classList.add('show');if($('igDm').classList.contains('show'))renderInbox();$('dmIn').value='';toggleSend();stopAudio();
   if(window.__tU)window.__tU();rTo=null;
@@ -9057,8 +9287,46 @@ async function aiSend(){
   aiHist.push({role:'assistant',content:reply,t:Date.now()});aiSave();aiBusy=false;if(peer&&peer.ai)aiPaint(false);
 }
 function aiClear(){gzConfirm('Clear this chat?\n\nYour messages with Gupzy AI are deleted from this phone.').then(ok=>{if(!ok)return;aiHist=[];aiSave();aiPaint(false);});}
-$('chatAud').onclick=()=>peer&&window.__calls&&window.__calls.startCall({id:peer.id,name:peer.name,logo:peer.logo},'audio');
-$('chatVid').onclick=()=>peer&&window.__calls&&window.__calls.startCall({id:peer.id,name:peer.name,logo:peer.logo},'video');
+function chatCall(type){
+  if(!peer||!window.__calls)return;
+  if(peer.group){const c=chats[peer.id];if(!c){toast('Group not found');return;}window.__calls.groupStart(c,type==='video'?'video':'voice');return;}
+  window.__calls.startCall({id:peer.id,name:peer.name,logo:peer.logo},type);
+}
+$('chatAud').onclick=()=>chatCall('audio');
+$('chatVid').onclick=()=>chatCall('video');
+/* ===== GROUP CALL: "call in progress" banner inside the group chat + ring for members who are not in the call ===== */
+(function(){
+  const gAt=lc=>{const a=lc&&lc.at;return a&&a.toMillis?a.toMillis():(typeof a==='number'?a:Date.now());};
+  const gLive=c=>!!(c&&c.isGroup&&c.liveCall&&c.liveCall.by&&(Date.now()-gAt(c.liveCall))<6*3600*1000);
+  const seen={};let ringT=0;
+  function ringHide(){const r=$('ggRing');if(r)r.remove();clearTimeout(ringT);}
+  function ringShow(c){
+    ringHide();
+    const lc=c.liveCall,i=(c.info&&c.info[lc.by])||{},video=lc.type==='video';
+    const r=document.createElement('div');r.id='ggRing';
+    r.innerHTML='<div class="rbx"><div style="font-size:42px">📞</div><div style="font-size:19px;font-weight:800;margin-top:6px">'+esc(c.name||'Group')+'</div><div style="opacity:.8;margin-top:4px">'+esc(i.name||'Someone')+' started a group '+(video?'video':'voice')+' call</div><div class="rb2"><button id="ggRIgn" style="background:rgba(127,127,127,.25);color:inherit">Ignore</button><button id="ggRJoin" style="background:#12a150;color:#fff">Join</button></div></div>';
+    document.body.appendChild(r);try{navigator.vibrate&&navigator.vibrate([300,150,300,150,300]);}catch(e){}
+    $('ggRIgn').onclick=ringHide;
+    $('ggRJoin').onclick=()=>{ringHide();window.__calls&&window.__calls.groupStart(c,video?'video':'voice');};
+    ringT=setTimeout(ringHide,45000);
+  }
+  setInterval(()=>{
+    if(!currentUser)return;const K=window.__calls;if(!K)return;
+    const b=$('ggBanner'),c=(openId&&peer&&peer.group)?chats[openId]:null;
+    if(b){
+      if(c&&gLive(c)&&!K.groupActive()){b.textContent='📞 Group '+(c.liveCall.type==='video'?'video':'voice')+' call in progress · tap to join';b.classList.remove('cl-hide');b.onclick=()=>K.groupStart(c,c.liveCall.type==='video'?'video':'voice');}
+      else b.classList.add('cl-hide');
+    }
+    if(K.busy())return;const now=Date.now();
+    Object.keys(chats).forEach(k=>{
+      const cc=chats[k];if(!gLive(cc)||cc.liveCall.by===me()||(cc.mute&&cc.mute[me()]===true))return;
+      const at=gAt(cc.liveCall);if(now-at>45000)return;const key=k+':'+at;if(seen[key])return;seen[key]=1;
+      try{if(isBlockedUid(cc.liveCall.by))return;}catch(e){}
+      try{if(window.__gz&&window.__gz.dndBlocks(cc.liveCall.by))return;}catch(e){}
+      ringShow(cc);
+    });
+  },1200);
+})();
 async function markRead(){
   if(!openId||!peer||peer.ai)return;
   try{await db.collection('chats').doc(openId).set({...(peer.group?{}:{members:[me(),peer.id]}),lastRead:{[me()]:FV.serverTimestamp()},unread:{[me()]:0}},{merge:true});}catch(e){}
