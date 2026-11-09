@@ -368,7 +368,7 @@ html #boot img{position:relative;z-index:1;opacity:0;visibility:visible!importan
 </style>
 </head>
 <body>
-<style id="gzCallBoot">html.gz-callboot #boot{display:none!important}html.gz-callboot,html.gz-callboot body{background:#0b1220!important}</style>
+<style id="gzCallBoot">html.gz-callboot #boot{background:#0b1220!important}html.gz-callboot #boot img,html.gz-callboot #boot::before,html.gz-callboot #boot::after{display:none!important}html.gz-callboot,html.gz-callboot body{background:#0b1220!important}</style>
 <script>/* opened from an incoming-call tap (Answer / notification): no splash, no white flash - go straight to the dark call screen */
 (function(){try{var a=window.AndroidCall,c=false;
  try{ if(a){ if(typeof a.hasPendingAnswer==='function' && a.hasPendingAnswer()) c=true; else if(typeof a.isNativeRinging==='function' && a.isNativeRinging()) c=true; } }catch(e){}
