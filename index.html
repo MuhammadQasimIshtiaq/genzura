@@ -9644,7 +9644,7 @@ const E2E=(()=>{
   /* every public key ever published by the peer (only the peer can write their own userKeys doc) */
   async function knownPubs(uid){
     const cur=await peerPub(uid);let list=(await idbGet('p_'+uid))||[];
-    if(cur&&!list.includes(cur)){if(list.length)toast('🔒 Security code changed for this contact');list=[...list,cur];await idbSet('p_'+uid,list);}
+    if(cur&&!list.includes(cur)){list=[...list,cur];await idbSet('p_'+uid,list);}
     return {cur,list};
   }
   async function skey(pubB64,k){
@@ -16808,13 +16808,13 @@ box.addEventListener('click',function(e){
     resolve(inp).then(function(r){
       if(!r){ T('No channel found with this ID'); return; }
       var nm=r.c.name||inp;
-      if(a==='give'){ var d=parseInt(val('pmaDays'),10); if(!(d>=1&&d<=3650)){ T('Enter days (1–3650)'); return; } gzConfirm('Give '+d+' day(s) of Premium to '+nm+'?','Give').then(function(ok){ if(ok) grant(r.uid,d,nm).then(function(){ var x=$('pmaId'); if(x) x.value=''; }); }); }
-      else gzConfirm('Remove Premium from '+nm+'?','Remove').then(function(ok){ if(ok) revoke(r.uid); });
+      if(a==='give'){ var d=parseInt(val('pmaDays'),10); if(!(d>=1&&d<=3650)){ T('Enter days (1–3650)'); return; } gzConfirm('Do you really want to give '+d+' day(s) of Premium to '+nm+'?','Give').then(function(ok){ if(ok) grant(r.uid,d,nm).then(function(){ var x=$('pmaId'); if(x) x.value=''; }); }); }
+      else gzConfirm('Do you really want to remove Premium from '+nm+'?','Remove').then(function(ok){ if(ok) revoke(r.uid); });
     });
   }
   else if(a==='ok') grant(u,parseInt(el.getAttribute('data-d'),10)||30,'');
   else if(a==='no') reject(u);
-  else if(a==='rm'){ gzConfirm('Remove Premium from this member?','Remove').then(function(ok){ if(ok) revoke(u); }); }
+  else if(a==='rm'){ gzConfirm('Do you really want to remove Premium from this member?','Remove').then(function(ok){ if(ok) revoke(u); }); }
   else if(a==='savecfg') saveCfg();
 });
 document.querySelectorAll('#adminTabs .profile-tab').forEach(function(tab){
@@ -16823,5 +16823,12 @@ document.querySelectorAll('#adminTabs .profile-tab').forEach(function(tab){
 })();
 </script>
 
+<style id="flRingFix">
+/* animated Premium ring stays BEHIND the crown, admin/blue badges, the "+" story button and the change-photo icon */
+.pm-ring{z-index:0!important}
+.st-plus,.fl-av i,#flPic{z-index:6!important}
+.ch-badge-blue,.ch-badge-admin,.ch-badge-tier{z-index:5!important}
+.pm-crown{z-index:7!important}
+</style>
 </body>
 </html>
