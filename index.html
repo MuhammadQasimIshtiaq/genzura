@@ -15769,7 +15769,7 @@ function openMenu(){
 }
 function closeMenu(){ menu.classList.remove('show'); }
 menu.addEventListener('click',function(e){ var el=e.target.closest('[data-m]'); if(!el) return; var f=ACT[el.getAttribute('data-m')]; if(f) f(); });
-document.addEventListener('click',function(e){ if(menu.classList.contains('show') && e.target.closest && e.target.closest('nav .nav-btn')) closeMenu(); },true);
+document.addEventListener('click',function(e){ if(menu.classList.contains('show') && e.target.closest && e.target.closest('nav .nav-btn, #dmBtn')) closeMenu(); },true);   /* top Messages icon (desktop) also closes the Menu page */
 /* hamburger in old top bar now opens the new Menu page */
 var ob=$('profileMenuBtn'); if(ob){ var nb=ob.cloneNode(true); ob.parentNode.replaceChild(nb,ob); nb.addEventListener('click',openMenu); }
 /* Android back closes Menu first */
