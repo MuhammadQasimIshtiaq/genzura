@@ -1907,7 +1907,15 @@ function iceCacheSet(v){ try{ localStorage.setItem('at_ice', JSON.stringify({ t:
 /* ---- badges everywhere: any element with data-bduid="<uid>" gets that channel's badges (admin / blue / silver / gold / diamond) ---- */
 (function(){
   const SEL = '[data-bduid]:not([data-bdone])';
-  function badgeOne(el){ el.setAttribute('data-bdone','1'); const u = el.getAttribute('data-bduid'); if(u) applyChannelBadgeToAvatar(u, el); }
+  function badgeOne(el, n){
+    el.setAttribute('data-bdone','1'); const u = el.getAttribute('data-bduid'); if(!u) return;
+    Promise.resolve(applyChannelBadgeToAvatar(u, el)).then(ok=>{
+      if(ok !== false) return;                       /* fetch failed (e.g. auth not ready yet): try again, don't give up for good */
+      n = (n||0) + 1;
+      if(n >= 8){ el.removeAttribute('data-bdone'); return; }
+      setTimeout(()=>{ if(document.body.contains(el)) badgeOne(el, n); }, 1200*n);
+    }).catch(()=>{});
+  }
   function scan(root){ if(!root || root.nodeType !== 1) return; if(root.matches && root.matches(SEL)) badgeOne(root); root.querySelectorAll && root.querySelectorAll(SEL).forEach(badgeOne); }
   function start(){
     new MutationObserver(ms=>{ for(const m of ms){ m.addedNodes.forEach(scan); } }).observe(document.body, { childList:true, subtree:true });
@@ -2037,7 +2045,7 @@ function avatarBadgeOverlayHTML(ch, channelId){
   let html = '';
   if(channelId && ADMIN_UIDS.includes(channelId)){
     html += `<div class="ch-badge-admin">A</div>`;
-  }else if(ch.referredByAdmin){
+  }else if(ch.referredByAdmin || Number(ch.blueUntil) > Date.now()){
     html += `<div class="ch-badge-blue">✓</div>`;
   }
   const tier = getFollowerTier(ch.subscriberCount);
@@ -2053,20 +2061,28 @@ function channelBadgeRowHTML(ch){
 }
 /* one fetch per channel (even if many cards for the same channel appear at once) — cached as a Promise */
 const _channelBadgeCache = {};
+/* returns false when the channel could not be read (caller retries), true otherwise */
 async function applyChannelBadgeToAvatar(channelId, avatarEl){
-  if(!channelId || !avatarEl) return;
+  if(!channelId || !avatarEl) return true;
   try{
-    if(!_channelBadgeCache[channelId]){
-      _channelBadgeCache[channelId] = db.collection('channels').doc(channelId).get()
-        .then(doc=> doc.exists ? { referredByAdmin: doc.data().referredByAdmin, subscriberCount: doc.data().subscriberCount, premiumUntil: doc.data().premiumUntil, pm: doc.data().pm } : null)
-        .catch(()=>{ delete _channelBadgeCache[channelId]; return null; });
+    let chData;
+    if(typeof currentUser !== 'undefined' && currentUser && channelId === currentUser.uid && typeof currentChannel !== 'undefined' && currentChannel){
+      chData = currentChannel;                                   /* my own badges: already loaded, no fetch needed */
+    }else{
+      if(!_channelBadgeCache[channelId]){
+        _channelBadgeCache[channelId] = db.collection('channels').doc(channelId).get()
+          .then(doc=> doc.exists ? { referredByAdmin: doc.data().referredByAdmin, blueUntil: doc.data().blueUntil, subscriberCount: doc.data().subscriberCount, premiumUntil: doc.data().premiumUntil, pm: doc.data().pm } : null)
+          .catch(()=>{ delete _channelBadgeCache[channelId]; return undefined; });
+      }
+      chData = await _channelBadgeCache[channelId];
+      if(chData === undefined) return false;                     /* read failed -> retry later */
     }
-    const chData = await _channelBadgeCache[channelId];
-    if(!chData || !document.body.contains(avatarEl)) return;
-    if(avatarEl.querySelector('.ch-badge-blue,.ch-badge-admin,.ch-badge-tier,.pm-ring,.pm-crown')) return; /* already has its badges */
+    if(!chData || !document.body.contains(avatarEl)) return true;
+    if(avatarEl.querySelector('.ch-badge-blue,.ch-badge-admin,.ch-badge-tier,.pm-ring,.pm-crown')) return true; /* already has its badges */
     const html = avatarBadgeOverlayHTML(chData, channelId);
     if(html){ avatarEl.classList.add('has-badge'); avatarEl.insertAdjacentHTML('beforeend', html); }
-  }catch(e){ /* badge is cosmetic — fail silently */ }
+    return true;
+  }catch(e){ return false; }
 }
 function timeAgo(ts){ if(!ts) return 'Just now'; const s=Math.floor((Date.now()-ts.toMillis())/1000); if(s<60) return 'Just now'; if(s<3600) return Math.floor(s/60)+'m ago'; if(s<86400) return Math.floor(s/3600)+'h ago'; return Math.floor(s/86400)+'d ago'; }
 
@@ -4812,7 +4828,7 @@ function startUpload(kind){
   const oneDayAgo = Date.now() - 24*60*60*1000;
   const uploadsToday = yourVideosList.filter(v => v.createdAt && v.createdAt.toMillis() >= oneDayAgo).length;
   if(uploadsToday >= 3){
-    alert('You can only upload 3 reels per day. Please try again after 24 hours.');
+    toast('You can only upload 3 reels per day. Please try again after 24 hours.');
     return;
   }
   pending = { kind, file:null, url:null, chosenThumbBlob:null, chosenThumbUrl:null, noPreview:false };
@@ -4831,7 +4847,7 @@ videoFileInput.addEventListener('change', e=>{
     if(settled) return;
     settled = true;
     if(isFinite(duration) && duration > 300){
-      alert(`Videos can be up to 5 minutes (300s). This video is ${duration.toFixed(2)} seconds. Please select a different video.`);
+      toast(`Videos can be up to 5 minutes (300s). This video is ${duration.toFixed(2)} seconds. Please select a different video.`);
       URL.revokeObjectURL(url);
       videoFileInput.value = '';
       return;
@@ -10520,7 +10536,7 @@ $('xArG').onclick=e=>{const t=e.target.closest('[data-i]');if(!t)return;const i=
  if(selMode){sel.has(i)?sel.delete(i):sel.add(i);t.classList.toggle('on',sel.has(i));$('xArS').textContent='Add to Highlight ('+sel.size+')';}
  else{vi=[{url:arc[i].mediaURL,type:arc[i].mediaType}];vk=0;V.classList.add('show');showV();}};
 $('xArS').onclick=async()=>{if(!selMode){selMode=true;$('xArS').textContent='Add to Highlight (0)';return;}
- if(!sel.size)return toast('Pick at least one story');const title=(prompt('Highlight name','Highlights')||'').trim().slice(0,20);if(!title)return;
+ if(!sel.size)return toast('Pick at least one story');const title=((await gzPrompt('Highlight name','Highlights','Save'))||'').trim().slice(0,20);if(!title)return;
  const items=[...sel].sort((a,b)=>b-a).map(i=>({url:arc[i].mediaURL,type:arc[i].mediaType}));
  try{await db.collection('highlights').add({uid:me(),title,cover:items[0].type==='image'?items[0].url:null,items,createdAt:FV.serverTimestamp()});toast('Highlight added ✓');$('xAr').classList.remove('show');loadHL('own');}catch(er){toast('Failed: '+er.message);}};
 /* highlights row (own profile + other channels) */
@@ -11373,7 +11389,7 @@ function openATStudioApp(tab){
 
   async function createAlbum(){
     if(!(typeof requireAuth!=='function'||requireAuth())) return;
-    var t=(prompt('Album name','Our album')||'').trim().slice(0,60); if(!t) return;
+    var t=((await gzPrompt('Album name','Our album','Create'))||'').trim().slice(0,60); if(!t) return;
     var ppl=await pickPeople('Add friends', [], MAXM-1); if(ppl===null) return;
     var names={}; names[uid()]=myName(); var m=[uid()];
     ppl.forEach(function(p){ m.push(p.id); names[p.id]=p.name; });
@@ -12319,7 +12335,7 @@ function openATStudioApp(tab){
   function closePage(){ if(page){ page.remove(); page=null; } }
   function share(url,title){
     try{ if(typeof atShare==='function'){ atShare({title:'Gupzy',text:title,url:url}); return; } }catch(e){}
-    try{ navigator.clipboard.writeText(url).then(function(){ say('Link copied'); }); }catch(e){ prompt('Copy link:',url); }
+    try{ navigator.clipboard.writeText(url).then(function(){ say('Link copied'); }); }catch(e){ gzPrompt('Copy link:',url,'Close'); }
   }
   async function resolve(idOrUid){
     var u=idOrUid, d=await db.collection('channels').doc(idOrUid).get();
@@ -13682,6 +13698,53 @@ function openATStudioApp(tab){
   .gm-proof{background:#fff;color:#1b1f3b;} .gm-again{background:rgba(255,255,255,.16);color:#fff;}
   .gm-done{margin-top:10px;font-weight:700;color:#7dffb0;} .gm-by{margin-top:8px;font-size:11px;opacity:.65;}
 </style>
+<script id="gzPlayJs">
+/* Google Play Billing bridge. Payments for Blue Tick and Premium go ONLY through Google Play.
+   Android wrapper exposes  window.GupzyBilling  (buy(productId, uid), restore()) and calls  window.gzPlayResult(json).
+   Every purchase is verified by the server (/play-verify) which grants blueUntil / premiumUntil. */
+(function(){
+  var pending=null;
+  function has(){ try{ return !!(window.GupzyBilling && typeof window.GupzyBilling.buy==='function'); }catch(e){ return false; } }
+  async function idToken(){ var u=firebase.auth().currentUser; if(!u) throw new Error('Please sign in first'); return u.getIdToken(); }
+  async function verify(r){
+    var res=await fetch(atFn('play-verify'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({idToken:await idToken(),productId:r.productId,purchaseToken:r.purchaseToken})});
+    var j=null; try{ j=await res.json(); }catch(e){}
+    if(!res.ok||!j||!j.ok) throw new Error((j&&j.error)||'Could not verify the payment. It will be retried automatically.');
+    return j;
+  }
+  function applyGrant(j){
+    try{
+      var u=firebase.auth().currentUser; if(!u) return;
+      if(typeof currentChannel!=='undefined' && currentChannel){
+        if(j.blueUntil) currentChannel.blueUntil=j.blueUntil;
+        if(j.premiumUntil) currentChannel.premiumUntil=j.premiumUntil;
+      }
+      try{ delete _channelBadgeCache[u.uid]; }catch(e){}
+      try{ if(window.GZPM && typeof currentChannel!=='undefined') window.GZPM.applyOwn(currentChannel); }catch(e){}
+      try{ applyChannelToUI(); }catch(e){}
+    }catch(e){}
+  }
+  function buy(productId){
+    return new Promise(function(res,rej){
+      if(!has()){ rej(new Error('NO_BILLING')); return; }
+      var u=firebase.auth().currentUser; if(!u){ rej(new Error('Please sign in first')); return; }
+      if(pending){ rej(new Error('Another purchase is in progress')); return; }
+      pending={res:res,rej:rej};
+      try{ window.GupzyBilling.buy(productId,u.uid); }catch(e){ pending=null; rej(e); }
+    });
+  }
+  window.gzPlayResult=function(r){
+    var p=pending;
+    if(!r||!r.ok){ if(p){ pending=null; p.rej(new Error(r&&r.cancelled?'CANCELLED':((r&&r.error)||'Purchase failed'))); } return; }
+    verify(r).then(function(j){ applyGrant(j); if(p){ pending=null; p.res(j); } else { try{ toast(j.kind==='blue'?'Blue tick activated ✅':'Premium activated 👑'); }catch(e){} } })
+      .catch(function(e){ if(p){ pending=null; p.rej(e); } });
+  };
+  function restore(){ try{ if(has() && typeof window.GupzyBilling.restore==='function') window.GupzyBilling.restore(); }catch(e){} }
+  window.gzPlay={available:has,buy:buy,restore:restore};
+  /* purchases that were paid but not verified yet (app closed, no internet...) are re-sent after sign-in */
+  try{ firebase.auth().onAuthStateChanged(function(u){ if(u) setTimeout(restore,4000); }); }catch(e){}
+})();
+</script>
 <script id="gzHomeMenuJs">
 /* custom confirm dialog (no "The page at ... says") */
 window.gzConfirm=function(msg,okLabel){
@@ -13694,6 +13757,21 @@ window.gzConfirm=function(msg,okLabel){
     function done(v){ ov.remove(); res(v); }
     ov.addEventListener('click',function(e){ if(e.target===ov) return done(false); var b=e.target.closest('button[data-k]'); if(b) done(b.dataset.k==='1'); });
     document.body.appendChild(ov);
+  });
+};
+/* custom input dialog (replaces prompt(): no \"The page at ... says\") -> resolves to the text, or null on cancel */
+window.gzPrompt=function(msg,def,okLabel){
+  return new Promise(function(res){
+    var old=document.getElementById('gzCfOv'); if(old) old.remove();
+    var ov=document.createElement('div'); ov.id='gzCfOv';
+    ov.innerHTML='<div class="gz-cf" role="dialog" aria-modal="true"><p></p><input type="text" class="gz-cf-in" autocomplete="off" maxlength="200" style="width:100%;box-sizing:border-box;margin:0 0 16px;padding:11px 12px;border-radius:12px;border:1px solid var(--border,#ddd);background:var(--surface2,#f2f2f2);color:var(--text,#111);font-size:15px;outline:none"><div class="row"><button type="button" data-k="0">Cancel</button><button type="button" class="danger" data-k="1" style="background:var(--accent2,#4a5cff)">OK</button></div></div>';
+    ov.querySelector('p').textContent=msg||''; ov.querySelector('p').style.whiteSpace='pre-line';
+    var inp=ov.querySelector('input'); inp.value=def||''; if(okLabel) ov.querySelector('.danger').textContent=okLabel;
+    function done(v){ ov.remove(); res(v); }
+    ov.addEventListener('click',function(e){ if(e.target===ov) return done(null); var b=e.target.closest('button[data-k]'); if(b) done(b.dataset.k==='1'?inp.value:null); });
+    inp.addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); done(inp.value); } });
+    document.body.appendChild(ov);
+    setTimeout(function(){ try{ inp.focus(); inp.select(); }catch(e){} },60);
   });
 };
 /* HOME 3-lines menu */
@@ -16167,7 +16245,7 @@ async function saveInterests(){
   catch(e){ T('Could not save: '+((e&&e.message)||'error')); if(b){ b.textContent='Save interests'; b.disabled=false; } }
   saving=false;
 }
-/* ---- blue tick ($2, live USD->PKR, JazzCash/EasyPaisa/Bank in Pakistan, Payoneer international) ---- */
+/* ---- blue tick ($2 / 1 month, paid only through Google Play) ---- */
 var PRICE=2, RATE=0, CFG={}, region='', method='', form={txn:'',snd:'',reason:''};
 function isAdm(){ return false; } /* admin tools moved to Admin Panel > Blue Tick */
 async function getRate(force){
@@ -16181,40 +16259,32 @@ function val(id){ var e=$(id); return e?e.value.trim():''; }
 function saveForm(){ form.txn=val('fl4Txn')||form.txn; form.snd=val('fl4Snd')||form.snd; form.reason=val('fl4Reason')||form.reason; }
 function mList(){ if(region==='intl') return CFG.payoneer?['payoneer']:[]; return ['jazzcash','easypaisa','bank'].filter(function(k){return CFG[k]}); }
 var MN={jazzcash:'JazzCash',easypaisa:'EasyPaisa',bank:'Bank transfer',payoneer:'Payoneer'};
+function fmtD(ms){ return new Date(ms).toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'}); }
+async function buyBlue(){
+  if(saving) return;
+  if(!window.gzPlay||!gzPlay.available()){ T('Blue Tick can be bought in the Gupzy Android app from Google Play'); return; }
+  saving=true; T('Opening Google Play…');
+  try{ await gzPlay.buy('gupzy_bluetick_1m'); T('Blue tick active ✅'); }
+  catch(e){ if(String(e&&e.message)!=='CANCELLED') T((e&&e.message)||'Purchase failed'); }
+  saving=false; loadBlue();
+}
 async function loadBlue(){
   var u=me(), box=$('fl4Box'); if(!u||!box) return; box.innerHTML=loading();
-  var c=ch(), req=null;
-  var rs=await Promise.all([getRate(), fs().collection('settings').doc('blueTick').get().then(function(s){return s.exists?s.data():{}}).catch(function(){return {}}), fs().collection('verifyRequests').doc(u.uid).get().then(function(s){return s.exists?s.data():null}).catch(function(){return null})]);
-  RATE=rs[0]; CFG=rs[1]||{}; req=rs[2];
-  if(!region) region=(String(c.country||'').toLowerCase()==='pakistan'||!c.country)?'pk':'intl';
-  var ml=mList(); if(ml.indexOf(method)<0) method=ml[0]||'';
-  var pkr=Math.ceil(PRICE*RATE), badges=''; try{ badges=channelBadgeRowHTML(c)||''; }catch(e){}
-  var h='<div class="flp-hero"><big>'+(c.referredByAdmin?'✅':'🔵 $'+PRICE)+'</big><small>'+(c.referredByAdmin?'Your channel has the official blue tick':'One-time fee for the Blue Tick')+'</small>'
-    +(c.referredByAdmin?'':'<div style="margin-top:8px;font-weight:700">≈ Rs '+pkr.toLocaleString()+'</div><small style="display:block;margin-top:2px">1 USD = Rs '+RATE.toFixed(2)+' · live rate, updates automatically</small>')+(badges?'<div style="margin-top:10px">'+badges+'</div>':'')+'</div>';
-  if(!c.referredByAdmin){
-    if(req && req.status!=='rejected'){
-      h+='<div class="flp-card"><b>'+(req.status==='approved'?'✅ Approved':'⏳ Payment under review')+'</b><br><small style="color:var(--text-dim)">'+(req.status==='approved'?'Your blue tick will appear shortly.':'We are checking your payment ('+esc(MN[req.method]||'')+', ID '+esc(req.txnId||'')+'). This usually takes a short while.')+'</small></div>';
+  try{ var sn=await fs().collection('channels').doc(u.uid).get(); if(sn.exists){ var dd=sn.data(); try{ currentChannel.blueUntil=dd.blueUntil; currentChannel.referredByAdmin=dd.referredByAdmin; }catch(e){} } }catch(e){}
+  var c=ch(), perm=!!c.referredByAdmin, until=Number(c.blueUntil)||0, act=until>Date.now(), left=act?Math.ceil((until-Date.now())/86400000):0, badges=''; try{ badges=channelBadgeRowHTML(c)||''; }catch(e){}
+  var h='<div class="flp-hero"><big>'+((perm||act)?'✅':'🔵 $'+PRICE)+'</big><small>'
+    +(perm?'Your channel has the official blue tick':act?'Blue tick active until '+fmtD(until)+' · '+left+' day'+(left===1?'':'s')+' left':'for 1 month')+'</small>'
+    +(badges?'<div style="margin-top:10px">'+badges+'</div>':'')+'</div>';
+  if(!perm){
+    if(window.gzPlay&&gzPlay.available()){
+      h+='<div class="flp-card"><b>'+(act?'Extend by 1 month':'Get the Blue Tick for 1 month')+'</b><br><small style="color:var(--text-dim)">$'+PRICE+' for 1 month, paid securely with Google Play. Google Play shows the final price in your local currency.'+(act?' The new month is added on top of the days you still have.':' When the month ends the blue tick is removed unless you buy again.')+'</small>'
+        +'<button class="flp-go" style="margin-top:12px" data-z="buyblue">'+(act?'Extend · ':'Buy · ')+'$'+PRICE+' / 1 month</button></div>';
     } else {
-      if(req&&req.status==='rejected') h+='<div class="flp-card" style="border:1px solid #ef4444"><b>❌ Not approved</b><br><small>'+esc(req.rejectReason||'We could not verify your payment.')+'</small><br><button class="flp-go" style="margin-top:10px" data-z="retry">Try again</button></div>';
-      h+='<div class="flp-tabs" style="margin-top:14px"><button class="flp-tab'+(region==='pk'?' on':'')+'" data-z="region" data-r="pk">🇵🇰 Pakistan</button><button class="flp-tab'+(region==='intl'?' on':'')+'" data-z="region" data-r="intl">🌍 International</button></div>';
-      if(!ml.length) h+='<div class="flp-card">Payment details for this option are not set yet. Please check back soon.</div>';
-      else{
-        h+='<div class="fl4-chips" style="margin-top:4px">'+ml.map(function(k){return '<button class="fl4-chip'+(method===k?' on':'')+'" data-z="method" data-m="'+k+'">'+MN[k]+'</button>';}).join('')+'</div>';
-        var amt=region==='intl'?('$'+PRICE+' USD'):('Rs '+pkr.toLocaleString());
-        h+='<div class="flp-card"><b>Send exactly '+amt+'</b><br>'+MN[method]+(method==='payoneer'?' email / ID:':' account:')+'<div class="flp-lk" style="margin-top:8px;color:var(--text)">'+esc(CFG[method])+(CFG.title&&method!=='payoneer'?'<br>Title: '+esc(CFG.title):'')+'</div><button class="flp-go" style="margin-top:10px" data-z="copy" data-v="'+esc(CFG[method])+'">Copy</button></div>'
-          +'<input class="fl4-ta" id="fl4Txn" style="min-height:0" placeholder="Transaction ID" value="'+esc(form.txn)+'" maxlength="80">'
-          +'<input class="fl4-ta" id="fl4Snd" style="min-height:0" placeholder="Sender name / number" value="'+esc(form.snd)+'" maxlength="80">'
-          +'<textarea class="fl4-ta" id="fl4Reason" maxlength="400" placeholder="Tell us about your channel (who you are, links, what you post)">'+esc(form.reason)+'</textarea>'
-          +'<div style="margin-top:10px;font-size:14px;color:var(--text-dim)">Payment screenshot (optional)</div><input type="file" id="fl4Proof" accept="image/*" style="margin-top:6px;max-width:100%">'
-          +'<button class="flp-go" style="margin-top:16px" data-z="sendblue">I have paid — submit</button>';
-      }
+      h+='<div class="flp-card"><b>Buy in the Gupzy app</b><br><small style="color:var(--text-dim)">The Blue Tick ($'+PRICE+' for 1 month) is paid only through Google Play. Open Gupzy from the Google Play app on your Android phone to buy it.</small></div>';
     }
   }
-  if(isAdm()) h+='<div class="flp-card" style="margin-top:22px"><b>🛠 Admin: payment details</b>'
-    +['jazzcash:JazzCash number','easypaisa:EasyPaisa number','bank:Bank (name / IBAN)','payoneer:Payoneer email','title:Account title'].map(function(p){var k=p.split(':')[0];return '<input class="fl4-ta" style="min-height:0;margin-top:8px" id="fl4A_'+k+'" placeholder="'+p.split(':')[1]+'" value="'+esc(CFG[k]||'')+'" maxlength="120">';}).join('')
-    +'<button class="flp-go" style="margin-top:10px" data-z="admsave">Save payment details</button></div><div id="fl4Adm"></div>';
   box.innerHTML=h;
-  if(isAdm()) loadAdm();
+  try{ if(window.gzPlay) gzPlay.restore(); }catch(e){}
 }
 async function loadAdm(){
   var box=$('fl4Adm'); if(!box) return;
@@ -16229,7 +16299,7 @@ async function loadAdm(){
   }catch(e){ box.innerHTML='<div class="flp-card">Could not load requests.</div>'; }
 }
 async function admAct(uid,ok){
-  if(!isAdm()||saving) return; var why=''; if(!ok){ why=(prompt('Reason for rejecting?')||'').trim(); if(!why) return; }
+  if(!isAdm()||saving) return; var why=''; if(!ok){ why=((await gzPrompt('Reason for rejecting?','','Reject'))||'').trim(); if(!why) return; }
   saving=true; var FV=firebase.firestore.FieldValue;
   try{
     if(ok) await fs().collection('channels').doc(uid).update({referredByAdmin:true});
@@ -16272,7 +16342,7 @@ pg.addEventListener('click',function(e){
   else if(a==='post'){ var p=savedPosts[el.getAttribute('data-id')]; hideAll(); try{ openPost(p); }catch(x){} }
   else if(a==='chip'){ var c=el.getAttribute('data-c'), i=chips.indexOf(c); if(i>=0) chips.splice(i,1); else if(chips.length<5) chips.push(c); else T('Max 5 interests'); drawInterests(); }
   else if(a==='saveint') saveInterests();
-  else if(a==='sendblue') sendBlue();
+  else if(a==='buyblue') buyBlue();
   else if(a==='region'){ saveForm(); region=el.getAttribute('data-r'); method=''; loadBlue(); }
   else if(a==='method'){ saveForm(); method=el.getAttribute('data-m'); loadBlue(); }
   else if(a==='copy'){ var v=el.getAttribute('data-v')||''; try{navigator.clipboard.writeText(v).then(function(){T('Copied')},function(){T(v)})}catch(x){T(v)} }
@@ -16320,12 +16390,8 @@ function build(){
   box.innerHTML='<div class="flp-card"><b>➕ Custom blue tick</b><br><small style="color:var(--text-dim)">Type a channel ID (example: muhammadqasim) and give or remove the blue tick directly.</small>'
    +'<input class="fl4-ta" id="flbId" style="min-height:0;margin-top:10px" placeholder="Channel ID  (without @)" autocapitalize="off" autocomplete="off">'
    +'<div class="flp-two"><button class="flp-go" style="background:#16a34a" data-b="give">🔵 Give blue tick</button><button class="flp-go" style="background:#ef4444" data-b="take">Remove blue tick</button></div></div>'
-   +'<div style="margin:18px 2px 6px;font-weight:800">💳 Pending payment requests</div><div id="flbPend"></div>'
-   +'<div style="margin:18px 2px 6px;font-weight:800">✅ Channels with blue tick</div><div id="flbList"></div>'
-   +'<div class="flp-card" style="margin-top:18px"><b>🛠 Payment details shown to users ($2)</b>'
-   +['jazzcash:JazzCash number','easypaisa:EasyPaisa number','bank:Bank (name / IBAN)','payoneer:Payoneer email','title:Account title'].map(function(p){var k=p.split(':')[0];return '<input class="fl4-ta" style="min-height:0;margin-top:8px" id="flbC_'+k+'" placeholder="'+p.split(':')[1]+'" maxlength="120">';}).join('')
-   +'<button class="flp-go" style="margin-top:10px" data-b="savecfg">Save payment details</button></div>';
-  loadCfg(); loadPend(); loadList();
+   +'<div style="margin:18px 2px 6px;font-weight:800">✅ Channels with blue tick</div><div id="flbList"></div>';
+  loadList();
 }
 async function loadCfg(){ try{ var s=await fs().collection('settings').doc('blueTick').get(), d=s.exists?s.data():{}; ['jazzcash','easypaisa','bank','payoneer','title'].forEach(function(k){ var e=$('flbC_'+k); if(e) e.value=d[k]||''; }); }catch(e){} }
 async function saveCfg(){
@@ -16572,18 +16638,10 @@ async function getRate(){
 function mList(){ if(region==='intl') return CFG.payoneer?['payoneer']:[]; return ['jazzcash','easypaisa','bank'].filter(function(k){return CFG[k]}); }
 async function load(){
   var u=me(); if(!u) return; pg.innerHTML='<div class="flp-card">Loading…</div>';
-  var rs=await Promise.all([
-    getRate(),
-    fs().collection('channels').doc(u.uid).get().then(function(s){return s.exists?s.data():null}).catch(function(){return null}),
-    fs().collection('settings').doc('premium').get().then(function(s){return s.exists?s.data():null}).catch(function(){return null}),
-    fs().collection('settings').doc('blueTick').get().then(function(s){return s.exists?s.data():null}).catch(function(){return null}),
-    fs().collection('premiumRequests').doc(u.uid).get().then(function(s){return s.exists?s.data():null}).catch(function(){return null})
-  ]);
-  RATE=rs[0]; chD=rs[1]||curCh()||{}; CFG=(rs[2]&&(rs[2].jazzcash||rs[2].easypaisa||rs[2].bank||rs[2].payoneer))?rs[2]:(rs[3]||{}); req=rs[4];
+  chD=(await fs().collection('channels').doc(u.uid).get().then(function(x){return x.exists?x.data():null}).catch(function(){return null}))||curCh()||{};
   try{ if(curCh()){ currentChannel.premiumUntil=chD.premiumUntil; currentChannel.pm=chD.pm; } }catch(e){}
-  if(!region) region=(String(chD.country||'').toLowerCase()==='pakistan'||!chD.country)?'pk':'intl';
-  var ml=mList(); if(ml.indexOf(method)<0) method=ml[0]||'';
   draw();
+  try{ if(window.gzPlay) gzPlay.restore(); }catch(e){}
 }
 function opt(kind,id,on,inner,label){ return '<button class="pmx-opt'+(on?' on':'')+'" data-p="'+kind+'" data-v="'+id+'">'+inner+'<span>'+esc(label)+'</span></button>'; }
 function draw(){
@@ -16592,7 +16650,7 @@ function draw(){
   var logo=c.logoURL?'<img src="'+esc(c.logoURL)+'" alt="">':esc(((c.name||'?').trim().charAt(0)||'?').toUpperCase());
   var h='<div class="flp-h"><button data-p="back">‹</button><h1>Gupzy Premium</h1></div>';
   h+='<div class="pmx-hero"><big>'+(on?'👑 Active':'$'+PRICE+'<span style="font-size:20px"> / month</span>')+'</big><small>'
-    +(on?'Valid until '+new Date(c.premiumUntil).toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'})+' · '+left+' day'+(left===1?'':'s')+' left':'≈ Rs '+pkr1.toLocaleString()+' · per month')+'</small></div>';
+    +(on?'Valid until '+new Date(c.premiumUntil).toLocaleDateString(undefined,{day:'numeric',month:'long',year:'numeric'})+' · '+left+' day'+(left===1?'':'s')+' left':'billed monthly through Google Play')+'</small></div>';
 
   /* features */
   h+='<div class="pmx-sec">🎨 Personalization &amp; UI/UX</div>'
@@ -16615,28 +16673,15 @@ function draw(){
       +'<div class="pmx-note">In the Gupzy Android app this changes your home-screen icon (the phone may take a few seconds to refresh it). On the website it changes the browser-tab icon and new “Add to Home Screen” installs.</div>';
   }
 
-  /* payment / renew */
+  /* payment / renew (Google Play only) */
   h+='<div class="pmx-sec">'+(on?'Renew Premium':'Get Premium')+'</div>';
-  var pend=req&&req.status==='pending', rej=req&&req.status==='rejected';
-  if(pend){
-    h+='<div class="flp-card"><b>⏳ Payment under review</b><br><small style="color:var(--text-dim)">We are checking your payment ('+esc(MN[req.method]||'')+', ID '+esc(req.txnId||'')+'). Premium starts as soon as it is approved.</small></div>';
+  if([1,3,6,12].indexOf(months)<0) months=1;
+  if(window.gzPlay&&gzPlay.available()){
+    h+='<div style="font-weight:700;margin-top:6px">How many months?</div><div class="fl4-chips" style="margin-top:8px">'+[1,3,6,12].map(function(n){ return '<button class="fl4-chip'+(months===n?' on':'')+'" data-p="months" data-n="'+n+'">'+n+' month'+(n>1?'s':'')+' · $'+(PRICE*n)+'</button>'; }).join('')+'</div>'
+      +'<button class="flp-go" style="margin-top:16px" data-p="buy">'+(on?'Renew':'Get Premium')+' · $'+tot+' for '+months+' month'+(months>1?'s':'')+'</button>'
+      +'<div class="pmx-note">Paid securely with Google Play (Google Play shows the final price in your local currency). Each month = 30 days. Renewing while active adds the new days on top of the days you still have.</div>';
   } else {
-    if(rej) h+='<div class="flp-card" style="border:1px solid #ef4444"><b>❌ Not approved</b><br><small>'+esc(req.rejectReason||'We could not verify your payment.')+'</small></div>';
-    if(req&&req.status==='approved'&&!on) h+='<div class="flp-card"><small style="color:var(--text-dim)">Your last Premium month has ended. Renew below to continue.</small></div>';
-    var ml=mList();
-    h+='<div style="font-weight:700;margin-top:6px">How many months?</div><div class="fl4-chips" style="margin-top:8px">'+[1,2,3,6,12].map(function(n){ return '<button class="fl4-chip'+(months===n?' on':'')+'" data-p="months" data-n="'+n+'">'+n+' month'+(n>1?'s':'')+' · $'+(PRICE*n)+'</button>'; }).join('')+'</div>';
-    h+='<div class="flp-tabs" style="margin-top:14px"><button class="flp-tab'+(region==='pk'?' on':'')+'" data-p="region" data-r="pk">🇵🇰 Pakistan</button><button class="flp-tab'+(region==='intl'?' on':'')+'" data-p="region" data-r="intl">🌍 International</button></div>';
-    if(!ml.length) h+='<div class="flp-card">Payment details for this option are not set yet. Please check back soon.</div>';
-    else{
-      var amt=region==='intl'?('$'+tot+' USD'):('Rs '+pkr.toLocaleString());
-      h+='<div class="fl4-chips" style="margin-top:4px">'+ml.map(function(k){return '<button class="fl4-chip'+(method===k?' on':'')+'" data-p="method" data-m="'+k+'">'+MN[k]+'</button>';}).join('')+'</div>'
-        +'<div class="flp-card"><b>Send exactly '+amt+' for '+months+' month'+(months>1?'s':'')+'</b><br>'+MN[method]+(method==='payoneer'?' email / ID:':' account:')+'<div class="flp-lk" style="margin-top:8px;color:var(--text)">'+esc(CFG[method])+(CFG.title&&method!=='payoneer'?'<br>Title: '+esc(CFG.title):'')+'</div><button class="flp-go" style="margin-top:10px" data-p="copy" data-v="'+esc(CFG[method])+'">Copy</button></div>'
-        +'<input class="fl4-ta" id="pmxTxn" style="min-height:0" placeholder="Transaction ID" value="'+esc(form.txn)+'" maxlength="80">'
-        +'<input class="fl4-ta" id="pmxSnd" style="min-height:0" placeholder="Sender name / number" value="'+esc(form.snd)+'" maxlength="80">'
-        +'<div style="margin-top:10px;font-size:14px;color:var(--text-dim)">Payment screenshot (optional)</div><input type="file" id="pmxProof" accept="image/*" style="margin-top:6px;max-width:100%">'
-        +'<button class="flp-go" style="margin-top:16px" data-p="send">I have paid — submit</button>'
-        +'<div class="pmx-note">Each month = 30 days from approval. Renewing while active adds the new days on top of the days you still have.</div>';
-    }
+    h+='<div class="flp-card"><b>Buy in the Gupzy app</b><br><small style="color:var(--text-dim)">Gupzy Premium ($'+PRICE+' / month) is paid only through Google Play. Open Gupzy from the Google Play app on your Android phone to buy it.</small></div>';
   }
   pg.innerHTML=h;
 }
@@ -16652,18 +16697,12 @@ async function savePm(patch){
   }catch(e){ T('Could not save'); }
   busy=false; var y=pg.scrollTop; draw(); pg.scrollTop=y;
 }
-async function send(){
-  var u=me(); if(!u||busy) return;
-  var txn=val('pmxTxn'), snd=val('pmxSnd'); form.txn=txn; form.snd=snd;
-  if(txn.length<4||snd.length<3){ T('Please fill transaction ID and sender'); return; }
-  busy=true; T('Submitting…');
-  var proof='', f=$('pmxProof')&&$('pmxProof').files[0];
-  if(f){ try{ proof=await uploadToCloudinary(f,'image',document.createElement('div'),'pmproof_'+u.uid+'_'+Date.now()+'.jpg'); if(typeof proof!=='string') proof=''; }catch(e){ proof=''; } }
-  var c=chD||{}, d={uid:u.uid,name:(c.name||'').slice(0,60),channelId:c.channelId||'',status:'pending',region:region,method:method,priceUsd:PRICE*months,amountPkr:Math.ceil(PRICE*months*RATE),rate:RATE,txnId:txn.slice(0,80),sender:snd.slice(0,80),days:DAYS*months,createdAt:firebase.firestore.FieldValue.serverTimestamp()};
-  if(proof) d.proofURL=proof;
-  try{ if(req&&req.status!=='pending'){ await fs().collection('premiumRequests').doc(u.uid).delete(); }
-    await fs().collection('premiumRequests').doc(u.uid).set(d); form={txn:'',snd:''}; req=d; T('Submitted. We will verify your payment.'); }
-  catch(e){ T('Could not submit. Please try again.'); }
+async function buyPremium(){
+  if(busy) return;
+  if(!window.gzPlay||!gzPlay.available()){ T('Premium can be bought in the Gupzy Android app from Google Play'); return; }
+  busy=true; T('Opening Google Play…');
+  try{ await gzPlay.buy('gupzy_premium_'+months+'m'); T('Premium active 👑'); await load(); }
+  catch(e){ if(String(e&&e.message)!=='CANCELLED') T((e&&e.message)||'Purchase failed'); }
   busy=false; draw();
 }
 pg.addEventListener('click',function(e){
@@ -16672,8 +16711,8 @@ pg.addEventListener('click',function(e){
   else if(a==='region'){ form.txn=val('pmxTxn')||form.txn; form.snd=val('pmxSnd')||form.snd; region=el.getAttribute('data-r'); method=''; var ml=mList(); method=ml[0]||''; draw(); }
   else if(a==='method'){ form.txn=val('pmxTxn')||form.txn; form.snd=val('pmxSnd')||form.snd; method=el.getAttribute('data-m'); draw(); }
   else if(a==='copy'){ var v=el.getAttribute('data-v')||''; try{navigator.clipboard.writeText(v).then(function(){T('Copied')},function(){T(v)})}catch(x){T(v)} }
-  else if(a==='months'){ form.txn=val('pmxTxn')||form.txn; form.snd=val('pmxSnd')||form.snd; months=parseInt(el.getAttribute('data-n'),10)||1; draw(); }
-  else if(a==='send') send();
+  else if(a==='months'){ months=parseInt(el.getAttribute('data-n'),10)||1; draw(); }
+  else if(a==='buy') buyPremium();
   else if(a==='border'||a==='badge'||a==='theme'||a==='chatTheme'||a==='icon'){ var o={}; o[a]=el.getAttribute('data-v'); savePm(o); }
 });
 document.addEventListener('click',function(e){ if(pg.classList.contains('show') && e.target.closest && e.target.closest('nav .nav-btn')) close(); },true);
@@ -16701,12 +16740,8 @@ function build(){
    +'<input class="fl4-ta" id="pmaId" style="min-height:0;margin-top:10px" placeholder="Channel ID" autocapitalize="off" autocomplete="off">'
    +'<input class="fl4-ta" id="pmaDays" type="number" style="min-height:0;margin-top:8px" value="30" min="1" max="3650">'
    +'<div class="flp-two"><button class="flp-go" style="background:#16a34a" data-a="give">👑 Give Premium</button><button class="flp-go" style="background:#ef4444" data-a="take">Remove</button></div></div>'
-   +'<div style="margin:18px 2px 6px;font-weight:800">💳 Pending payment requests</div><div id="pmaPend"></div>'
-   +'<div style="margin:18px 2px 6px;font-weight:800">👑 Active Premium members</div><div id="pmaList"></div>'
-   +'<div class="flp-card" style="margin-top:18px"><b>🛠 Premium payment details</b><br><small style="color:var(--text-dim)">Leave empty to reuse the Blue Tick payment details.</small>'
-   +['jazzcash:JazzCash number','easypaisa:EasyPaisa number','bank:Bank (name / IBAN)','payoneer:Payoneer email','title:Account title'].map(function(p){var k=p.split(':')[0];return '<input class="fl4-ta" style="min-height:0;margin-top:8px" id="pmaC_'+k+'" placeholder="'+p.split(':')[1]+'" maxlength="120">';}).join('')
-   +'<button class="flp-go" style="margin-top:10px" data-a="savecfg">Save payment details</button></div>';
-  loadCfg(); loadPend(); loadList();
+   +'<div style="margin:18px 2px 6px;font-weight:800">👑 Active Premium members</div><div id="pmaList"></div>';
+  loadList();
 }
 async function loadCfg(){ try{ var s=await fs().collection('settings').doc('premium').get(), d=s.exists?s.data():{}; ['jazzcash','easypaisa','bank','payoneer','title'].forEach(function(k){ var e=$('pmaC_'+k); if(e) e.value=d[k]||''; }); }catch(e){} }
 async function saveCfg(){
@@ -16762,7 +16797,7 @@ async function revoke(uid){
   busy=false; loadList();
 }
 async function reject(uid){
-  var why=(prompt('Reason for rejecting? (the user will see it)')||'').trim(); if(!why||busy) return; busy=true;
+  var why=((await gzPrompt('Reason for rejecting? (the user will see it)','','Reject'))||'').trim(); if(!why||busy) return; busy=true;
   try{ await fs().collection('premiumRequests').doc(uid).update({status:'rejected',rejectReason:why.slice(0,200),reviewedAt:firebase.firestore.FieldValue.serverTimestamp()}); T('Request rejected'); }catch(e){ T('Failed'); }
   busy=false; loadPend();
 }
@@ -16773,13 +16808,13 @@ box.addEventListener('click',function(e){
     resolve(inp).then(function(r){
       if(!r){ T('No channel found with this ID'); return; }
       var nm=r.c.name||inp;
-      if(a==='give'){ var d=parseInt(val('pmaDays'),10); if(!(d>=1&&d<=3650)){ T('Enter days (1–3650)'); return; } if(confirm('Give '+d+' day(s) of Premium to '+nm+'?')) grant(r.uid,d,nm).then(function(){ var x=$('pmaId'); if(x) x.value=''; }); }
-      else if(confirm('Remove Premium from '+nm+'?')) revoke(r.uid);
+      if(a==='give'){ var d=parseInt(val('pmaDays'),10); if(!(d>=1&&d<=3650)){ T('Enter days (1–3650)'); return; } gzConfirm('Give '+d+' day(s) of Premium to '+nm+'?','Give').then(function(ok){ if(ok) grant(r.uid,d,nm).then(function(){ var x=$('pmaId'); if(x) x.value=''; }); }); }
+      else gzConfirm('Remove Premium from '+nm+'?','Remove').then(function(ok){ if(ok) revoke(r.uid); });
     });
   }
   else if(a==='ok') grant(u,parseInt(el.getAttribute('data-d'),10)||30,'');
   else if(a==='no') reject(u);
-  else if(a==='rm'){ if(confirm('Remove Premium from this member?')) revoke(u); }
+  else if(a==='rm'){ gzConfirm('Remove Premium from this member?','Remove').then(function(ok){ if(ok) revoke(u); }); }
   else if(a==='savecfg') saveCfg();
 });
 document.querySelectorAll('#adminTabs .profile-tab').forEach(function(tab){

@@ -20,3 +20,6 @@ How it works:
   Admin -> Admin Panel -> "Premium" tab -> Approve (days shown on each request) / Reject, or give days by channel ID.
   Renewal adds 30 days on top of the remaining time. When premiumUntil passes, everything
   (border, crown, themes) switches off automatically.
+
+UPDATE: payments now go ONLY through Google Play (see PLAY_BILLING_SETUP.txt). premiumRequests / settings docs are no longer used.
+Also protect channels/{uid}.blueUntil exactly like premiumUntil (only the server/admin may write it).
