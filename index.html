@@ -8973,7 +8973,7 @@ function openChat0(p){
   if(p.group&&chats[p.id]&&chats[p.id].isTemp&&chats[p.id].expiresAt&&chats[p.id].expiresAt<Date.now()){toast('This vibe group has expired ⏳');return;}
   if(!p.group && isBlockedUid(p.id)){toast('You blocked this user. Unblock to message.');return;}
   if(!currentChannel){toast('Create your channel first');return;}
-  $('igChat').classList.remove('gz-ai');peer=p;openId=p.group?p.id:cidOf(me(),p.id);$('chatAud').style.display=$('chatVid').style.display=p.group?'none':'';
+  $('igChat').classList.remove('gz-ai');peer=p;openId=p.group?p.id:cidOf(me(),p.id);try{ if(!p.group&&!p.ai) blockedMe(p.id); }catch(e){}$('chatAud').style.display=$('chatVid').style.display=p.group?'none':'';
   $('chatWho').innerHTML=avbox(p.name,p.logo,36,p.group?'':p.id)+`<div style="min-width:0"><b id="dmWho">${esc(p.group?p.name:window.__gzLN(p.id,p.name))}</b><small id="dmTyp"></small></div>`;
   $('dmMsgs').innerHTML='';msgs=[];clr=0;$('igChat').classList.add('show');if($('igDm').classList.contains('show'))renderInbox();$('dmIn').value='';toggleSend();stopAudio();
   if(window.__tU)window.__tU();rTo=null;
@@ -9067,11 +9067,11 @@ function audUrl(u){return u&&u.includes('/video/upload/')?u.replace('/video/uplo
 function fmtD(s){s=Math.round(s||0);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
 function renderMsgs(){
   const box=$('dmMsgs');const near=box.scrollHeight-box.scrollTop-box.clientHeight<140;
-  let last=0,h='';
-  msgs.forEach(m=>{
+  let last=0;const segs=[];
+  msgs.forEach(m=>{let h='';
     const t=ts(m.createdAt);if(t-last>15*60000){h+=`<div class="dm-t">${new Date(t).toLocaleDateString([], {month:'short',day:'numeric'})}, ${hm(t)}</div>`;}last=t;
-    if(m.type==='sys'){h+=`<div class="dm-t">${esc(m.text)}</div>`;return;}
-    if(m.type==='game'&&m.game){h+=gmCard(m);return;}
+    if(m.type==='sys'){h+=`<div class="dm-t">${esc(m.text)}</div>`;segs.push(h);return;}
+    if(m.type==='game'&&m.game){h+=gmCard(m);segs.push(h);return;}
     const mine=m.from===me();
     const q=((peer&&peer.group&&m.from!==me())?`<div class="dm-sn">${esc(m.fromName||'User')}</div>`:'')+(m.reply?`<div class="dm-q">${esc(m.reply.text)}</div>`:'');const rxs=m.reactions?Object.values(m.reactions):[];const rx=rxs.length?`<span class="dm-rx">${[...new Set(rxs)].join('')}${rxs.length>1?' '+rxs.length:''}</span>`:'';
     const eu=m.enc&&m.type!=='text'?encUrl(m):null;
@@ -9080,15 +9080,47 @@ function renderMsgs(){
     else if(m.type==='image')h+=`<div class="dm-m img ${mine?'me':''}" data-m="${m.id}"><img src="${esc(eu||m.url)}" data-big alt="">${rx}</div>`;
     else if(m.type==='audio')h+=`<div class="dm-m ${mine?'me':''}" data-m="${m.id}"><div class="dm-aud" data-u="${esc(eu||audUrl(m.url))}"><button data-ap>${ic.play}</button><div class="bar"><i></i></div><span>${fmtD(eu&&m._o&&m._o.m?m._o.m.dur:m.dur)}</span></div>${rx}</div>`;
     else h+=`<div class="dm-m ${mine?'me':''}" data-m="${m.id}"${m.postId?` data-post="${esc(m.postId)}"`:''}>${q}${esc(m.text)}${m._pending&&mine?' <span style="opacity:.65;font-size:11px">🕓</span>':''}${rx}</div>`;
+  segs.push(h);
   });
+  let h='';
   OB.mine(openId).forEach(j=>{
     const clk=' <span style="opacity:.7;font-size:11px">🕓 waiting for internet</span>';
     if(j.type==='image')h+=`<div class="dm-m img me" data-ob="${j.id}"><img src="${OB.url(j)}" alt="" style="opacity:.7"><div style="padding:3px 8px;font-size:11px;opacity:.8">🕓</div></div>`;
     else if(j.type==='video')h+=`<div class="dm-m img me" data-ob="${j.id}"><video src="${OB.url(j)}" muted playsinline preload="metadata" style="display:block;width:100%;max-width:260px;border-radius:12px;opacity:.7"></video><div style="padding:3px 8px;font-size:11px;opacity:.8">🕓</div></div>`;
     else h+=`<div class="dm-m me" data-ob="${j.id}">🎤 Voice message${clk}</div>`;
   });
-  h+='<div class="dm-seen hidden" id="dmSeen">Seen</div>';
-  box.innerHTML=h;renderSeen();
+  const seenH='<div class="dm-seen hidden" id="dmSeen">Seen</div>';
+  /* SPEED: do not rebuild all (up to 200) messages on every update. Keep the messages that did not change (their photos/videos/voice players stay as they are)
+     and only re-draw from the first changed message down. Any surprise (someone else touched the box) -> safe full rebuild. */
+  const nOf=sg=>{const t=document.createElement('template');t.innerHTML=sg;return t.content.children.length;};
+  const old=box._seg;let done=false;
+  try{
+    const tl=document.getElementById('dmTail');
+    if(old&&tl&&tl.parentNode===box&&box._kids===box.children.length){
+      const sn=document.getElementById('dmSeen');if(sn&&sn.parentNode===box)box.appendChild(sn); /* renderSeen() moves it into the list: put it back at the end first */
+      let tot=0;old.forEach(o=>tot+=o.n);
+      if(Array.prototype.indexOf.call(box.children,tl)===tot){
+        let k=0;const mx=Math.min(old.length,segs.length);
+        while(k<mx&&old[k].s===segs[k])k++;
+        let off=0;for(let i=0;i<k;i++)off+=old[i].n;
+        let el=box.children[off];
+        while(el&&el!==tl){const nx=el.nextElementSibling;el.remove();el=nx;}
+        const fresh=segs.slice(k).map(sg=>({s:sg,n:0}));
+        fresh.forEach(o=>{o.n=nOf(o.s);});
+        if(fresh.length)tl.insertAdjacentHTML('beforebegin',fresh.map(o=>o.s).join(''));
+        while(tl.nextSibling)tl.nextSibling.remove();
+        tl.insertAdjacentHTML('afterend',h+seenH);
+        box._seg=old.slice(0,k).concat(fresh);done=true;
+      }
+    }
+  }catch(e){done=false;}
+  if(!done){
+    const objs=segs.map(sg=>({s:sg,n:nOf(sg)}));
+    box.innerHTML=segs.join('')+'<i id="dmTail" style="display:none"></i>'+h+seenH;
+    box._seg=objs;
+  }
+  box._kids=box.children.length;
+  renderSeen();
   if(near||!box._init){box.scrollTop=box.scrollHeight;box._init=1;}
 }
 function renderSeen(){
@@ -9607,11 +9639,18 @@ async function sendMsg(m,ctx){
     catch(e){if(e.message==='nokey'){if(!nokeyWarned[PR.id]){nokeyWarned[PR.id]=1;toast((PR.group?'Some group members have':PR.name+' has')+' not updated the app yet — this message is not encrypted');}}else if(e.message==='unsupported'){toast('Encryption is not supported on this browser — message not encrypted');}else{toast('Could not encrypt: '+e.message);return;}}
   }
   const W=pr=>navigator.onLine?pr:(pr.catch(()=>{}),Promise.resolve()); /* offline: the write is queued on the device, don't wait for the server */
-  await W(ref.collection('messages').add(Object.assign({from:me(),fromName:(currentChannel&&currentChannel.name)||'',createdAt:FV.serverTimestamp()},rq?{reply:{id:rq.id,text:m.enc?'':rq.text}}:{},m)));if(!ctx){rTo=null;setRep();}if(window.atPush)window.atPush({kind:'message',chatId:OID});
+  /* SPEED: the message and the chat-list summary go out in ONE atomic batch = one server round-trip (before: message first, then summary = two, one after the other) */
+  const _mRef=ref.collection('messages').doc();
+  const _mData=Object.assign({from:me(),fromName:(currentChannel&&currentChannel.name)||'',createdAt:FV.serverTimestamp()},rq?{reply:{id:rq.id,text:m.enc?'':rq.text}}:{},m);
+  if(!ctx){rTo=null;setRep();}
+  let _sum;
+  if(PR.group){const un={};(PR.members||(chats[OID]&&chats[OID].members)||[]).forEach(u=>{if(u!==me())un[u]=FV.increment(1);});_sum={lastText:preview,lastType:m.type,lastFrom:me(),lastAt:FV.serverTimestamp(),unread:un};}
+  else{_sum={members:[me(),PR.id],info:{[me()]:{name:currentChannel.name,logo:currentChannel.logoURL||null},[PR.id]:{name:PR.name,logo:PR.logo||null}},
+    lastText:preview,lastType:m.type,lastFrom:me(),lastAt:FV.serverTimestamp(),unread:{[PR.id]:FV.increment(1)}};}
+  const _b=db.batch();_b.set(_mRef,_mData);_b.set(ref,_sum,{merge:true});
+  await W(_b.commit());
+  if(window.atPush)window.atPush({kind:'message',chatId:OID});
   if(_ghMs!=null&&window.__gzGhost){ try{ window.__gzGhost.record(_ghMs); }catch(e){} }
-  if(PR.group){const un={};(PR.members||(chats[OID]&&chats[OID].members)||[]).forEach(u=>{if(u!==me())un[u]=FV.increment(1);});await W(ref.set({lastText:preview,lastType:m.type,lastFrom:me(),lastAt:FV.serverTimestamp(),unread:un},{merge:true}));return;}
-  await W(ref.set({members:[me(),PR.id],info:{[me()]:{name:currentChannel.name,logo:currentChannel.logoURL||null},[PR.id]:{name:PR.name,logo:PR.logo||null}},
-    lastText:preview,lastType:m.type,lastFrom:me(),lastAt:FV.serverTimestamp(),unread:{[PR.id]:FV.increment(1)}},{merge:true}));
 }
 
 /* ================= OFFLINE OUTBOX for photos / videos / voice (like WhatsApp) =================
