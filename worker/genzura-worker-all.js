@@ -1082,12 +1082,132 @@ async function ctHandle(request, env) {
   }
 }
 
-export default {
+/* ---- Google Play Billing: verify a purchase and grant Blue Tick / Premium (POST /play-verify) ----
+   Body: { idToken, productId, purchaseToken }.  Products: gupzy_bluetick_1m, gupzy_premium_{1|3|6|12}m.
+   Needs: the service account (FIREBASE_* or optional PLAY_CLIENT_EMAIL + PLAY_PRIVATE_KEY) added in Play Console >
+   Users and permissions with "View financial data" + "Manage orders and subscriptions", and Google Play Android Developer API enabled.
+   Optional env: PLAY_PACKAGE (default com.gupzy.app). Each purchaseToken can be used once (playPurchases/{hash}). */
+async function pvToken(env, scope) {
+  const email = String(env.PLAY_CLIENT_EMAIL || env.FIREBASE_CLIENT_EMAIL || "").trim();
+  const pk = env.PLAY_PRIVATE_KEY || env.FIREBASE_PRIVATE_KEY;
+  const now = Math.floor(Date.now() / 1000);
+  const unsigned = anB64u(anEnc.encode(JSON.stringify({ alg: "RS256", typ: "JWT" }))) + "." +
+    anB64u(anEnc.encode(JSON.stringify({ iss: email, scope, aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600 })));
+  const key = await crypto.subtle.importKey("pkcs8", anPemToDer(pk), { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
+  const sig = new Uint8Array(await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, anEnc.encode(unsigned)));
+  const r = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: "grant_type=" + encodeURIComponent("urn:ietf:params:oauth:grant-type:jwt-bearer") + "&assertion=" + encodeURIComponent(unsigned + "." + anB64u(sig)) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.access_token) throw new Error("Google Play token exchange failed");
+  return d.access_token;
+}
+const PV_DAY = 86400000;
+function pvProduct(id) {
+  id = String(id || "");
+  if (id === "gupzy_bluetick_1m") return { kind: "blue", field: "blueUntil", days: 30 };
+  const m = /^gupzy_premium_(1|3|6|12)m$/.exec(id);
+  if (m) return { kind: "premium", field: "premiumUntil", days: 30 * Number(m[1]) };
+  return null;
+}
+async function pvHandle(request, env) {
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CT_H });
+  if (request.method !== "POST") return ctJ(405, { error: "POST only" });
+  try {
+    const pid = String(env.FIREBASE_PROJECT_ID || "").trim();
+    if (!pid || !env.FIREBASE_CLIENT_EMAIL || !env.FIREBASE_PRIVATE_KEY) return ctJ(500, { error: "missing env vars" });
+    const body = await request.json().catch(() => ({}));
+    const idToken = String(body.idToken || (request.headers.get("Authorization") || "").replace(/^Bearer /i, "")).trim();
+    const productId = String(body.productId || ""), token = String(body.purchaseToken || "").trim();
+    const prod = pvProduct(productId);
+    if (!idToken) return ctJ(401, { error: "Please sign in first" });
+    if (!prod || token.length < 20 || token.length > 2000) return ctJ(400, { error: "bad purchase" });
+    const lr = await fetch("https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=" + (env.FIREBASE_API_KEY || CT_KEY_DEFAULT).trim(),
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }) });
+    const ld = await lr.json().catch(() => ({}));
+    const user = ld.users && ld.users[0];
+    if (!user || !user.localId) return ctJ(401, { error: "Please sign in again" });
+    const me = user.localId;
+
+    /* 1) ask Google Play if this purchase is real and paid */
+    const pkg = String(env.PLAY_PACKAGE || "com.gupzy.app").trim();
+    const PT = await pvToken(env, "https://www.googleapis.com/auth/androidpublisher");
+    const PH = { Authorization: "Bearer " + PT, "Content-Type": "application/json" };
+    const API = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications/" + pkg;
+    const tk = encodeURIComponent(token);
+    let until = 0, needAck = false, ackUrl = "", acct = "";
+    let r = await fetch(`${API}/purchases/products/${encodeURIComponent(productId)}/tokens/${tk}`, { headers: PH });
+    if (r.ok) {                                   /* one-time product */
+      const p = await r.json();
+      if (p.purchaseState === 2) return ctJ(402, { error: "Payment is pending. Premium starts when it is completed." });
+      if (p.purchaseState !== 0) return ctJ(402, { error: "This purchase was cancelled or refunded." });
+      acct = p.obfuscatedExternalAccountId || "";
+      needAck = p.acknowledgementState === 0;
+      ackUrl = `${API}/purchases/products/${encodeURIComponent(productId)}/tokens/${tk}:acknowledge`;
+    } else {                                      /* subscription */
+      r = await fetch(`${API}/purchases/subscriptionsv2/tokens/${tk}`, { headers: PH });
+      if (!r.ok) {
+        console.log("play-verify google " + r.status + " " + (await r.text().catch(() => "")).slice(0, 200));
+        return ctJ(r.status === 401 || r.status === 403 ? 502 : 400, { error: r.status === 401 || r.status === 403 ? "Payment check is not set up yet. Please contact support." : "Purchase not found." });
+      }
+      const s = await r.json();
+      const li = (s.lineItems || []).find((x) => x.productId === productId) || (s.lineItems || [])[0];
+      const exp = li && li.expiryTime ? Date.parse(li.expiryTime) : 0;
+      if (!li || li.productId !== productId) return ctJ(400, { error: "Purchase does not match the product." });
+      if (!(exp > Date.now())) return ctJ(402, { error: "This subscription is not active." });
+      until = exp;
+      acct = (s.externalAccountIdentifiers && s.externalAccountIdentifiers.obfuscatedExternalAccountId) || "";
+      needAck = s.acknowledgementState === "ACKNOWLEDGEMENT_STATE_PENDING";
+      ackUrl = `${API}/purchases/subscriptions/${encodeURIComponent(productId)}/tokens/${tk}:acknowledge`;
+    }
+    if (acct && acct !== me) return ctJ(403, { error: "This purchase belongs to another account." });
+
+    /* 2) one purchase token = one grant */
+    const at = await anAccessToken(env);
+    const A = { Authorization: "Bearer " + at, "Content-Type": "application/json" };
+    const DOCS = `https://firestore.googleapis.com/v1/projects/${pid}/databases/(default)/documents`;
+    const dh = await anHash(token);
+    const num = (f, k) => Number(f && f[k] && (f[k].integerValue || f[k].doubleValue) || 0);
+    const rd = await fetch(`${DOCS}/playPurchases/${dh}`, { headers: A });
+    let granted = false;
+    if (rd.ok) {
+      const f = (await rd.json()).fields || {};
+      if ((f.uid && f.uid.stringValue) !== me) return ctJ(409, { error: "This purchase was already used on another account." });
+      granted = !!(f.granted && f.granted.booleanValue);
+    } else {
+      const cr = await fetch(`${DOCS}/playPurchases/${dh}?currentDocument.exists=false`, { method: "PATCH", headers: A, body: JSON.stringify({ fields: {
+        uid: { stringValue: me }, productId: { stringValue: productId }, granted: { booleanValue: false }, at: { integerValue: String(Date.now()) } } }) });
+      if (!cr.ok && cr.status !== 409 && cr.status !== 400) return ctJ(500, { error: "Could not save the purchase. Please retry." });
+    }
+
+    /* 3) grant (adds on top of the remaining time; subscriptions use Google's expiry time) */
+    const cd = await fetch(`${DOCS}/channels/${me}`, { headers: A });
+    if (!cd.ok) return ctJ(404, { error: "Create your channel first, then restore the purchase." });
+    const cf = (await cd.json()).fields || {};
+    const cur = num(cf, prod.field);
+    if (!granted) {
+      const now = Date.now();
+      const next = until ? Math.max(cur, until) : Math.max(cur, now) + prod.days * PV_DAY;
+      const pr = await fetch(`${DOCS}/channels/${me}?updateMask.fieldPaths=${prod.field}`, { method: "PATCH", headers: A,
+        body: JSON.stringify({ fields: { [prod.field]: { integerValue: String(next) } } }) });
+      if (!pr.ok) return ctJ(500, { error: "Could not activate. It will be retried automatically." });
+      await fetch(`${DOCS}/playPurchases/${dh}?updateMask.fieldPaths=granted&updateMask.fieldPaths=until`, { method: "PATCH", headers: A,
+        body: JSON.stringify({ fields: { granted: { booleanValue: true }, until: { integerValue: String(next) } } }) });
+      if (needAck) await fetch(ackUrl, { method: "POST", headers: PH, body: "{}" }).catch(() => {});   /* Play refunds unacknowledged purchases after 3 days */
+      return ctJ(200, { ok: true, kind: prod.kind, [prod.field]: next });
+    }
+    return ctJ(200, { ok: true, kind: prod.kind, [prod.field]: cur });
+  } catch (e) {
+    return ctJ(500, { error: String((e && e.message) || e) });
+  }
+}
+
+const BASE_HANDLER = {
   async fetch(request, env, ctx) {
     const p = new URL(request.url).pathname.replace(/\/+$/, "");
     if (p === "/anon-send") return new Response(JSON.stringify({error:"disabled"}), {status:410, headers:{"Content-Type":"application/json","Access-Control-Allow-Origin":"*"}}); /* anonymous inbox removed */
     if (request.method === "POST" && p === "/ring-ack") return rkHandle(request, env);
     if (request.method === "GET" && p === "/sitemap-videos.xml") return smHandle(request, env, ctx);
+    if (p === "/play-verify") return pvHandle(request, env); /* handles its own OPTIONS preflight */
     if (p === "/contacts" || p === "/translate" || p === "/ai") return ctHandle(request, env); /* handles its own OPTIONS preflight */
     if (p === "/view") return VIEWS.fetch(request, env, ctx);
     return API.fetch(request, env, ctx);
@@ -1095,5 +1215,71 @@ export default {
   /* Cron Trigger -> Real Moments daily push */
   async scheduled(event, env, ctx) {
     ctx.waitUntil(mmRun(env).then((r) => console.log(JSON.stringify(r))).catch((e) => console.log("moment-push error", String((e && e.message) || e))));
+  },
+};
+
+/* ================================================================
+   FREEZE SWITCH  (Admin Panel -> Freeze)
+   While settings/appFreeze.on == true: every route of this worker (push, turn, view, ring-ack, contacts,
+   translate, ai, play-verify) answers 503 "paused" and the daily Real Moments cron sends nothing.
+   Only the admin's own requests (Firebase login token of the admin) still work. The video sitemap stays public.
+   The state is cached for 15 seconds inside the worker; if Firestore cannot be read, the last known state is kept.
+   ================================================================ */
+const FZ_ADMIN_UID = "zLq96Q4K6iNJoUHDxrE0GwBL1vk1";
+const FZ_WEB_KEY = "AIzaSyATkLM81knrj_enQUsg1L9XRXt9_jdvL0w";
+let FZ = { on: false, at: 0 };
+let FZ_TOK = { v: "", exp: 0 };
+async function fzToken(env) {
+  if (FZ_TOK.v && Date.now() < FZ_TOK.exp) return FZ_TOK.v;
+  const t = await anAccessToken(env);
+  FZ_TOK = { v: t, exp: Date.now() + 50 * 60 * 1000 };
+  return t;
+}
+async function fzFrozen(env) {
+  const now = Date.now();
+  if (now - FZ.at < 15000) return FZ.on;
+  try {
+    const pid = String(env.FIREBASE_PROJECT_ID || "").trim();
+    if (!pid) return FZ.on;
+    const at = await fzToken(env);
+    const r = await fetch("https://firestore.googleapis.com/v1/projects/" + pid + "/databases/(default)/documents/settings/appFreeze",
+      { headers: { Authorization: "Bearer " + at } });
+    if (r.status === 404) { FZ = { on: false, at: now }; return false; }
+    if (r.ok) {
+      const d = await r.json();
+      FZ = { on: !!(d.fields && d.fields.on && d.fields.on.booleanValue === true), at: now };
+      return FZ.on;
+    }
+  } catch (e) { /* keep the last known state */ }
+  return FZ.on;
+}
+async function fzIsAdmin(request, env) {
+  try {
+    const idToken = (request.headers.get("Authorization") || "").replace(/^Bearer /i, "").trim();
+    if (!idToken) return false;
+    const r = await fetch("https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=" + String(env.FIREBASE_API_KEY || FZ_WEB_KEY).trim(),
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }) });
+    const d = await r.json();
+    return !!(d.users && d.users[0] && d.users[0].localId === FZ_ADMIN_UID);
+  } catch (e) { return false; }
+}
+
+export default {
+  async fetch(request, env, ctx) {
+    const p = new URL(request.url).pathname.replace(/\/+$/, "");
+    if (request.method !== "OPTIONS" && p !== "/sitemap-videos.xml" && (await fzFrozen(env))) {
+      if (!(await fzIsAdmin(request, env))) {
+        return new Response(JSON.stringify({ ok: false, frozen: true, error: "The app is temporarily paused. Please try again later." }), {
+          status: 503,
+          headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" },
+        });
+      }
+    }
+    return BASE_HANDLER.fetch(request, env, ctx);
+  },
+  async scheduled(event, env, ctx) {
+    if (await fzFrozen(env)) return;   /* frozen: no daily push */
+    return BASE_HANDLER.scheduled(event, env, ctx);
   },
 };
