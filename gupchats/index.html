@@ -3408,5 +3408,48 @@ window.gcPm={active:active,sheet:sheetOpen};
 })();
 </script>
 <style id="flAiTagFix">.rn .gzai-tag{display:inline-block!important;width:auto!important;overflow:visible!important;white-space:nowrap;font-size:10px!important;color:#fff!important;padding:1px 6px!important;margin-left:6px}</style>
+<script id="gzFreezeGuard">
+(function(){
+var ADMIN='zLq96Q4K6iNJoUHDxrE0GwBL1vk1', unsub=null, ov=null, bar=null;
+function fsdb(){ try{ return firebase.firestore(); }catch(e){ return null; } }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]}); }
+function show(d, isAdmin){
+  if(!ov){
+    ov=document.createElement('div'); ov.id='gzFreezeOv';
+    ov.style.cssText='position:fixed;inset:0;z-index:2147483000;background:#0b0b10;color:#fff;display:none;align-items:center;justify-content:center;text-align:center;padding:28px;font-family:system-ui,sans-serif;touch-action:none;';
+    document.body.appendChild(ov);
+  }
+  if(!bar){
+    bar=document.createElement('div'); bar.id='gzFreezeBar';
+    bar.style.cssText='position:fixed;left:0;right:0;top:0;z-index:2147482000;background:#0ea5e9;color:#fff;font:700 12px system-ui,sans-serif;text-align:center;padding:5px 8px;display:none;pointer-events:none;';
+    bar.textContent='🧊 App is FROZEN for users (only you can use it)'; document.body.appendChild(bar);
+  }
+  var on = !!(d && d.on);
+  if(on && !isAdmin){
+    ov.innerHTML='<div style="max-width:340px"><div style="font-size:54px">🧊</div><div style="font-size:20px;font-weight:800;margin:10px 0 8px">Temporarily paused</div><div style="font-size:14px;line-height:1.6;opacity:.8">'+esc(d.message||'We are doing some quick maintenance. Please try again in a little while.')+'</div><button id="gzFreezeRetry" style="margin-top:18px;padding:10px 22px;border:0;border-radius:10px;background:#fff;color:#000;font-weight:700">Retry</button></div>';
+    ov.style.display='flex'; bar.style.display='none';
+    var b=document.getElementById('gzFreezeRetry'); if(b) b.onclick=function(){ location.reload(); };
+  } else {
+    ov.style.display='none'; bar.style.display = (on && isAdmin) ? 'block' : 'none';
+  }
+}
+var curUser=null, lastD=null;
+function listen(){
+  if(unsub) return;
+  var db=fsdb(); if(!db) return;
+  unsub = db.collection('settings').doc('appFreeze').onSnapshot(function(s){
+    lastD = s.exists ? s.data() : null;
+    show(lastD, !!(curUser && curUser.uid===ADMIN));
+  }, function(){ /* can't read -> never lock users out by mistake */ });
+}
+function boot(){
+  try{
+    listen();   /* works even before / without login (rules let everybody read this one doc) */
+    firebase.auth().onAuthStateChanged(function(u){ curUser=u; show(lastD, !!(u && u.uid===ADMIN)); });
+  }catch(e){ setTimeout(boot,500); }
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();
+</script>
 </body>
 </html>

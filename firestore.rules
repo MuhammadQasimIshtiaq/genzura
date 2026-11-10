@@ -9,11 +9,25 @@ service cloud.firestore {
     function me()       { return request.auth.uid; }
     function isAdmin()  { return request.auth != null && request.auth.uid == 'zLq96Q4K6iNJoUHDxrE0GwBL1vk1'; }
 
+    // ================================================================
+    //  FREEZE SWITCH (Admin Panel -> Freeze).  When settings/appFreeze.on == true,
+    //  EVERY read and write below is refused for everybody except the admin.
+    //  (the admin check comes first, so the admin never pays the extra read)
+    // ================================================================
+    function notFrozen() {
+      return isAdmin()
+        || !(exists(/databases/$(database)/documents/settings/appFreeze)
+             && get(/databases/$(database)/documents/settings/appFreeze).data.get('on', false) == true);
+    }
+
     // which top-level fields changed in this write
     function changed()  { return request.resource.data.diff(resource.data).affectedKeys(); }
     // numeric change of a counter field (missing field = 0)
     function delta(f)   { return request.resource.data.get(f, 0) - resource.data.get(f, 0); }
     function isStr(v, max) { return v is string && v.size() > 0 && v.size() <= max; }
+
+    // day number used by coins / streak (changes at midnight Pakistan time, UTC+5)
+    function flToday()  { return math.floor((request.time.toMillis() + 18000000) / 86400000); }
 
     // follow helpers
     function subPath(a, b) { return /databases/$(database)/documents/subscriptions/$(a + '_' + b); }
@@ -27,6 +41,17 @@ service cloud.firestore {
     function videoLikePath(u, v) { return /databases/$(database)/documents/likes/$(u + '_' + v); }
     function videoSignalPath(u, v, t) { return /databases/$(database)/documents/videoSignals/$(u + '_' + v + '_' + t); }
     function postLikePath(u, p)  { return /databases/$(database)/documents/postLikes/$(u + '_' + p); }
+
+    // BOOST: the new boostUntil value must belong to a real, paid boost made in the SAME write
+    // (wallet.lastBoostId -> boosts/{id} with matching target, kind and end time)
+    function paidBoost(targetId, kind) {
+      let w = getAfter(/databases/$(database)/documents/coinWallets/$(me())).data;
+      let b = getAfter(/databases/$(database)/documents/boosts/$(w.lastBoostId)).data;
+      return b.uid == me()
+        && b.targetId == targetId
+        && b.kind == kind
+        && b.until == request.resource.data.boostUntil;
+    }
 
     // owner helpers
     function videoOwner(vid) { return get(/databases/$(database)/documents/videos/$(vid)).data.channelId == me(); }
@@ -60,56 +85,58 @@ service cloud.firestore {
     //  KEY BACKUPS / USER KEYS / PUSH TOKENS  (private)
     // ================================================================
     match /keyBackups/{uid} {
-      allow read, write: if signedIn() && me() == uid;
+      allow read, write: if notFrozen() && (signedIn() && me() == uid);
     }
 
     match /userKeys/{uid} {
-      allow read: if signedIn();                                   // public keys (needed for E2E chat)
-      allow create, update: if signedIn() && me() == uid
-        && isStr(request.resource.data.pub, 400);
-      allow delete: if signedIn() && me() == uid;
+      allow read: if notFrozen() && (signedIn());                                   // public keys (needed for E2E chat)
+      allow create, update: if notFrozen() && (signedIn() && me() == uid
+        && isStr(request.resource.data.pub, 400));
+      allow delete: if notFrozen() && (signedIn() && me() == uid);
     }
 
     match /fcmTokens/{token} {
-      allow create, update: if signedIn() && request.resource.data.uid == me();
-      allow get, delete: if signedIn() && resource.data.uid == me();
+      allow create, update: if notFrozen() && (signedIn() && request.resource.data.uid == me());
+      allow get, delete: if notFrozen() && (signedIn() && resource.data.uid == me());
       // own tokens only (needed for "Delete my account"): query must filter uid == me
-      allow list: if signedIn() && resource.data.uid == me();
+      allow list: if notFrozen() && (signedIn() && resource.data.uid == me());
     }
 
     // ================================================================
     //  CHANNELS + CHANNEL IDS
     // ================================================================
     match /channelIds/{cid} {
-      allow read: if true;
-      allow create: if signedIn() && request.resource.data.ownerUid == me()
-        && request.resource.data.keys().hasOnly(['ownerUid']);
+      allow read: if notFrozen() && (true);
+      allow create: if notFrozen() && (signedIn() && request.resource.data.ownerUid == me()
+        && request.resource.data.keys().hasOnly(['ownerUid']));
       allow update: if false;
-      allow delete: if signedIn() && (resource.data.ownerUid == me() || isAdmin());
+      allow delete: if notFrozen() && (signedIn() && (resource.data.ownerUid == me() || isAdmin()));
     }
 
     match /channels/{uid} {
-      allow read: if true;
+      allow read: if notFrozen() && (true);
 
-      allow create: if signedIn() && me() == uid
+      allow create: if notFrozen() && (signedIn() && me() == uid
         && isStr(request.resource.data.name, 100)
         && request.resource.data.subscriberCount == 0
         && request.resource.data.get('likesTotal', 0) == 0
         && request.resource.data.get('referralCount', 0) == 0
         && !('monetized' in request.resource.data)
         && !('referredByAdmin' in request.resource.data)
+        && !('premiumUntil' in request.resource.data)
+        && !('blueUntil' in request.resource.data)
         && !('suspended' in request.resource.data)
         && request.resource.data.channelId is string
-        && getAfter(/databases/$(database)/documents/channelIds/$(request.resource.data.channelId)).data.ownerUid == me();
+        && getAfter(/databases/$(database)/documents/channelIds/$(request.resource.data.channelId)).data.ownerUid == me());
 
-      allow delete: if signedIn() && (me() == uid || isAdmin());
+      allow delete: if notFrozen() && (signedIn() && (me() == uid || isAdmin()));
 
-      allow update: if signedIn() && (
+      allow update: if notFrozen() && (signedIn() && (
         // admin: anything (approve monetization, etc.)
         isAdmin()
         // owner: edit own profile, but never the protected counters / badges
         || (me() == uid
-            && !changed().hasAny(['subscriberCount', 'likesTotal', 'referralCount', 'referredByAdmin', 'createdAt', 'suspended', 'suspendReason', 'suspendedAt'])
+            && !changed().hasAny(['subscriberCount', 'likesTotal', 'referralCount', 'referredByAdmin', 'premiumUntil', 'blueUntil', 'createdAt', 'suspended', 'suspendReason', 'suspendedAt'])
             // auto-monetization: owner may only switch monetized from off to ON (never off)
             && (!changed().hasAny(['monetized']) || (request.resource.data.monetized == true && resource.data.get('monetized', false) == false))
             && (request.resource.data.get('channelId', null) == resource.data.get('channelId', null)
@@ -119,30 +146,30 @@ service cloud.firestore {
             && changed().hasOnly(['subscriberCount'])
             && ((delta('subscriberCount') == 1  &&  existsAfter(subPath(me(), uid)))
              || (delta('subscriberCount') == -1 && !existsAfter(subPath(me(), uid)))))
-      );
+      ));
     }
 
     // ================================================================
     //  FOLLOWS
     // ================================================================
     match /subscriptions/{id} {
-      allow read: if true;
-      allow create: if signedIn()
+      allow read: if notFrozen() && (true);
+      allow create: if notFrozen() && (signedIn()
         && request.resource.data.subscriberId == me()
         && request.resource.data.channelId is string
         && request.resource.data.channelId != me()
-        && id == me() + '_' + request.resource.data.channelId;
+        && id == me() + '_' + request.resource.data.channelId);
       allow update: if false;
-      allow delete: if signedIn() && (resource.data.subscriberId == me() || isAdmin());
+      allow delete: if notFrozen() && (signedIn() && (resource.data.subscriberId == me() || isAdmin()));
     }
 
     // ================================================================
     //  VIDEOS (+ comments)
     // ================================================================
     match /videos/{vid} {
-      allow read: if true;
+      allow read: if notFrozen() && (true);
 
-      allow create: if signedIn()
+      allow create: if notFrozen() && (signedIn()
         && request.resource.data.channelId == me()
         && exists(/databases/$(database)/documents/channels/$(me()))
         && isStr(request.resource.data.title, 300)
@@ -150,13 +177,15 @@ service cloud.firestore {
         && request.resource.data.get('status', '') == 'pending'
         && request.resource.data.get('likesCount', 0) == 0
         && request.resource.data.get('commentsCount', 0) == 0
-        && request.resource.data.createdAt == request.time;
+        && request.resource.data.createdAt == request.time);
 
-      allow update: if signedIn() && (
+      allow update: if notFrozen() && (signedIn() && (
         isAdmin()
         // owner edits (title, desc, boost, name/logo sync ...) but never counters / identity
         || (resource.data.channelId == me()
-            && !changed().hasAny(['views', 'likesCount', 'commentsCount', 'sharesCount', 'watchCount', 'watchPctSum', 'skipsCount', 'channelId', 'createdAt', 'status', 'reviewedBy', 'reviewedAt', 'rejectReason', 'videoURL']))
+            && !changed().hasAny(['views', 'likesCount', 'commentsCount', 'sharesCount', 'watchCount', 'watchPctSum', 'skipsCount', 'channelId', 'createdAt', 'status', 'reviewedBy', 'reviewedAt', 'rejectReason', 'videoURL'])
+            // paid Boost (coins): boostUntil can only change together with a real boost purchase
+            && (!changed().hasAny(['boostUntil']) || paidBoost(vid, 'reel')))
         // likes counter: +1 only with my like doc, -1 only after my like doc is gone
         || (changed().hasOnly(['likesCount'])
             && ((delta('likesCount') == 1  &&  existsAfter(videoLikePath(me(), vid)))
@@ -174,18 +203,18 @@ service cloud.firestore {
             && delta('skipsCount') >= 0 && delta('skipsCount') <= 1
             && existsAfter(videoSignalPath(me(), vid, 'watch')))
         // NOTE: "views" can NOT be changed from the app. Only the Worker (service account) does it.
-      );
+      ));
 
-      allow delete: if signedIn() && (resource.data.channelId == me() || isAdmin());
+      allow delete: if notFrozen() && (signedIn() && (resource.data.channelId == me() || isAdmin()));
 
       match /comments/{cid} {
-        allow read: if true;
-        allow create: if signedIn()
+        allow read: if notFrozen() && (true);
+        allow create: if notFrozen() && (signedIn()
           && request.resource.data.authorId == me()
-          && isStr(request.resource.data.text, 2000);
+          && isStr(request.resource.data.text, 2000));
         // video owner can only add / remove the "creator heart"
-        allow update: if signedIn() && videoOwner(vid) && changed().hasOnly(['creatorHeart']);
-        allow delete: if signedIn() && (resource.data.authorId == me() || videoOwner(vid) || isAdmin());
+        allow update: if notFrozen() && (signedIn() && videoOwner(vid) && changed().hasOnly(['creatorHeart']));
+        allow delete: if notFrozen() && (signedIn() && (resource.data.authorId == me() || videoOwner(vid) || isAdmin()));
       }
     }
 
@@ -193,7 +222,7 @@ service cloud.firestore {
     //  VIEWS  (written only by the Worker with service account)
     // ================================================================
     match /views/{id} {
-      allow read: if signedIn();       // Studio analytics query by videoId / date
+      allow read: if notFrozen() && (signedIn());       // Studio analytics query by videoId / date
       allow write: if false;
     }
 
@@ -202,11 +231,11 @@ service cloud.firestore {
     // ================================================================
     match /videoSignals/{id} {
       allow read: if false;
-      allow create: if signedIn()
+      allow create: if notFrozen() && (signedIn()
         && request.resource.data.uid == me()
         && request.resource.data.type in ['share', 'watch']
         && request.resource.data.videoId is string
-        && id == me() + '_' + request.resource.data.videoId + '_' + request.resource.data.type;
+        && id == me() + '_' + request.resource.data.videoId + '_' + request.resource.data.type);
       allow update, delete: if false;
     }
 
@@ -214,23 +243,23 @@ service cloud.firestore {
     //  VIDEO LIKES
     // ================================================================
     match /likes/{id} {
-      allow get: if signedIn() && (id.matches(me() + '_.*') || isAdmin());
-      allow list: if isAdmin();
-      allow create: if signedIn()
+      allow get: if notFrozen() && (signedIn() && (id.matches(me() + '_.*') || isAdmin()));
+      allow list: if notFrozen() && (isAdmin());
+      allow create: if notFrozen() && (signedIn()
         && request.resource.data.uid == me()
         && request.resource.data.videoId is string
-        && id == me() + '_' + request.resource.data.videoId;
+        && id == me() + '_' + request.resource.data.videoId);
       allow update: if false;
-      allow delete: if signedIn() && id.matches(me() + '_.*');
+      allow delete: if notFrozen() && (signedIn() && id.matches(me() + '_.*'));
     }
 
     // ================================================================
     //  POSTS (+ comments)
     // ================================================================
     match /posts/{id} {
-      allow read: if true;
+      allow read: if notFrozen() && (true);
 
-      allow create: if signedIn()
+      allow create: if notFrozen() && (signedIn()
         && request.resource.data.uid == me()
         && exists(/databases/$(database)/documents/channels/$(me()))
         && request.resource.data.get('likesCount', 0) == 0
@@ -238,9 +267,9 @@ service cloud.firestore {
         && request.resource.data.get('status', '') == 'pending'
         && request.resource.data.get('caption', '') is string
         && request.resource.data.get('caption', '').size() <= 2200
-        && request.resource.data.createdAt == request.time;
+        && request.resource.data.createdAt == request.time);
 
-      allow update: if signedIn() && (
+      allow update: if notFrozen() && (signedIn() && (
         isAdmin()
         // owner, while the post is still a draft (detailsDone == false): fill in media, caption, tags, tagged people, time capsule -- once detailsDone is true the media is locked
         || (resource.data.uid == me()
@@ -252,6 +281,11 @@ service cloud.firestore {
             && changed().hasOnly(['caption', 'tags', 'edited', 'commentsCount'])
             && delta('commentsCount') <= 0
             && request.resource.data.get('commentsCount', 0) >= 0)
+        // owner: paid Boost (coins) -> only boostUntil, only together with a real boost purchase
+        || (resource.data.uid == me()
+            && changed().hasOnly(['boostUntil'])
+            && request.resource.data.boostUntil is number
+            && paidBoost(id, 'post'))
         // likes counter (anyone, incl. owner): tied to my postLikes doc
         || (changed().hasOnly(['likesCount'])
             && ((delta('likesCount') == 1  &&  existsAfter(postLikePath(me(), id)))
@@ -260,67 +294,67 @@ service cloud.firestore {
         || (changed().hasOnly(['commentsCount'])
             && (delta('commentsCount') == 1
                 || (delta('commentsCount') < 0 && request.resource.data.commentsCount >= 0)))
-      );
+      ));
 
-      allow delete: if signedIn() && (resource.data.uid == me() || isAdmin());
+      allow delete: if notFrozen() && (signedIn() && (resource.data.uid == me() || isAdmin()));
 
       match /comments/{cid} {
-        allow read: if true;
-        allow create: if signedIn()
+        allow read: if notFrozen() && (true);
+        allow create: if notFrozen() && (signedIn()
           && request.resource.data.authorId == me()
           && isStr(request.resource.data.text, 2200)
-          && request.resource.data.get('likes', []).size() == 0;
-        allow update: if signedIn() && onlyMyLikeToggle();
-        allow delete: if signedIn() && (
+          && request.resource.data.get('likes', []).size() == 0);
+        allow update: if notFrozen() && (signedIn() && onlyMyLikeToggle());
+        allow delete: if notFrozen() && (signedIn() && (
           resource.data.authorId == me()
           || postOwner(id)
           || isAdmin()
           // author of a parent comment deleting its replies
           || (resource.data.get('parentId', null) != null
               && get(/databases/$(database)/documents/posts/$(id)/comments/$(resource.data.parentId)).data.authorId == me())
-        );
+        ));
       }
     }
 
     match /postLikes/{id} {
-      allow get: if signedIn() && (id.matches(me() + '_.*') || isAdmin());
-      allow list: if isAdmin();
-      allow create: if signedIn()
+      allow get: if notFrozen() && (signedIn() && (id.matches(me() + '_.*') || isAdmin()));
+      allow list: if notFrozen() && (isAdmin());
+      allow create: if notFrozen() && (signedIn()
         && request.resource.data.uid == me()
         && request.resource.data.postId is string
-        && id == me() + '_' + request.resource.data.postId;
+        && id == me() + '_' + request.resource.data.postId);
       allow update: if false;
-      allow delete: if signedIn() && id.matches(me() + '_.*');
+      allow delete: if notFrozen() && (signedIn() && id.matches(me() + '_.*'));
     }
 
     match /saves/{id} {
-      allow read: if signedIn() && resource.data.uid == me();
-      allow create: if signedIn()
+      allow read: if notFrozen() && (signedIn() && resource.data.uid == me());
+      allow create: if notFrozen() && (signedIn()
         && request.resource.data.uid == me()
         && request.resource.data.postId is string
-        && id == me() + '_' + request.resource.data.postId;
+        && id == me() + '_' + request.resource.data.postId);
       allow update: if false;
-      allow delete: if signedIn() && resource.data.uid == me();
+      allow delete: if notFrozen() && (signedIn() && resource.data.uid == me());
     }
 
     // ================================================================
     //  NOTIFICATIONS
     // ================================================================
     match /notifications/{id} {
-      allow read: if signedIn() && resource.data.toUid == me();
-      allow create: if signedIn()
+      allow read: if notFrozen() && (signedIn() && resource.data.toUid == me());
+      allow create: if notFrozen() && (signedIn()
         && request.resource.data.fromUid == me()
         && request.resource.data.toUid is string
-        && request.resource.data.toUid != me();
-      allow update: if signedIn() && (
+        && request.resource.data.toUid != me());
+      allow update: if notFrozen() && (signedIn() && (
         // receiver: only mark as read
         (resource.data.toUid == me() && changed().hasOnly(['read']))
         // sender: re-send the same notification (same like -> same id)
         || (resource.data.fromUid == me()
             && request.resource.data.fromUid == me()
             && request.resource.data.toUid == resource.data.toUid)
-      );
-      allow delete: if signedIn() && (resource.data.toUid == me() || resource.data.fromUid == me());
+      ));
+      allow delete: if notFrozen() && (signedIn() && (resource.data.toUid == me() || resource.data.fromUid == me()));
     }
 
     // ================================================================
@@ -340,46 +374,46 @@ service cloud.firestore {
     //  REFERRALS
     // ================================================================
     match /referrals/{id} {
-      allow read: if signedIn() && (resource.data.referrerUid == me() || resource.data.newUid == me() || isAdmin());
-      allow create: if signedIn()
+      allow read: if notFrozen() && (signedIn() && (resource.data.referrerUid == me() || resource.data.newUid == me() || isAdmin()));
+      allow create: if notFrozen() && (signedIn()
         && request.resource.data.newUid == me()
         && request.resource.data.referrerUid is string
-        && request.resource.data.referrerUid != me();
-      allow update, delete: if isAdmin();
+        && request.resource.data.referrerUid != me());
+      allow update, delete: if notFrozen() && (isAdmin());
     }
 
     // ================================================================
     //  STORIES, ARCHIVE, CLOSE FRIENDS, HIGHLIGHTS
     // ================================================================
     match /stories/{sid} {
-      allow read: if signedIn();
-      allow create: if signedIn() && request.resource.data.uid == me();
-      allow update: if signedIn() && resource.data.uid == me()
-        && request.resource.data.uid == resource.data.uid;
-      allow delete: if signedIn() && (resource.data.uid == me() || isAdmin());
+      allow read: if notFrozen() && (signedIn());
+      allow create: if notFrozen() && (signedIn() && request.resource.data.uid == me());
+      allow update: if notFrozen() && (signedIn() && resource.data.uid == me()
+        && request.resource.data.uid == resource.data.uid);
+      allow delete: if notFrozen() && (signedIn() && (resource.data.uid == me() || isAdmin()));
 
       match /views/{v} {
-        allow read: if signedIn() && (v == me()
-          || get(/databases/$(database)/documents/stories/$(sid)).data.uid == me());
-        allow create, update: if signedIn() && v == me() && request.resource.data.uid == me();
-        allow delete: if signedIn() && (v == me()
-          || get(/databases/$(database)/documents/stories/$(sid)).data.uid == me());
+        allow read: if notFrozen() && (signedIn() && (v == me()
+          || get(/databases/$(database)/documents/stories/$(sid)).data.uid == me()));
+        allow create, update: if notFrozen() && (signedIn() && v == me() && request.resource.data.uid == me());
+        allow delete: if notFrozen() && (signedIn() && (v == me()
+          || get(/databases/$(database)/documents/stories/$(sid)).data.uid == me()));
       }
     }
 
     match /storyArchive/{id} {
-      allow read: if signedIn() && resource.data.uid == me();
-      allow create: if signedIn() && request.resource.data.uid == me();
+      allow read: if notFrozen() && (signedIn() && resource.data.uid == me());
+      allow create: if notFrozen() && (signedIn() && request.resource.data.uid == me());
       allow update: if false;
-      allow delete: if signedIn() && resource.data.uid == me();
+      allow delete: if notFrozen() && (signedIn() && resource.data.uid == me());
     }
 
     // ================================================================
     //  MOOD STATUS + DO-NOT-DISTURB SCHEDULE  (public status, no private lists inside)
     // ================================================================
     match /presence/{uid} {
-      allow read: if signedIn();
-      allow create, update: if signedIn() && me() == uid
+      allow read: if notFrozen() && (signedIn());
+      allow create, update: if notFrozen() && (signedIn() && me() == uid
         && request.resource.data.keys().hasOnly(['mood', 'moodText', 'moodUntil', 'dndOn', 'dndFrom', 'dndTo', 'tz', 'updatedAt', 'vibe', 'vibeUntil', 'vibeGroup'])
         // Vibe: auto-expiring mood (max 2 hours) used for floating statuses + auto vibe groups
         && request.resource.data.get('vibe', '') in ['', 'bored', 'cramming', 'chai', 'hangout', 'gaming', 'movie', 'hungry', 'walk']
@@ -392,40 +426,40 @@ service cloud.firestore {
         && request.resource.data.get('dndOn', false) is bool
         && request.resource.data.get('dndFrom', '22:00') is string && request.resource.data.get('dndFrom', '22:00').matches('^[0-2][0-9]:[0-5][0-9]$')
         && request.resource.data.get('dndTo', '07:00') is string && request.resource.data.get('dndTo', '07:00').matches('^[0-2][0-9]:[0-5][0-9]$')
-        && request.resource.data.get('tz', 0) is number;
-      allow delete: if signedIn() && me() == uid;
+        && request.resource.data.get('tz', 0) is number);
+      allow delete: if notFrozen() && (signedIn() && me() == uid);
     }
 
     // ================================================================
     //  CREATOR TIP JAR  (EasyPaisa / JazzCash numbers the creator chooses to show; no money goes through Gupzy)
     // ================================================================
     match /tipJars/{uid} {
-      allow read: if signedIn();
-      allow create, update: if signedIn() && me() == uid
+      allow read: if notFrozen() && (signedIn());
+      allow create, update: if notFrozen() && (signedIn() && me() == uid
         && request.resource.data.keys().hasOnly(['enabled', 'easypaisa', 'jazzcash', 'title', 'message', 'updatedAt'])
         && request.resource.data.get('enabled', false) is bool
         && request.resource.data.get('easypaisa', '') is string && request.resource.data.get('easypaisa', '').size() <= 15
         && request.resource.data.get('jazzcash', '') is string && request.resource.data.get('jazzcash', '').size() <= 15
         && request.resource.data.get('title', '') is string && request.resource.data.get('title', '').size() <= 60
-        && request.resource.data.get('message', '') is string && request.resource.data.get('message', '').size() <= 140;
-      allow delete: if signedIn() && me() == uid;
+        && request.resource.data.get('message', '') is string && request.resource.data.get('message', '').size() <= 140);
+      allow delete: if notFrozen() && (signedIn() && me() == uid);
     }
 
     match /closeFriends/{uid} {
-      allow read, write: if signedIn() && me() == uid;
+      allow read, write: if notFrozen() && (signedIn() && me() == uid);
     }
 
     match /highlights/{id} {
-      allow read: if signedIn();
-      allow create: if signedIn() && request.resource.data.uid == me();
-      allow update: if signedIn() && resource.data.uid == me()
-        && request.resource.data.uid == resource.data.uid;
-      allow delete: if signedIn() && (resource.data.uid == me() || isAdmin());
+      allow read: if notFrozen() && (signedIn());
+      allow create: if notFrozen() && (signedIn() && request.resource.data.uid == me());
+      allow update: if notFrozen() && (signedIn() && resource.data.uid == me()
+        && request.resource.data.uid == resource.data.uid);
+      allow delete: if notFrozen() && (signedIn() && (resource.data.uid == me() || isAdmin()));
 
       match /items/{i} {
-        allow read: if signedIn();
-        allow write: if signedIn()
-          && get(/databases/$(database)/documents/highlights/$(id)).data.uid == me();
+        allow read: if notFrozen() && (signedIn());
+        allow write: if notFrozen() && (signedIn()
+          && get(/databases/$(database)/documents/highlights/$(id)).data.uid == me());
       }
     }
 
@@ -433,32 +467,32 @@ service cloud.firestore {
     //  LIVE STREAMS  (doc id = broadcaster uid)
     // ================================================================
     match /live_streams/{sid} {
-      allow read: if signedIn();
-      allow create, update, delete: if signedIn() && me() == sid;
+      allow read: if notFrozen() && (signedIn());
+      allow create, update, delete: if notFrozen() && (signedIn() && me() == sid);
 
       match /chat/{m} {
-        allow read: if signedIn();
-        allow create: if signedIn()
+        allow read: if notFrozen() && (signedIn());
+        allow create: if notFrozen() && (signedIn()
           && request.resource.data.authorId == me()
-          && isStr(request.resource.data.text, 200);
+          && isStr(request.resource.data.text, 200));
         allow update: if false;
-        allow delete: if signedIn() && (me() == sid || resource.data.authorId == me() || isAdmin());
+        allow delete: if notFrozen() && (signedIn() && (me() == sid || resource.data.authorId == me() || isAdmin()));
       }
 
       match /viewers/{v} {
-        allow read: if signedIn() && (me() == sid || me() == v);
-        allow create: if signedIn() && me() == v;
-        allow update: if signedIn() && (me() == sid || me() == v);   // streamer writes "answer"
-        allow delete: if signedIn() && (me() == sid || me() == v);
+        allow read: if notFrozen() && (signedIn() && (me() == sid || me() == v));
+        allow create: if notFrozen() && (signedIn() && me() == v);
+        allow update: if notFrozen() && (signedIn() && (me() == sid || me() == v));   // streamer writes "answer"
+        allow delete: if notFrozen() && (signedIn() && (me() == sid || me() == v));
 
         match /viewerCandidates/{c} {
-          allow create: if signedIn() && me() == v;
-          allow read: if signedIn() && (me() == sid || me() == v);
+          allow create: if notFrozen() && (signedIn() && me() == v);
+          allow read: if notFrozen() && (signedIn() && (me() == sid || me() == v));
           allow update, delete: if false;
         }
         match /broadcasterCandidates/{c} {
-          allow create: if signedIn() && me() == sid;
-          allow read: if signedIn() && (me() == sid || me() == v);
+          allow create: if notFrozen() && (signedIn() && me() == sid);
+          allow read: if notFrozen() && (signedIn() && (me() == sid || me() == v));
           allow update, delete: if false;
         }
       }
@@ -469,8 +503,8 @@ service cloud.firestore {
     //  phoneIndex / contactBooks / userPhone are server-only: no rule = denied for clients.
     // ================================================================
     match /contactLinks/{id} {
-      allow get: if signedIn() && inDmId(id);
-      allow list: if signedIn() && me() in resource.data.members;
+      allow get: if notFrozen() && (signedIn() && inDmId(id));
+      allow list: if notFrozen() && (signedIn() && me() in resource.data.members);
       allow write: if false;
     }
 
@@ -481,67 +515,67 @@ service cloud.firestore {
     //  GUPCHATS (separate chat app): own E2E public keys + own DM chats
     // ================================================================
     match /gcKeys/{uid} {
-      allow read: if signedIn();
-      allow create, update: if signedIn() && me() == uid
+      allow read: if notFrozen() && (signedIn());
+      allow create, update: if notFrozen() && (signedIn() && me() == uid
         && request.resource.data.uid == me()
         && request.resource.data.keys().hasOnly(['uid', 'pub', 'updatedAt'])
         && request.resource.data.pub is string
-        && request.resource.data.pub.size() < 200;
-      allow delete: if signedIn() && me() == uid;
+        && request.resource.data.pub.size() < 200);
+      allow delete: if notFrozen() && (signedIn() && me() == uid);
     }
 
     // Gupchats key backup: private. Holds the user's private key encrypted with their own backup PIN (server never sees the PIN).
     match /gcKeyBackups/{uid} {
-      allow read: if signedIn() && me() == uid;
-      allow create, update: if signedIn() && me() == uid
+      allow read: if notFrozen() && (signedIn() && me() == uid);
+      allow create, update: if notFrozen() && (signedIn() && me() == uid
         && request.resource.data.keys().hasOnly(['v', 'iter', 'salt', 'iv', 'ct', 'pub', 'updatedAt'])
         && request.resource.data.ct is string && request.resource.data.ct.size() < 4000
-        && request.resource.data.pub is string && request.resource.data.pub.size() < 200;
-      allow delete: if signedIn() && me() == uid;
+        && request.resource.data.pub is string && request.resource.data.pub.size() < 200);
+      allow delete: if notFrozen() && (signedIn() && me() == uid);
     }
 
     // Gupchats online status: readable by signed-in users, written only by the owner
     match /gcPresence/{uid} {
-      allow read: if signedIn();
-      allow create, update: if signedIn() && me() == uid
+      allow read: if notFrozen() && (signedIn());
+      allow create, update: if notFrozen() && (signedIn() && me() == uid
         && request.resource.data.keys().hasOnly(['uid', 'online', 'hidden', 'lastSeen'])
         && request.resource.data.uid == me()
         && request.resource.data.online is bool
-        && request.resource.data.get('hidden', false) is bool;
-      allow delete: if signedIn() && me() == uid;
+        && request.resource.data.get('hidden', false) is bool);
+      allow delete: if notFrozen() && (signedIn() && me() == uid);
     }
 
     match /gcChats/{chatId} {
-      allow read: if signedIn() && (
+      allow read: if notFrozen() && (signedIn() && (
         (resource == null && inDmId(chatId))
         || (resource != null && (me() in resource.data.members))
-      );
-      allow create: if signedIn() && inDmId(chatId) && dmFollowOk(chatId)
+      ));
+      allow create: if notFrozen() && (signedIn() && inDmId(chatId) && dmFollowOk(chatId)
         && request.resource.data.members.size() == 2
-        && request.resource.data.members.toSet() == chatId.split('_').toSet();
-      allow update: if signedIn() && inDmId(chatId)
-        && request.resource.data.members.toSet() == chatId.split('_').toSet();
+        && request.resource.data.members.toSet() == chatId.split('_').toSet());
+      allow update: if notFrozen() && (signedIn() && inDmId(chatId)
+        && request.resource.data.members.toSet() == chatId.split('_').toSet());
       allow delete: if false;
 
       match /messages/{mid} {
-        allow read: if signedIn() && inDmId(chatId);
-        allow create: if signedIn() && inDmId(chatId) && dmFollowOk(chatId)
+        allow read: if notFrozen() && (signedIn() && inDmId(chatId));
+        allow create: if notFrozen() && (signedIn() && inDmId(chatId) && dmFollowOk(chatId)
           && request.resource.data.from == me()
           && request.resource.data.keys().hasOnly(['from', 'iv', 'ct', 'v', 'createdAt'])
           && request.resource.data.ct is string
-          && request.resource.data.ct.size() < 8000;
+          && request.resource.data.ct.size() < 8000);
         allow update: if false;
-        allow delete: if signedIn() && inDmId(chatId) && resource.data.from == me();
+        allow delete: if notFrozen() && (signedIn() && inDmId(chatId) && resource.data.from == me());
       }
     }
 
     match /chats/{chatId} {
-      allow read: if signedIn() && (
+      allow read: if notFrozen() && (signedIn() && (
         inDmId(chatId)
         || (resource != null && (me() in resource.data.members))
-      );
+      ));
 
-      allow create: if signedIn() && (
+      allow create: if notFrozen() && (signedIn() && (
         // 1-to-1
         (inDmId(chatId)
           && dmFollowOk(chatId)
@@ -554,9 +588,9 @@ service cloud.firestore {
           && (me() in request.resource.data.members)
           && request.resource.data.members.size() >= 2
           && request.resource.data.members.size() <= 50)
-      );
+      ));
 
-      allow update: if signedIn() && (
+      allow update: if notFrozen() && (signedIn() && (
         // 1-to-1: both members can update, but the 2 members can never change
         (inDmId(chatId)
           && request.resource.data.members.toSet() == chatId.split('_').toSet())
@@ -583,14 +617,14 @@ service cloud.firestore {
               && (request.resource.data.owner == resource.data.owner
                   || (resource.data.owner == me() && (request.resource.data.owner in request.resource.data.members))))
         ))
-      );
+      ));
 
       allow delete: if false;
 
       // DAKU LEDGER (group chats): ETA "Busted" + chai udhaar, members only
       match /ledger/{lid} {
-        allow read: if signedIn() && chatMember(chatId);
-        allow create: if signedIn() && isGroupId(chatId) && chatMember(chatId)
+        allow read: if notFrozen() && (signedIn() && chatMember(chatId));
+        allow create: if notFrozen() && (signedIn() && isGroupId(chatId) && chatMember(chatId)
           && request.resource.data.by == me()
           && (
             (request.resource.data.kind == 'eta'
@@ -605,8 +639,8 @@ service cloud.firestore {
               && request.resource.data.lender is string && request.resource.data.borrower is string
               && request.resource.data.lender != request.resource.data.borrower
               && (me() == request.resource.data.lender || me() == request.resource.data.borrower))
-          );
-        allow update: if signedIn() && chatMember(chatId) && (
+          ));
+        allow update: if notFrozen() && (signedIn() && chatMember(chatId) && (
           // owner says "arrived"
           (resource.data.kind == 'eta' && resource.data.uid == me() && resource.data.status == 'open'
             && changed().hasOnly(['status', 'arrivedAt']) && request.resource.data.status == 'ok')
@@ -619,27 +653,27 @@ service cloud.firestore {
           // lender marks the udhaar as paid
           || (resource.data.kind == 'debt' && resource.data.lender == me()
             && changed().hasOnly(['paid', 'paidAt']))
-        );
-        allow delete: if signedIn() && chatMember(chatId) && resource.data.by == me();
+        ));
+        allow delete: if notFrozen() && (signedIn() && chatMember(chatId) && resource.data.by == me());
       }
 
       match /messages/{mid} {
-        allow read: if signedIn() && chatMember(chatId);
+        allow read: if notFrozen() && (signedIn() && chatMember(chatId));
 
-        allow create: if signedIn()
+        allow create: if notFrozen() && (signedIn()
           && chatMember(chatId)
           && request.resource.data.from == me()
           && (!isDmId(chatId) || dmFollowOk(chatId))
           // temporary vibe groups stop accepting messages when they expire
-          && (!isGroupId(chatId) || groupData(chatId).get('expiresAt', 0) == 0 || groupData(chatId).expiresAt > request.time.toMillis());
+          && (!isGroupId(chatId) || groupData(chatId).get('expiresAt', 0) == 0 || groupData(chatId).expiresAt > request.time.toMillis()));
 
         // reactions: only my own key
-        allow update: if signedIn() && chatMember(chatId)
+        allow update: if notFrozen() && (signedIn() && chatMember(chatId)
           && changed().hasOnly(['reactions'])
-          && request.resource.data.get('reactions', {}).diff(resource.data.get('reactions', {})).affectedKeys().hasOnly([me()]);
+          && request.resource.data.get('reactions', {}).diff(resource.data.get('reactions', {})).affectedKeys().hasOnly([me()]));
 
         // unsend: only my own message
-        allow delete: if signedIn() && chatMember(chatId) && resource.data.from == me();
+        allow delete: if notFrozen() && (signedIn() && chatMember(chatId) && resource.data.from == me());
       }
     }
 
@@ -648,24 +682,25 @@ service cloud.firestore {
     //  participants[] = who is inside (join order), sig/* = WebRTC offer / answer / ICE between two members
     // ================================================================
     match /groupCalls/{gid} {
-      allow get: if signedIn() && isGroupId(gid) && chatMember(gid);
+      allow get: if notFrozen() && (signedIn() && isGroupId(gid) && chatMember(gid));
       allow list: if false;
-      allow create: if signedIn() && isGroupId(gid) && chatMember(gid)
+      allow create: if notFrozen() && (signedIn() && isGroupId(gid) && chatMember(gid)
         && request.resource.data.participants == [me()]
         && request.resource.data.startedBy == me()
-        && request.resource.data.type in ['voice', 'video'];
-      allow update: if signedIn() && isGroupId(gid) && chatMember(gid)
-        && changed().hasOnly(['type', 'startedBy', 'startedAt', 'participants', 'updatedAt'])
+        && request.resource.data.type in ['voice', 'video']);
+      // 'beat' = per-person heartbeat ({uid: ms}); other members use it to drop a phone that crashed / lost network without leaving.
+      // Because of that, a member may also remove OTHER people from participants[] (stale ones). Only I can add myself.
+      allow update: if notFrozen() && (signedIn() && isGroupId(gid) && chatMember(gid)
+        && changed().hasOnly(['type', 'startedBy', 'startedAt', 'participants', 'updatedAt', 'beat'])
         && request.resource.data.participants.size() <= 6
-        && request.resource.data.participants.toSet().difference(resource.data.participants.toSet()).hasOnly([me()])
-        && resource.data.participants.toSet().difference(request.resource.data.participants.toSet()).hasOnly([me()]);
+        && request.resource.data.participants.toSet().difference(resource.data.participants.toSet()).hasOnly([me()]));
       allow delete: if false;
 
       match /sig/{sid} {
-        allow create: if signedIn() && request.resource.data.from == me()
+        allow create: if notFrozen() && (signedIn() && request.resource.data.from == me()
           && request.resource.data.to is string
-          && (me() in get(/databases/$(database)/documents/groupCalls/$(gid)).data.participants);
-        allow read, delete: if signedIn() && resource.data.to == me();
+          && (me() in get(/databases/$(database)/documents/groupCalls/$(gid)).data.participants));
+        allow read, delete: if notFrozen() && (signedIn() && resource.data.to == me());
         allow update: if false;
       }
     }
@@ -674,29 +709,29 @@ service cloud.firestore {
     //  CALLS  (new call needs mutual follow)
     // ================================================================
     match /calls/{callId} {
-      allow read: if signedIn() && (resource.data.callerId == me() || resource.data.calleeId == me());
+      allow read: if notFrozen() && (signedIn() && (resource.data.callerId == me() || resource.data.calleeId == me()));
 
-      allow create: if signedIn()
+      allow create: if notFrozen() && (signedIn()
         && request.resource.data.callerId == me()
         && request.resource.data.calleeId is string
         && request.resource.data.calleeId != me()
         && request.resource.data.status == 'ringing'
-        && canTalk(me(), request.resource.data.calleeId);
+        && canTalk(me(), request.resource.data.calleeId));
 
-      allow update: if signedIn()
+      allow update: if notFrozen() && (signedIn()
         && (resource.data.callerId == me() || resource.data.calleeId == me())
-        && changed().hasOnly(['status', 'answer', 'reason', 'calleeRinging', 'calleeBeat']);
+        && changed().hasOnly(['status', 'answer', 'reason', 'calleeRinging', 'calleeBeat']));
 
-      allow delete: if signedIn() && (resource.data.callerId == me() || resource.data.calleeId == me());
+      allow delete: if notFrozen() && (signedIn() && (resource.data.callerId == me() || resource.data.calleeId == me()));
 
       match /callerCandidates/{c} {
-        allow create: if signedIn() && callData(callId).callerId == me();
-        allow read: if signedIn() && callParty(callId);
+        allow create: if notFrozen() && (signedIn() && callData(callId).callerId == me());
+        allow read: if notFrozen() && (signedIn() && callParty(callId));
         allow update, delete: if false;
       }
       match /calleeCandidates/{c} {
-        allow create: if signedIn() && callData(callId).calleeId == me();
-        allow read: if signedIn() && callParty(callId);
+        allow create: if notFrozen() && (signedIn() && callData(callId).calleeId == me());
+        allow read: if notFrozen() && (signedIn() && callParty(callId));
         allow update, delete: if false;
       }
     }
@@ -705,32 +740,39 @@ service cloud.firestore {
     //  MONETIZATION / ADMIN PANEL
     // ================================================================
     match /monetization_applications/{uid} {
-      allow get: if signedIn() && (me() == uid || isAdmin());
-      allow list: if isAdmin();
+      allow get: if notFrozen() && (signedIn() && (me() == uid || isAdmin()));
+      allow list: if notFrozen() && (isAdmin());
       // user can only apply as "pending" (never self-approve)
       // one-time payout form: auto-approved for a monetized channel (old 'pending' path kept for compatibility)
-      allow create: if signedIn() && me() == uid && (request.resource.data.status == 'pending'
-        || (request.resource.data.status == 'approved' && get(/databases/$(database)/documents/channels/$(uid)).data.get('monetized', false) == true));
-      allow update: if signedIn() && (
+      allow create: if notFrozen() && (signedIn() && me() == uid && (request.resource.data.status == 'pending'
+        || (request.resource.data.status == 'approved' && get(/databases/$(database)/documents/channels/$(uid)).data.get('monetized', false) == true)));
+      allow update: if notFrozen() && (signedIn() && (
         isAdmin()
         || (me() == uid
             && resource.data.status != 'approved'
             && request.resource.data.status == 'pending')
-      );
-      allow delete: if isAdmin();
+      ));
+      allow delete: if notFrozen() && (isAdmin());
     }
 
     // withdrawals (min $2): same payment method as the saved form -> 'approved' automatically, a different one -> 'pending' for the team
     match /withdrawals/{id} {
-      allow read: if signedIn() && (resource.data.uid == me() || isAdmin());
-      allow create: if signedIn() && request.resource.data.uid == me()
+      allow read: if notFrozen() && (signedIn() && (resource.data.uid == me() || isAdmin()));
+      allow create: if notFrozen() && (signedIn() && request.resource.data.uid == me()
         && request.resource.data.status in ['approved', 'pending']
         && request.resource.data.amount is number && request.resource.data.amount >= 2
-        && get(/databases/$(database)/documents/channels/$(me())).data.get('monetized', false) == true;
-      allow update, delete: if isAdmin();
+        && get(/databases/$(database)/documents/channels/$(me())).data.get('monetized', false) == true);
+      allow update, delete: if notFrozen() && (isAdmin());
     }
 
     match /promotions/{id} {
+      allow read: if notFrozen() && (true);
+      allow write: if notFrozen() && (isAdmin());
+    }
+
+    // FREEZE SWITCH: read by EVERYONE (even signed-out) so every screen can show the "paused" page.
+    // Only the admin can write it.
+    match /settings/appFreeze {
       allow read: if true;
       allow write: if isAdmin();
     }
@@ -741,13 +783,13 @@ service cloud.firestore {
     }
 
     match /reports/{reportId} {
-      allow get: if signedIn() && (reportId.matches('.*_' + me()) || isAdmin());
-      allow list: if isAdmin();
-      allow create: if signedIn()
+      allow get: if notFrozen() && (signedIn() && (reportId.matches('.*_' + me()) || isAdmin()));
+      allow list: if notFrozen() && (isAdmin());
+      allow create: if notFrozen() && (signedIn()
         && request.resource.data.reporterId == me()
         && reportId.matches('.*_' + me())
-        && request.resource.data.status == 'pending';
-      allow update, delete: if isAdmin();
+        && request.resource.data.status == 'pending');
+      allow update, delete: if notFrozen() && (isAdmin());
     }
 
     // ================================================================
@@ -759,15 +801,15 @@ service cloud.firestore {
 
     match /watchParties/{code} {
       // host creates a party for himself (only himself inside, playlist up to 40 reels)
-      allow create: if signedIn()
+      allow create: if notFrozen() && (signedIn()
         && request.resource.data.hostUid == me()
         && request.resource.data.members == [me()]
         && request.resource.data.queue is list
-        && request.resource.data.queue.size() <= 40;
+        && request.resource.data.queue.size() <= 40);
       // anyone signed in who has the (secret, random) code can open it; no listing
-      allow get: if signedIn();
+      allow get: if notFrozen() && (signedIn());
       allow list: if false;
-      allow update: if signedIn() && (
+      allow update: if notFrozen() && (signedIn() && (
         // host: end the party
         (resource.data.hostUid == me()
           && changed().hasOnly(['videoId', 'by', 'seq', 'updatedAt', 'ended']))
@@ -787,16 +829,16 @@ service cloud.firestore {
           && request.resource.data.members.size() <= 4
           && request.resource.data.members.toSet().difference(resource.data.members.toSet()) == [me()].toSet()
           && resource.data.members.toSet().difference(request.resource.data.members.toSet()).size() == 0)
-      );
+      ));
       allow delete: if false;
 
       // voice-chat signalling (offer / answer / ICE): written by a member, read + deleted by the receiver
       match /sig/{sid} {
-        allow create: if signedIn()
+        allow create: if notFrozen() && (signedIn()
           && request.resource.data.from == me()
           && request.resource.data.to is string
-          && wpMember(code);
-        allow read, delete: if signedIn() && resource.data.to == me();
+          && wpMember(code));
+        allow read, delete: if notFrozen() && (signedIn() && resource.data.to == me());
         allow update: if false;
       }
     }
@@ -807,12 +849,12 @@ service cloud.firestore {
     function grMember(code) { return me() in get(/databases/$(database)/documents/gameRooms/$(code)).data.members; }
 
     match /gameRooms/{code} {
-      allow create: if signedIn()
+      allow create: if notFrozen() && (signedIn()
         && request.resource.data.hostUid == me()
-        && request.resource.data.members == [me()];
-      allow get: if signedIn();
+        && request.resource.data.members == [me()]);
+      allow get: if notFrozen() && (signedIn());
       allow list: if false;
-      allow update: if signedIn() && (
+      allow update: if notFrozen() && (signedIn() && (
         (resource.data.hostUid == me() && changed().hasOnly(['state','wheel','spin','ended','updatedAt']))
         || ((me() in resource.data.members) && changed().hasOnly(['wheel','spin','updatedAt']))
         || ((me() in resource.data.members)
@@ -826,20 +868,20 @@ service cloud.firestore {
           && request.resource.data.members.size() <= 6
           && request.resource.data.members.toSet().difference(resource.data.members.toSet()) == [me()].toSet()
           && resource.data.members.toSet().difference(request.resource.data.members.toSet()).size() == 0)
-      );
+      ));
       allow delete: if false;
 
       match /sig/{sid} {
-        allow create: if signedIn() && request.resource.data.from == me()
-          && request.resource.data.to is string && grMember(code);
-        allow read, delete: if signedIn() && resource.data.to == me();
+        allow create: if notFrozen() && (signedIn() && request.resource.data.from == me()
+          && request.resource.data.to is string && grMember(code));
+        allow read, delete: if notFrozen() && (signedIn() && resource.data.to == me());
         allow update: if false;
       }
     }
 
     match /gameInvites/{id} {
-      allow create: if signedIn() && request.resource.data.fromUid == me() && request.resource.data.toUid is string;
-      allow read, delete: if signedIn() && (resource.data.toUid == me() || resource.data.fromUid == me());
+      allow create: if notFrozen() && (signedIn() && request.resource.data.fromUid == me() && request.resource.data.toUid is string);
+      allow read, delete: if notFrozen() && (signedIn() && (resource.data.toUid == me() || resource.data.fromUid == me()));
       allow update: if false;
     }
 
@@ -853,19 +895,19 @@ service cloud.firestore {
     function cvOpenOf(o)      { return get(/databases/$(database)/documents/crushOpen/$(o)).data.enabled == true; }
 
     match /crushOpen/{uid} {
-      allow read: if signedIn();
-      allow create, update: if signedIn() && me() == uid
+      allow read: if notFrozen() && (signedIn());
+      allow create, update: if notFrozen() && (signedIn() && me() == uid
         && request.resource.data.keys().hasOnly(['enabled', 'updatedAt'])
-        && request.resource.data.enabled is bool;
-      allow delete: if signedIn() && me() == uid;
+        && request.resource.data.enabled is bool);
+      allow delete: if notFrozen() && (signedIn() && me() == uid);
     }
 
     match /crushStats/{uid} {
-      allow read: if signedIn() && me() == uid;
-      allow create: if signedIn() && me() == uid
+      allow read: if notFrozen() && (signedIn() && me() == uid);
+      allow create: if notFrozen() && (signedIn() && me() == uid
         && request.resource.data.keys().hasOnly(['crush', 'legend'])
-        && request.resource.data.crush == 0 && request.resource.data.legend == 0;
-      allow update: if signedIn() && me() != uid
+        && request.resource.data.crush == 0 && request.resource.data.legend == 0);
+      allow update: if notFrozen() && (signedIn() && me() != uid
         && cvOpenOf(uid)
         && canTalk(me(), uid)
         && !exists(cvVotePath(me(), uid))
@@ -874,13 +916,13 @@ service cloud.firestore {
         && (
           (delta('crush') == 1 && delta('legend') == 0 && getAfter(cvVotePath(me(), uid)).data.kind == 'crush')
           || (delta('legend') == 1 && delta('crush') == 0 && getAfter(cvVotePath(me(), uid)).data.kind == 'legend')
-        );
+        ));
       allow delete: if false;
     }
 
     match /crushVotes/{id} {
-      allow read: if signedIn() && resource.data.voter == me();
-      allow create: if signedIn()
+      allow read: if notFrozen() && (signedIn() && resource.data.voter == me());
+      allow create: if notFrozen() && (signedIn()
         && request.resource.data.keys().hasOnly(['voter', 'owner', 'kind', 'createdAt'])
         && request.resource.data.voter == me()
         && request.resource.data.owner is string
@@ -888,7 +930,7 @@ service cloud.firestore {
         && id == me() + '_' + request.resource.data.owner
         && request.resource.data.kind in ['crush', 'legend']
         && cvOpenOf(request.resource.data.owner)
-        && canTalk(me(), request.resource.data.owner);
+        && canTalk(me(), request.resource.data.owner));
       allow update, delete: if false;
     }
 
@@ -900,8 +942,8 @@ service cloud.firestore {
     //  Only the two people can read it. Nobody can edit / delete it.
     // ----------------------------------------------------------------
     match /sparks/{pid} {
-      allow read: if signedIn() && (me() in resource.data.uids);
-      allow create: if signedIn()
+      allow read: if notFrozen() && (signedIn() && (me() in resource.data.uids));
+      allow create: if notFrozen() && (signedIn()
         && request.resource.data.keys().hasOnly(['uids', 'createdAt'])
         && request.resource.data.uids is list
         && request.resource.data.uids.size() == 2
@@ -911,16 +953,16 @@ service cloud.firestore {
         && exists(cvVotePath(request.resource.data.uids[0], request.resource.data.uids[1]))
         && exists(cvVotePath(request.resource.data.uids[1], request.resource.data.uids[0]))
         && get(cvVotePath(request.resource.data.uids[0], request.resource.data.uids[1])).data.kind == 'crush'
-        && get(cvVotePath(request.resource.data.uids[1], request.resource.data.uids[0])).data.kind == 'crush';
+        && get(cvVotePath(request.resource.data.uids[1], request.resource.data.uids[0])).data.kind == 'crush');
       allow update, delete: if false;
     }
 
     // the person asks the server to COUNT how many phone books contain his number (count only, no names)
     match /savedCountOpt/{uid} {
-      allow read, delete: if signedIn() && me() == uid;
-      allow create, update: if signedIn() && me() == uid
+      allow read, delete: if notFrozen() && (signedIn() && me() == uid);
+      allow create, update: if notFrozen() && (signedIn() && me() == uid
         && request.resource.data.keys().hasOnly(['on', 'updatedAt'])
-        && request.resource.data.get('on', false) is bool;
+        && request.resource.data.get('on', false) is bool);
     }
 
     // ================================================================
@@ -928,13 +970,13 @@ service cloud.firestore {
     //  r = last 20 reply buckets (0 fast / 1 ok / 2 slow), hidden = owner turned the badge off
     // ================================================================
     match /responseStats/{uid} {
-      allow read: if signedIn();
-      allow create, update: if signedIn() && me() == uid
+      allow read: if notFrozen() && (signedIn());
+      allow create, update: if notFrozen() && (signedIn() && me() == uid
         && request.resource.data.keys().hasOnly(['r', 'hidden', 'updatedAt'])
         && request.resource.data.get('r', []) is list
         && request.resource.data.get('r', []).size() <= 20
-        && request.resource.data.get('hidden', false) is bool;
-      allow delete: if signedIn() && me() == uid;
+        && request.resource.data.get('hidden', false) is bool);
+      allow delete: if notFrozen() && (signedIn() && me() == uid);
     }
 
     // ================================================================
@@ -943,14 +985,14 @@ service cloud.firestore {
     function albumData(aid) { return get(/databases/$(database)/documents/albums/$(aid)).data; }
 
     match /albums/{aid} {
-      allow read: if signedIn() && (me() in resource.data.members);
-      allow create: if signedIn()
+      allow read: if notFrozen() && (signedIn() && (me() in resource.data.members));
+      allow create: if notFrozen() && (signedIn()
         && request.resource.data.owner == me()
         && request.resource.data.members is list
         && (me() in request.resource.data.members)
         && request.resource.data.members.size() <= 10
-        && isStr(request.resource.data.title, 60);
-      allow update: if signedIn() && (
+        && isStr(request.resource.data.title, 60));
+      allow update: if notFrozen() && (signedIn() && (
         // owner: rename, invite, counters, cover (he stays inside, max 10)
         (resource.data.owner == me()
           && request.resource.data.owner == resource.data.owner
@@ -967,19 +1009,19 @@ service cloud.firestore {
           && !(me() in request.resource.data.members)
           && resource.data.members.toSet().difference(request.resource.data.members.toSet()) == [me()].toSet()
           && request.resource.data.members.toSet().difference(resource.data.members.toSet()).size() == 0)
-      );
-      allow delete: if signedIn() && resource.data.owner == me();
+      ));
+      allow delete: if notFrozen() && (signedIn() && resource.data.owner == me());
 
       match /clips/{cid} {
-        allow read: if signedIn() && ((me() in albumData(aid).members) || isAdmin());
-        allow create: if signedIn()
+        allow read: if notFrozen() && (signedIn() && ((me() in albumData(aid).members) || isAdmin()));
+        allow create: if notFrozen() && (signedIn()
           && (me() in albumData(aid).members)
           && request.resource.data.uid == me()
           && isStr(request.resource.data.mediaURL, 600)
-          && request.resource.data.mediaType in ['image', 'video'];
+          && request.resource.data.mediaType in ['image', 'video']);
         allow update: if false;
-        allow delete: if signedIn() && (isAdmin() || ((me() in albumData(aid).members)
-          && (resource.data.uid == me() || albumData(aid).owner == me())));
+        allow delete: if notFrozen() && (signedIn() && (isAdmin() || ((me() in albumData(aid).members)
+          && (resource.data.uid == me() || albumData(aid).owner == me()))));
       }
     }
 
@@ -987,31 +1029,31 @@ service cloud.firestore {
     //  PUBLIC Q&A PAGE  - the owner publishes an anonymous question together with his answer
     // ================================================================
     match /qa/{id} {
-      allow read: if true;
-      allow create: if signedIn()
+      allow read: if notFrozen() && (true);
+      allow create: if notFrozen() && (signedIn()
         && request.resource.data.uid == me()
         && request.resource.data.keys().hasOnly(['uid', 'name', 'logo', 'question', 'answer', 'createdAt'])
         && isStr(request.resource.data.question, 500)
         && isStr(request.resource.data.answer, 1000)
-        && request.resource.data.createdAt == request.time;
-      allow update: if signedIn() && resource.data.uid == me()
+        && request.resource.data.createdAt == request.time);
+      allow update: if notFrozen() && (signedIn() && resource.data.uid == me()
         && changed().hasOnly(['answer'])
-        && isStr(request.resource.data.answer, 1000);
-      allow delete: if signedIn() && (resource.data.uid == me() || isAdmin());
+        && isStr(request.resource.data.answer, 1000));
+      allow delete: if notFrozen() && (signedIn() && (resource.data.uid == me() || isAdmin()));
     }
 
     // ================================================================
     //  VOICE POSTS  (30-second audio posts; the app shows only the last 48 hours)
     // ================================================================
     match /voicePosts/{id} {
-      allow read: if signedIn();
-      allow create: if signedIn()
+      allow read: if notFrozen() && (signedIn());
+      allow create: if notFrozen() && (signedIn()
         && request.resource.data.uid == me()
         && isStr(request.resource.data.audioURL, 600)
         && request.resource.data.get('dur', 0) <= 35
-        && request.resource.data.get('caption', '').size() <= 120;
+        && request.resource.data.get('caption', '').size() <= 120);
       allow update: if false;
-      allow delete: if signedIn() && (resource.data.uid == me() || isAdmin());
+      allow delete: if notFrozen() && (signedIn() && (resource.data.uid == me() || isAdmin()));
     }
 
     // ================================================================
@@ -1019,12 +1061,12 @@ service cloud.firestore {
     //  Only the owner or a MUTUAL follower can open a moment. No listing.
     // ================================================================
     match /moments/{momentId} {
-      allow get: if signedIn()
+      allow get: if notFrozen() && (signedIn()
         && (resource == null
             || resource.data.uid == me()
-            || followsBoth(me(), resource.data.uid));
+            || followsBoth(me(), resource.data.uid)));
       allow list: if false;
-      allow create: if signedIn()
+      allow create: if notFrozen() && (signedIn()
         && request.resource.data.uid == me()
         && request.resource.data.day is string
         && request.resource.data.day.size() == 10
@@ -1037,9 +1079,9 @@ service cloud.firestore {
         && (!('logoURL' in request.resource.data) || isStr(request.resource.data.logoURL, 500))
         && (!('caption' in request.resource.data) || isStr(request.resource.data.caption, 80))
         && request.resource.data.late is bool
-        && request.resource.data.createdAt == request.time;
+        && request.resource.data.createdAt == request.time);
       allow update: if false;
-      allow delete: if signedIn() && resource.data.uid == me();
+      allow delete: if notFrozen() && (signedIn() && resource.data.uid == me());
     }
 
     // (momentPush/* is written only by the Cloudflare worker with the service account -> no client access)
@@ -1050,10 +1092,10 @@ service cloud.firestore {
     //  "lk" = geohash(4) + '|' + reversed time (lets the app query a map cell newest-first with NO composite index).
     // ================================================================
     match /localPosts/{postId} {
-      allow read: if signedIn();
-      allow create: if signedIn() && lmValid(request.resource.data);
+      allow read: if notFrozen() && (signedIn());
+      allow create: if notFrozen() && (signedIn() && lmValid(request.resource.data));
       allow update: if false;
-      allow delete: if signedIn() && (resource.data.uid == me() || isAdmin());
+      allow delete: if notFrozen() && (signedIn() && (resource.data.uid == me() || isAdmin()));
     }
     function lmValid(d) {
       return d.keys().hasAll(['uid','name','kind','text','lat','lng','gh','lk','expiresAt','createdAt'])
@@ -1087,8 +1129,8 @@ service cloud.firestore {
     //  "hidden" = owner does not want it shown on friends' Home strip.
     // ================================================================
     match /auras/{uid} {
-      allow read: if signedIn();
-      allow create, update: if signedIn() && me() == uid
+      allow read: if notFrozen() && (signedIn());
+      allow create, update: if notFrozen() && (signedIn() && me() == uid
         && request.resource.data.keys().hasOnly(['name', 'owner', 'c1', 'c2', 'traits', 'sub', 'av', 'hidden', 'updatedAt'])
         && request.resource.data.keys().hasAll(['name', 'c1', 'c2', 'traits', 'av'])
         && isStr(request.resource.data.name, 60)
@@ -1104,8 +1146,8 @@ service cloud.firestore {
         && request.resource.data.av.hairC is int && request.resource.data.av.hairC >= 0 && request.resource.data.av.hairC < 6
         && request.resource.data.av.acc is int && request.resource.data.av.acc >= 0 && request.resource.data.av.acc < 8
         && request.resource.data.av.top is string && request.resource.data.av.top.matches('^#[0-9a-fA-F]{6}$')
-        && request.resource.data.get('hidden', false) is bool;
-      allow delete: if signedIn() && (me() == uid || isAdmin());
+        && request.resource.data.get('hidden', false) is bool);
+      allow delete: if notFrozen() && (signedIn() && (me() == uid || isAdmin()));
     }
 
     // ================================================================
@@ -1114,8 +1156,8 @@ service cloud.firestore {
     //  questPoints/{uid}            points / streak (gamification only, written by the user's own phone)
     // ================================================================
     match /sideQuests/{questId} {
-      allow get, list: if signedIn() && resource.data.uid == me();
-      allow create: if signedIn()
+      allow get, list: if notFrozen() && (signedIn() && resource.data.uid == me());
+      allow create: if notFrozen() && (signedIn()
         && request.resource.data.uid == me()
         && request.resource.data.day is string && request.resource.data.day.size() == 10
         && questId == me() + '_' + request.resource.data.day
@@ -1126,44 +1168,170 @@ service cloud.firestore {
         && request.resource.data.videoURL is string && request.resource.data.videoURL.size() <= 500
         && request.resource.data.videoURL.matches('^https://res\\.cloudinary\\.com/.*')
         && (!('logoURL' in request.resource.data) || (request.resource.data.logoURL is string && request.resource.data.logoURL.size() <= 500))
-        && request.resource.data.createdAt == request.time;
+        && request.resource.data.createdAt == request.time);
       allow update: if false;
-      allow delete: if signedIn() && resource.data.uid == me();
+      allow delete: if notFrozen() && (signedIn() && resource.data.uid == me());
     }
     match /questPoints/{uid} {
-      allow read: if signedIn() && me() == uid;
-      allow create: if signedIn() && me() == uid
+      allow read: if notFrozen() && (signedIn() && me() == uid);
+      allow create: if notFrozen() && (signedIn() && me() == uid
         && request.resource.data.keys().hasOnly(['points','streak','done','lastDay','updatedAt'])
         && request.resource.data.points is int && request.resource.data.points >= 10 && request.resource.data.points <= 20
         && request.resource.data.streak == 1 && request.resource.data.done == 1
-        && request.resource.data.lastDay is string && request.resource.data.lastDay.size() == 10;
-      allow update: if signedIn() && me() == uid
+        && request.resource.data.lastDay is string && request.resource.data.lastDay.size() == 10);
+      allow update: if notFrozen() && (signedIn() && me() == uid
         && request.resource.data.keys().hasOnly(['points','streak','done','lastDay','updatedAt'])
         && request.resource.data.points is int
         && request.resource.data.points - resource.data.points >= 10 && request.resource.data.points - resource.data.points <= 20
         && request.resource.data.done == resource.data.done + 1
         && request.resource.data.lastDay is string && request.resource.data.lastDay.size() == 10
         && request.resource.data.lastDay != resource.data.lastDay
-        && request.resource.data.streak is int && request.resource.data.streak >= 1 && request.resource.data.streak <= resource.data.streak + 1;
+        && request.resource.data.streak is int && request.resource.data.streak >= 1 && request.resource.data.streak <= resource.data.streak + 1);
       allow delete: if false;
+    }
+
+    // ================================================================
+    //  COINS + DAILY STREAK + BOOST
+    //  coinWallets/{uid}      coins / streak / lastClaimDay / lastBoostId (owner reads)
+    //     - streak claim: +50 coins once per day (day changes at midnight Pakistan time)
+    //     - boost spend:  -300 (1 hour) or -500 (2 hours), only together with a boosts/{id} doc
+    //  coinWallets/{uid}/tx   history lines (streak + boost)
+    //  boosts/{id}            one doc per paid boost (create-only, owner reads)
+    // ================================================================
+    match /coinWallets/{uid} {
+      allow read: if notFrozen() && (signedIn() && me() == uid);
+      allow create: if notFrozen() && (signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['coins', 'streak', 'lastClaimDay', 'updatedAt'])
+        && request.resource.data.coins == 50
+        && request.resource.data.streak == 1
+        && request.resource.data.lastClaimDay == flToday());
+      allow update: if notFrozen() && (signedIn() && me() == uid && (
+        // (a) daily streak claim: +50
+        (request.resource.data.keys().hasOnly(['coins', 'streak', 'lastClaimDay', 'updatedAt'])
+          && request.resource.data.lastClaimDay == flToday()
+          && resource.data.lastClaimDay < flToday()
+          && request.resource.data.coins == resource.data.coins + 50
+          && request.resource.data.streak ==
+               (resource.data.lastClaimDay == flToday() - 1 ? resource.data.streak + 1 : 1))
+        ||
+        // (b) boost spend: -300 / -500, streak + day untouched, a real boosts/{lastBoostId} doc is created in the same write
+        (request.resource.data.keys().hasOnly(['coins', 'streak', 'lastClaimDay', 'updatedAt', 'lastBoostId'])
+          && changed().hasOnly(['coins', 'updatedAt', 'lastBoostId'])
+          && (request.resource.data.coins == resource.data.coins - 300
+              || request.resource.data.coins == resource.data.coins - 500)
+          && request.resource.data.coins >= 0
+          && request.resource.data.lastBoostId is string
+          && request.resource.data.updatedAt == request.time
+          && getAfter(/databases/$(database)/documents/boosts/$(request.resource.data.lastBoostId)).data.uid == me()
+          && getAfter(/databases/$(database)/documents/boosts/$(request.resource.data.lastBoostId)).data.cost
+               == resource.data.coins - request.resource.data.coins)
+      ));
+      allow delete: if false;
+
+      match /tx/{id} {
+        allow read: if notFrozen() && (signedIn() && me() == uid);
+        allow create: if notFrozen() && (signedIn() && me() == uid && (
+          (request.resource.data.keys().hasOnly(['type', 'amount', 'day', 'note', 'at'])
+            && request.resource.data.type == 'streak'
+            && request.resource.data.amount == 50
+            && request.resource.data.day == flToday()
+            && request.resource.data.at == request.time
+            && getAfter(/databases/$(database)/documents/coinWallets/$(uid)).data.lastClaimDay == request.resource.data.day)
+          ||
+          (request.resource.data.keys().hasOnly(['type', 'amount', 'note', 'at'])
+            && request.resource.data.type == 'boost'
+            && (request.resource.data.amount == -300 || request.resource.data.amount == -500)
+            && request.resource.data.at == request.time
+            && getAfter(/databases/$(database)/documents/coinWallets/$(uid)).data.coins
+                 == get(/databases/$(database)/documents/coinWallets/$(uid)).data.coins + request.resource.data.amount)
+        ));
+        allow update, delete: if false;
+      }
+    }
+
+    match /boosts/{id} {
+      allow read: if notFrozen() && (signedIn() && resource.data.uid == me());
+      allow create: if notFrozen() && (signedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'kind', 'targetId', 'hours', 'cost', 'until', 'at'])
+        && request.resource.data.uid == me()
+        && request.resource.data.kind in ['reel', 'post']
+        && request.resource.data.targetId is string
+        && ((request.resource.data.hours == 1 && request.resource.data.cost == 300)
+            || (request.resource.data.hours == 2 && request.resource.data.cost == 500))
+        && request.resource.data.at == request.time
+        && request.resource.data.until is number
+        && request.resource.data.until <= request.time.toMillis() + request.resource.data.hours * 3600000 + 600000
+        && request.resource.data.until >= request.time.toMillis() + request.resource.data.hours * 3600000 - 600000);
+      allow update, delete: if false;
+    }
+
+    // Blue tick requests ($2 one-time fee, paid by JazzCash / EasyPaisa / Bank in Pakistan or Payoneer abroad).
+    // The owner sends ONE request with the payment proof; only the admin can approve / reject it.
+    match /verifyRequests/{uid} {
+      allow get: if notFrozen() && (signedIn() && (me() == uid || isAdmin()));
+      allow list: if notFrozen() && (isAdmin());
+      allow create: if notFrozen() && (signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'channelId', 'followers', 'reason', 'status', 'region', 'method', 'priceUsd', 'amountPkr', 'rate', 'txnId', 'sender', 'proofURL', 'createdAt'])
+        && request.resource.data.keys().hasAll(['uid', 'reason', 'status', 'region', 'method', 'priceUsd', 'txnId', 'sender', 'createdAt'])
+        && request.resource.data.uid == me()
+        && request.resource.data.status == 'pending'
+        && request.resource.data.priceUsd == 2
+        && request.resource.data.region in ['pk', 'intl']
+        && request.resource.data.method in ['jazzcash', 'easypaisa', 'bank', 'payoneer']
+        && isStr(request.resource.data.reason, 400)
+        && isStr(request.resource.data.txnId, 80)
+        && isStr(request.resource.data.sender, 80)
+        && (!('proofURL' in request.resource.data) || (request.resource.data.proofURL is string
+              && request.resource.data.proofURL.size() <= 500
+              && request.resource.data.proofURL.matches('https://res\\.cloudinary\\.com/.*')))
+        && request.resource.data.createdAt == request.time);
+      allow update: if notFrozen() && (isAdmin());
+      // the owner may delete a REJECTED request to try again
+      allow delete: if notFrozen() && (isAdmin() || (signedIn() && me() == uid && resource.data.status == 'rejected'));
+    }
+
+    // Gupzy Premium requests ($3 per month x 1/2/3/6/12 months, paid by JazzCash / EasyPaisa / Bank in Pakistan or Payoneer abroad).
+    // The owner sends ONE request with the payment proof; only the admin can approve (gives +30 days) / reject it.
+    // To renew, the owner deletes the old (rejected or approved) request and sends a new one.
+    match /premiumRequests/{uid} {
+      allow get: if notFrozen() && (signedIn() && (me() == uid || isAdmin()));
+      allow list: if notFrozen() && (isAdmin());
+      allow create: if notFrozen() && (signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'channelId', 'status', 'region', 'method', 'priceUsd', 'amountPkr', 'rate', 'txnId', 'sender', 'proofURL', 'days', 'createdAt'])
+        && request.resource.data.keys().hasAll(['uid', 'status', 'region', 'method', 'priceUsd', 'days', 'txnId', 'sender', 'createdAt'])
+        && request.resource.data.uid == me()
+        && request.resource.data.status == 'pending'
+        // $3 per month (30 days): 1, 2, 3, 6 or 12 months
+        && request.resource.data.days in [30, 60, 90, 180, 360]
+        && request.resource.data.priceUsd * 10 == request.resource.data.days
+        && request.resource.data.region in ['pk', 'intl']
+        && request.resource.data.method in ['jazzcash', 'easypaisa', 'bank', 'payoneer']
+        && isStr(request.resource.data.txnId, 80)
+        && isStr(request.resource.data.sender, 80)
+        && (!('proofURL' in request.resource.data) || (request.resource.data.proofURL is string
+              && request.resource.data.proofURL.size() <= 500
+              && request.resource.data.proofURL.matches('https://res\\.cloudinary\\.com/.*')))
+        && request.resource.data.createdAt == request.time);
+      allow update: if notFrozen() && (isAdmin());
+      allow delete: if notFrozen() && (isAdmin() || (signedIn() && me() == uid && resource.data.status in ['rejected', 'approved']));
     }
 
     // ================================================================
     //  REVIEW: appeals (suspended channel owner -> admin) + permanent moderation record (admin only)
     // ================================================================
     match /appeals/{uid} {
-      allow get: if signedIn() && (me() == uid || isAdmin());
-      allow list: if isAdmin();
-      allow create: if signedIn() && me() == uid
+      allow get: if notFrozen() && (signedIn() && (me() == uid || isAdmin()));
+      allow list: if notFrozen() && (isAdmin());
+      allow create: if notFrozen() && (signedIn() && me() == uid
         && request.resource.data.uid == me()
         && request.resource.data.status == 'pending'
         && isStr(request.resource.data.message, 800)
-        && get(/databases/$(database)/documents/channels/$(me())).data.get('suspended', false) == true;
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+        && get(/databases/$(database)/documents/channels/$(me())).data.get('suspended', false) == true);
+      allow update: if notFrozen() && (isAdmin());
+      allow delete: if notFrozen() && (isAdmin());
     }
     match /moderationLog/{id} {
-      allow read, create: if isAdmin();
+      allow read, create: if notFrozen() && (isAdmin());
       allow update, delete: if false;
     }
 

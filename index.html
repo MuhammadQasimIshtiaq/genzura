@@ -1518,6 +1518,7 @@ html #bootLoading .boot-logo{position:relative;z-index:1;opacity:0;visibility:vi
       <div class="profile-tab" data-atab="wheel">🎲 Wheel</div>
       <div class="profile-tab" data-atab="bluetick">🔵 Blue Tick</div>
       <div class="profile-tab" data-atab="premium">👑 Premium</div>
+      <div class="profile-tab" data-atab="freeze">🧊 Freeze</div>
     </div>
     <div id="adminAppsContainer" style="padding:8px 0;"></div>
     <div id="adminCreatorsContainer" class="hidden" style="padding:8px 0;"></div>
@@ -1529,6 +1530,7 @@ html #bootLoading .boot-logo{position:relative;z-index:1;opacity:0;visibility:vi
     <div id="adminWheelContainer" class="hidden" style="padding:16px;"></div>
     <div id="adminBlueContainer" class="hidden" style="padding:12px 16px;"></div>
     <div id="adminPremiumContainer" class="hidden" style="padding:12px 16px;"></div>
+    <div id="adminFreezeContainer" class="hidden" style="padding:16px;"></div>
   </div>
 
   <!-- report a video -->
@@ -16837,5 +16839,86 @@ document.querySelectorAll('#adminTabs .profile-tab').forEach(function(tab){
 .pm-crown{z-index:7!important}
 </style>
 <style id="flAiTagFix">.dm-row .tx b .gzai-tag,.dm-row .tx .gzai-tag{display:inline-block!important;width:auto!important;max-width:none;overflow:visible!important;white-space:nowrap;font-size:10px!important;color:#fff!important;padding:1px 6px!important;margin-left:6px}</style>
+
+<!-- ===== ADMIN PANEL: Freeze tab (kill switch) ===== -->
+<script id="gzFreezeAdminJs">
+(function(){
+var box=document.getElementById('adminFreezeContainer'); if(!box) return;
+var busy=false;
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function ref(){ return firebase.firestore().collection('settings').doc('appFreeze'); }
+function T(m){ try{toast(m)}catch(e){} }
+async function render(){
+  var d={}; try{ var s=await ref().get(); d=s.exists?s.data():{}; }catch(e){}
+  var on=!!d.on;
+  box.innerHTML='<div style="border:1px solid var(--border);background:var(--surface);border-radius:14px;padding:16px">'
+   +'<div style="font-weight:800;font-size:16px">🧊 Freeze app &amp; chats</div>'
+   +'<div style="font-size:12.5px;color:var(--text-dim);margin:6px 0 12px;line-height:1.6">When ON, all users (web app and Gupchats) see a "Temporarily paused" screen and cannot use anything. Only you (admin) can still use the app. Turn OFF to unfreeze instantly.</div>'
+   +'<div style="font-weight:700;margin-bottom:12px">Status: <span style="color:'+(on?'#ef4444':'#16a34a')+'">'+(on?'FROZEN 🧊':'LIVE ✅')+'</span></div>'
+   +'<textarea id="gzFzMsg" maxlength="200" placeholder="Message shown to users (optional)" style="width:100%;min-height:64px;box-sizing:border-box;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font:inherit">'+esc(d.message||'')+'</textarea>'
+   +'<button id="gzFzBtn" style="margin-top:12px;width:100%;padding:14px;border:0;border-radius:12px;font-weight:800;font-size:15px;color:#fff;background:'+(on?'#16a34a':'#ef4444')+'">'+(on?'✅ Unfreeze app':'🧊 Freeze app now')+'</button></div>';
+  document.getElementById('gzFzBtn').onclick=async function(){
+    if(busy) return;
+    if(!on && !confirm('Freeze the whole app and all chats for every user?')) return;
+    busy=true;
+    try{
+      await ref().set({ on:!on, message:(document.getElementById('gzFzMsg').value||'').trim(), by:firebase.auth().currentUser.uid, at:firebase.firestore.FieldValue.serverTimestamp() });
+      T(!on?'App frozen 🧊':'App is live again ✅');
+    }catch(e){ T('Could not save'); }
+    busy=false; render();
+  };
+}
+document.querySelectorAll('#adminTabs .profile-tab').forEach(function(tab){
+  tab.addEventListener('click', function(){
+    var f=tab.dataset.atab==='freeze';
+    box.classList.toggle('hidden', !f);
+    if(f) render();
+  });
+});
+})();
+</script>
+<script id="gzFreezeGuard">
+(function(){
+var ADMIN='zLq96Q4K6iNJoUHDxrE0GwBL1vk1', unsub=null, ov=null, bar=null;
+function fsdb(){ try{ return firebase.firestore(); }catch(e){ return null; } }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]}); }
+function show(d, isAdmin){
+  if(!ov){
+    ov=document.createElement('div'); ov.id='gzFreezeOv';
+    ov.style.cssText='position:fixed;inset:0;z-index:2147483000;background:#0b0b10;color:#fff;display:none;align-items:center;justify-content:center;text-align:center;padding:28px;font-family:system-ui,sans-serif;touch-action:none;';
+    document.body.appendChild(ov);
+  }
+  if(!bar){
+    bar=document.createElement('div'); bar.id='gzFreezeBar';
+    bar.style.cssText='position:fixed;left:0;right:0;top:0;z-index:2147482000;background:#0ea5e9;color:#fff;font:700 12px system-ui,sans-serif;text-align:center;padding:5px 8px;display:none;pointer-events:none;';
+    bar.textContent='🧊 App is FROZEN for users (only you can use it)'; document.body.appendChild(bar);
+  }
+  var on = !!(d && d.on);
+  if(on && !isAdmin){
+    ov.innerHTML='<div style="max-width:340px"><div style="font-size:54px">🧊</div><div style="font-size:20px;font-weight:800;margin:10px 0 8px">Temporarily paused</div><div style="font-size:14px;line-height:1.6;opacity:.8">'+esc(d.message||'We are doing some quick maintenance. Please try again in a little while.')+'</div><button id="gzFreezeRetry" style="margin-top:18px;padding:10px 22px;border:0;border-radius:10px;background:#fff;color:#000;font-weight:700">Retry</button></div>';
+    ov.style.display='flex'; bar.style.display='none';
+    var b=document.getElementById('gzFreezeRetry'); if(b) b.onclick=function(){ location.reload(); };
+  } else {
+    ov.style.display='none'; bar.style.display = (on && isAdmin) ? 'block' : 'none';
+  }
+}
+var curUser=null, lastD=null;
+function listen(){
+  if(unsub) return;
+  var db=fsdb(); if(!db) return;
+  unsub = db.collection('settings').doc('appFreeze').onSnapshot(function(s){
+    lastD = s.exists ? s.data() : null;
+    show(lastD, !!(curUser && curUser.uid===ADMIN));
+  }, function(){ /* can't read -> never lock users out by mistake */ });
+}
+function boot(){
+  try{
+    listen();   /* works even before / without login (rules let everybody read this one doc) */
+    firebase.auth().onAuthStateChanged(function(u){ curUser=u; show(lastD, !!(u && u.uid===ADMIN)); });
+  }catch(e){ setTimeout(boot,500); }
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();
+</script>
 </body>
 </html>
