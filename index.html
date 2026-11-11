@@ -1762,7 +1762,6 @@ html #bootLoading .boot-logo{position:relative;z-index:1;opacity:0;visibility:vi
     </div>
   </div>
   <div id="toast"></div>
-  <div id="offBar" style="display:none;position:fixed;left:0;right:0;top:0;z-index:9000;background:#b45309;color:#fff;font-size:12.5px;font-weight:600;text-align:center;padding:calc(env(safe-area-inset-top,0px) + 4px) 10px 5px;">No internet — messages will be sent when you're back online</div>
 
   <input type="file" id="channelLogoInput" accept="image/*" class="hidden">
   <input type="file" id="channelBannerInput" accept="image/*" class="hidden">
@@ -1885,8 +1884,7 @@ const auth = firebase.auth();
 auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
 const db = firebase.firestore();
 try{ db.settings({experimentalAutoDetectLongPolling:true, merge:true}); }catch(e){}
-(function(){ function upd(){ var b=document.getElementById('offBar'); var adm=false; try{ adm=(typeof __isAdminDev==='function') && __isAdminDev(); }catch(e){} if(b) b.style.display = (!navigator.onLine && adm) ? 'block' : 'none'; } /* the orange 'No internet' bar is for the admin only */
-  window.addEventListener('online', upd); window.addEventListener('offline', upd); document.addEventListener('DOMContentLoaded', upd); setTimeout(upd, 500); })();
+
 /* offline mode: chats/feed are cached on the device; messages written offline are sent automatically when the internet returns */
 try{ db.enablePersistence({ synchronizeTabs:true }).catch(()=>{}); }catch(e){}
 const functionsInstance = firebase.functions();
@@ -9320,7 +9318,12 @@ async function aiSend(){
 }
 function aiClear(){gzConfirm('Clear this chat?\n\nYour messages with Gupzy AI are deleted from this phone.').then(ok=>{if(!ok)return;aiHist=[];aiSave();aiPaint(false);});}
 function chatCall(type){
-  if(MESH&&navigator.onLine===false&&peer&&!peer.group&&!peer.ai){ if(type==='video'){toast('Video needs internet. Voice call works offline when the person is nearby.');meshSheet();}else meshCallOrSheet(); return; }
+  var vid=type==='video';
+  /* person is nearby (Bluetooth / Wi-Fi) or we have no internet: call over the nearby link, works even if one side is offline */
+  if(MESH&&peer&&!peer.group&&!peer.ai){
+    var nr=false; try{ nr=!!MESH.isEnabled()&&!!MESH.nearby(mHash(peer.id)); }catch(e){}
+    if(nr||navigator.onLine===false){ if(meshCallNow(vid)) return; if(navigator.onLine===false){ meshSheet(); return; } }
+  }
   if(!peer||!window.__calls)return;
   if(peer.group){const c=chats[peer.id];if(!c){toast('Group not found');return;}window.__calls.groupStart(c,type==='video'?'video':'voice');return;}
   window.__calls.startCall({id:peer.id,name:peer.name,logo:peer.logo},type);
@@ -9805,7 +9808,7 @@ window.__blkRefreshB=function(){try{renderInbox();}catch(e){}};
 /* ================= OFFLINE MODE: messages + voice calls without internet (Android app only) =================
    Text is encrypted exactly like always, then handed to the phone's Bluetooth/Wi-Fi network (Google Nearby).
    Every Gupzy / Gupchats phone in range carries it onward (store-carry-forward). Calls: direct neighbours only.
-   Far away + no internet: SIM buttons (SMS / call) in the 📡 panel. Same protocol as Gupchats. */
+   Online and offline people can reach each other whenever they are within Bluetooth / Wi-Fi range. Far away + no internet: SIM buttons (SMS / call) in the 📡 panel (opened by the green line). */
 var MESH=window.AndroidMesh||null, meshPeerHash={};
 try{ if(MESH&&!MESH.isSupported()) MESH=null; }catch(e){ MESH=null; }
 function mHash(uid){ if(!MESH) return ''; return meshPeerHash[uid]||(meshPeerHash[uid]=String(MESH.hash(uid)||'')); }
@@ -9815,15 +9818,19 @@ function meshWipe(){ try{ if(MESH) MESH.disable(); }catch(e){} try{ Object.keys(
 function meshOffer(PR,mid,m,commit){
   if(!MESH||!me()||PR.group||PR.ai||!m||m.type!=='text'||!m.enc||m.enc!==1||!m.ct) return;
   var done=false; commit.then(function(){ done=true; },function(){});
-  var go=function(){
-    if(done) return;
+  var send=function(){
     try{ MESH.send(JSON.stringify({id:mid,f:mHash(me()),t:mHash(PR.id),ts:Date.now(),ty:'text',env:{enc:1,ct:m.ct,iv:m.iv,spk:m.spk,rpk:m.rpk}})); meshNote(); }catch(e){ console.warn(e); }
   };
+  var near=false; try{ near=!!MESH.isEnabled()&&!!MESH.nearby(mHash(PR.id)); }catch(e){}
+  /* receiver is right here (maybe without internet): hand it over Bluetooth / Wi-Fi now, the internet copy is dropped on their side when it arrives */
+  if(near){ send(); return; }
+  var go=function(){ if(done) return; send(); };
   if(navigator.onLine===false) go(); else setTimeout(go,4000);
 }
 var meshNoteAt=0;
 function meshNote(){
   if(Date.now()-meshNoteAt<8000) return; meshNoteAt=Date.now();
+  if(navigator.onLine!==false) return;   /* we have internet: nothing to tell */
   var on=false; try{ on=MESH.isEnabled(); }catch(e){}
   if(on) toast('📡 No internet: sent to nearby phones. It reaches them when they come in range.');
   else { toast('📡 No internet. Allow nearby chat to send this to people around you.'); meshAsk(true); }
@@ -9875,16 +9882,17 @@ function meshSheet(){
   var on=false,st={}; try{ on=MESH.isEnabled(); st=JSON.parse(MESH.status()||'{}'); }catch(e){}
   var near=(st.near||[]).length, pr=(peer&&!peer.group&&!peer.ai&&openId)?peer:null;
   var ph=''; try{ if(pr) ph=localStorage.getItem('gzph_'+pr.id)||''; }catch(e){}
-  var bs='width:100%;box-sizing:border-box;padding:13px;margin-top:8px;border:0;border-radius:12px;background:linear-gradient(90deg,#ec2b8e,#7b3ff2);color:#fff;font:700 15px system-ui,sans-serif;cursor:pointer';
+    var bs='width:100%;box-sizing:border-box;padding:13px;margin-top:8px;border:0;border-radius:12px;background:linear-gradient(90deg,#ec2b8e,#7b3ff2);color:#fff;font:700 15px system-ui,sans-serif;cursor:pointer';
   var bg=document.createElement('div'); bg.id='gzMeshSheet';
   bg.style.cssText='position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px';
   var h='<div style="background:#fff;color:#111;border-radius:18px;padding:20px 18px;width:100%;max-width:380px;max-height:90vh;overflow:auto;font:14px/1.45 system-ui,sans-serif;box-sizing:border-box">'
    +'<div style="font-weight:800;font-size:18px">📡 Chat without internet</div>'
-   +'<p style="color:#555;margin:8px 0">No internet? Text messages can still travel phone to phone over Bluetooth / Wi-Fi, even through other Gupzy / Gupchats users’ phones that carry them onward. Voice calls work when the other person is within about 30–100 m.</p>'
+   +'<p style="color:#555;margin:8px 0">No internet? Text messages can still travel phone to phone over Bluetooth / Wi-Fi, even through other Gupzy / Gupchats users’ phones that carry them onward. Voice calls work when the other person is within about 30–100 m. This works whether the other person has internet or not.</p>'
    +'<p'+(' style="margin:6px 0"')+'>'+near+' nearby phone'+(near===1?'':'s')+' connected · '+(st.queued||0)+' message(s) being carried</p>';
   if(pr){
     h+='<div style="margin-top:16px;font-weight:700">'+esc(pr.name||'this person')+'</div>'
      +'<button id="moCall" style="'+bs+'">📞 Offline voice call (nearby)</button>'
+     +'<button id="moVid" style="'+bs+'">🎥 Offline video call (nearby)</button>'
      +'<p style="color:#555;margin:14px 0 6px">Too far away? If you both have a SIM, use the phone network instead. Their number stays only on this phone.</p>'
      +'<input id="moNum" type="tel" inputmode="tel" placeholder="Their mobile number" value="'+esc(ph)+'" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid #ccd0d5;border-radius:10px;font-size:16px">'
      +'<div style="display:flex;gap:8px"><button id="moSms" style="'+bs+';flex:1">✉️ Send SMS</button><button id="moDial" style="'+bs+';flex:1">📱 Call</button></div>';
@@ -9895,18 +9903,20 @@ function meshSheet(){
   bg.querySelector('#moX').onclick=function(){ bg.remove(); };
   if(pr){
     bg.querySelector('#moCall').onclick=function(){ bg.remove(); meshCallNow(); };
+    bg.querySelector('#moVid').onclick=function(){ bg.remove(); meshCallNow(true); };
     var num=function(){ var v=(bg.querySelector('#moNum').value||'').trim(); if(!/^[+0-9 ()-]{5,20}$/.test(v)){ toast('Enter their mobile number'); return ''; } try{ localStorage.setItem('gzph_'+pr.id,v); }catch(e){} return v; };
     bg.querySelector('#moSms').onclick=function(){ var v=num(); if(!v) return; var t=(($('dmIn')&&$('dmIn').value)||'').trim()||('Hi, this is '+((currentChannel&&currentChannel.name)||'a friend')+' (sent by SMS because I have no internet)'); try{ MESH.sms(v,t); }catch(e){} };
     bg.querySelector('#moDial').onclick=function(){ var v=num(); if(!v) return; try{ MESH.dial(v); }catch(e){} };
   }
 }
-function meshCallNow(){
+function meshCallNow(vid){
   var ph=mHash(peer.id),near=false; try{ near=MESH.nearby(ph); }catch(e){}
   if(!near){ toast((peer.name||'This person')+' is not nearby right now'); return false; }
-  try{ var r=String(MESH.call(ph,peer.name||'',(currentChannel&&currentChannel.name)||'')); if(r==='ok') return true; toast(r==='off'?'Turn on Offline mode first':'Could not start the call'); }catch(e){}
+  if(vid&&typeof MESH.callVideo!=='function'){ toast('Update the app to use offline video calls'); return false; }
+  try{ var r=String(vid?MESH.callVideo(ph,peer.name||'',(currentChannel&&currentChannel.name)||''):MESH.call(ph,peer.name||'',(currentChannel&&currentChannel.name)||'')); if(r==='ok') return true; toast(r==='off'?'Turn on Offline mode first':'Could not start the call'); }catch(e){}
   return false;
 }
-function meshCallOrSheet(){ if(!meshCallNow()) meshSheet(); }
+function meshCallOrSheet(vid){ if(!meshCallNow(vid)) meshSheet(); }
 
 /* ---- top bar: shows when there is no internet or offline mode is on ---- */
 (function(){ var s=document.createElement('style'); s.textContent='#gzOff{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 6px);z-index:2000;display:none;padding:6px 14px;border-radius:16px;font:600 12px system-ui,sans-serif;color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.25);cursor:pointer;max-width:92%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#gzOff.on{background:#1f9d55}#gzOff.warn{background:#d97706}.mlab{font-size:10px;opacity:.7;margin-top:2px}'; document.head.appendChild(s); })();
@@ -10017,12 +10027,107 @@ function meshAssemble(parts,tm,store,have,touched,peers){
   });
   return n;
 }
+/* ===== GATEWAY: a phone WITH internet passes on the offline messages it is carrying for other people =====
+   Only the already end-to-end encrypted envelope (plus two short hashes) goes to Firestore meshRelay/{id}; the carrying phone cannot read it.
+   The real receiver (meshRelay where t == his hash) picks it up while he has internet, shows it in the chat and deletes the relay copy. Text, photos and voice messages (a photo / voice message is sent as ONE relay doc once all its parts have arrived). Calls cannot be relayed (they need instant two-way audio/video). */
+function gwUid(){ try{ return (me())||''; }catch(e){ return ''; } }
+function gwKey(s){ return 'gzgw_'+s+'_'+gwUid(); }
+function gwGet(s){ try{ return JSON.parse(localStorage.getItem(gwKey(s))||'{}')||{}; }catch(e){ return {}; } }
+function gwPut(s,o){ try{ var k=Object.keys(o); if(k.length>800){ k.sort(function(a,b){ return o[a]-o[b]; }).slice(0,k.length-600).forEach(function(x){ delete o[x]; }); } localStorage.setItem(gwKey(s),JSON.stringify(o)); }catch(e){} }
+var gwMedia={};   /* photo / voice message being collected: mid -> {h:header, p:{i:base64 part}, ids:[envelope ids], t:time} */
+function gwUpload(){
+  var U=gwUid();
+  if(!MESH||!U||navigator.onLine===false||typeof MESH.carried!=='function'||gwUpload.b) return;
+  var arr; try{ arr=JSON.parse(MESH.carried()||'[]'); }catch(e){ return; }
+  var now=Date.now(), mine=mHash(U), skip=[], hold=[], todo=[], mids=Object.keys(gwMedia);
+  mids.forEach(function(k){ if(now-gwMedia[k].t>20*60000) delete gwMedia[k]; });
+  (arr||[]).forEach(function(e){
+    if(!e||!e.id) return;
+    var id=String(e.id), v=e.env;
+    if(!v||e.f===mine||e.t===mine) { skip.push(id); return; }
+    if(e.ty==='text') { todo.push({k:'t',e:e}); return; }
+    if(e.ty==='part'){
+      if(!v.mid||typeof v.d!=='string'||!(v.i>=0)){ skip.push(id); return; }
+      var M=gwMedia[v.mid]||(gwMedia[v.mid]={p:{},ids:[],t:now}); M.p[v.i]=v.d; M.ids.push(id); hold.push(id); return;
+    }
+    if(e.ty==='image'||e.ty==='audio'){
+      if(!v.enc||!v.ct||!v.iv||!v.spk||!v.rpk||!(v.n>0&&v.n<=40)){ skip.push(id); return; }
+      var H=gwMedia[id]||(gwMedia[id]={p:{},ids:[],t:now}); H.h=e; H.ids.push(id); hold.push(id); return;
+    }
+    skip.push(id);
+  });
+  Object.keys(gwMedia).forEach(function(k){
+    var M=gwMedia[k]; if(!M.h) return;
+    var s='',i; for(i=0;i<M.h.env.n;i++){ if(typeof M.p[i]!=='string') return; s+=M.p[i]; }
+    todo.push({k:'m',e:M.h,d:s,ids:M.ids,mid:k});
+  });
+  if(skip.length){ try{ MESH.gwDone(JSON.stringify(skip)); }catch(e){} }
+  var doneNow={}; todo.forEach(function(x){ (x.ids||[]).forEach(function(i){ doneNow[i]=1; }); });
+  hold=hold.filter(function(i){ return !doneNow[i]; });
+  if(hold.length&&typeof MESH.gwHold==='function'){ try{ MESH.gwHold(JSON.stringify(hold)); }catch(e){} }
+  if(!todo.length) return;
+  todo=todo.slice(0,8);
+  gwUpload.b=1;
+  var ok=[], exp=firebase.firestore.Timestamp.fromMillis(Date.now()+3*86400000);
+  Promise.all(todo.map(function(x){
+    var e=x.e,v=e.env,env={enc:1,ct:String(v.ct),iv:String(v.iv),spk:String(v.spk),rpk:String(v.rpk)};
+    var doc={id:String(e.id),f:String(e.f),t:String(e.t),ts:Number(e.ts),ty:x.k==='t'?'text':String(e.ty),env:env,by:U,up:FV.serverTimestamp(),expireAt:exp};
+    if(x.k==='m'){ env.n=Number(v.n); doc.d=x.d; }
+    return db.collection('meshRelay').doc(String(e.id)).set(doc).then(function(){ ok.push(String(e.id)); if(x.ids) x.ids.forEach(function(i){ ok.push(i); }); if(x.mid) delete gwMedia[x.mid]; },
+      function(er){ if(er&&(er.code==='permission-denied'||er.code==='invalid-argument')){ ok.push(String(e.id)); if(x.ids) x.ids.forEach(function(i){ ok.push(i); }); if(x.mid) delete gwMedia[x.mid]; } });   /* denied = somebody else already passed it on */
+  })).then(function(){ if(ok.length){ try{ MESH.gwDone(JSON.stringify(ok)); }catch(e){} } },function(){}).then(function(){ gwUpload.b=0; });
+}
+var gwPend=[];
+function gwListen(){
+  var U=gwUid();
+  if(!U){ if(gwListen.off){ try{ gwListen.off(); }catch(e){} gwListen.off=null; gwListen.u=null; } return; }
+  if(!MESH||navigator.onLine===false||gwListen.u===U||gwListen.b||Date.now()-(gwListen.at||0)<30000) return;
+  gwListen.b=1; gwListen.at=Date.now();
+  var h=mHash(U);
+  var start=function(){
+    gwListen.b=0;
+    try{ if(gwListen.off) gwListen.off(); }catch(e){}
+    gwListen.u=U;
+    gwListen.off=db.collection('meshRelay').where('t','==',h).onSnapshot(function(s){
+      s.docChanges().forEach(function(c){ if(c.type!=='added') return; var d=c.doc.data(); if(d&&d.id&&!gwPend.some(function(x){ return x.id===d.id; })) gwPend.push(d); });
+      gwProcess();
+    },function(er){ gwListen.u=null; });
+  };
+  db.collection('meshHash').doc(h).set({uid:U}).then(start,start);   /* lets the server know which hash is mine (only I can read my relay mail) */
+}
+function gwProcess(){
+  var U=gwUid();
+  if(!gwPend.length||!U) return;
+  var peers=meshPeerMap(); if(!Object.keys(peers).length) return;   /* chats not loaded yet: keep it for the next round */
+  var seen=gwGet('in'), store=meshLoad(), have={}, touched={}, n=0, now=Date.now();
+  store.forEach(function(x){ have[x.id]=1; });
+  var list=gwPend; gwPend=[];
+  list.forEach(function(e){
+    try{
+      var v=e.env, med=(e.ty==='image'||e.ty==='audio')&&typeof e.d==='string'&&e.d.length>0, txt=e.ty==='text';
+      if(v&&v.enc&&v.ct&&v.iv&&v.spk&&v.rpk&&(txt||med)&&!seen[e.id]&&!have[e.id]&&peers[e.f]){
+        var puid=peers[e.f], cid=cidOf(me(),puid);
+        var row={id:String(e.id),cid:cid,from:puid,createdAt:Number(e.ts)||now,type:txt?'text':e.ty,enc:1,ct:String(v.ct),iv:String(v.iv),spk:String(v.spk),rpk:String(v.rpk),via:'mesh'};
+        if(med) row.url='data:application/octet-stream;base64,'+e.d;
+        store.push(row);
+        have[e.id]=1; touched[cid]=1; n++;
+      }
+      seen[e.id]=now;
+    }catch(x){}
+    db.collection('meshRelay').doc(String(e.id)).delete().catch(function(){});
+  });
+  gwPut('in',seen);
+  if(!n) return;
+  meshSave(store);
+  if(openId&&touched[openId]) meshRerender(); else toast('📡 New message received offline');
+}
+function gwTick(){ try{ gwListen(); gwProcess(); gwUpload(); }catch(e){ console.warn(e); } }
 function meshInit(){
   if(!MESH||!me()) return;
   try{ if(MESH.isEnabled()) MESH.enable(me()); }catch(e){}
   meshPull(); meshBanner(); setTimeout(meshAsk,2500);
   if(!meshInit.t){
-    meshInit.t=setInterval(function(){ meshPull(); meshBanner(); },5000);
+    meshInit.t=setInterval(function(){ meshPull(); meshBanner(); gwTick(); },5000); setTimeout(gwTick,3000); window.addEventListener('online',function(){ setTimeout(gwTick,1500); });
     window.addEventListener('online',meshBanner); window.addEventListener('offline',function(){ meshBanner(); meshAsk.done=0; setTimeout(function(){ meshAsk(false); },800); });
   }
 }
@@ -10240,91 +10345,6 @@ async function sendOrQueue(blob,type,extra,plainName){
 OB.load().then(()=>{if(navigator.onLine)setTimeout(()=>OB.flush(),5000);});
 window.addEventListener('online',()=>setTimeout(()=>OB.flush(),1500));
 setInterval(()=>{if(OB.items.length&&navigator.onLine)OB.flush();},45000);
-/* ===== NO INTERNET -> SIM FALLBACK (SMS / call through the SIM) =====
-   Only opens the phone's own SMS / dialer app (no SMS permission, nothing is sent silently).
-   The other person's number is typed once and kept ONLY on this phone (localStorage, never uploaded).
-   The SMS wording added by the app is always English. */
-(function(){
-  const KEY=id=>'gz_simnum_'+me()+'_'+id;
-  /* Android app: numbers are encrypted with a hardware-backed Keystore key (AndroidSimVault). Plain browser: kept in localStorage on this device only. */
-  const VAULT=()=>{try{return (window.AndroidSimVault&&typeof window.AndroidSimVault.put==='function')?window.AndroidSimVault:null;}catch(e){return null;}};
-  const getNum=id=>{
-    try{
-      const v=VAULT(), k=KEY(id);
-      if(v){ const n=v.get(k); if(n) return n;
-        const old=localStorage.getItem(k);                      /* move an older plain-text number into the vault */
-        if(old){ if(v.put(k,old)) localStorage.removeItem(k); return old; }
-        return ''; }
-      return localStorage.getItem(k)||'';
-    }catch(e){ return ''; }
-  };
-  const setNum=(id,n)=>{
-    try{
-      const v=VAULT(), k=KEY(id);
-      if(v && v.put(k,n)){ localStorage.removeItem(k); return; }
-      localStorage.setItem(k,n);
-    }catch(e){}
-  };
-  const clean=s=>String(s||'').replace(/[\s\-()]/g,'');
-  const valid=s=>/^\+?\d{7,15}$/.test(s);
-  function openExt(url){
-    try{ if(window.AndroidAuth&&window.AndroidAuth.openExternal){ window.AndroidAuth.openExternal(url); return; } }catch(e){}
-    location.href=url;
-  }
-  function smsBody(){
-    const t=(($('dmIn')&&$('dmIn').value)||'').trim();
-    const nm=(currentChannel&&currentChannel.name)||'';
-    return t ? t+'\n- '+nm+' (sent by SMS, no internet)'
-             : 'Hi, I have no internet right now. Please reply by SMS or call me. - '+nm+' (Gupzy)';
-  }
-  function askNum(pr,done){
-    const old=document.getElementById('gzSimAsk'); if(old) old.remove();
-    const ov=document.createElement('div'); ov.id='gzSimAsk';
-    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100001;display:flex;align-items:center;justify-content:center;padding:20px;';
-    ov.innerHTML='<div style="width:100%;max-width:340px;background:var(--surface);color:var(--text);border-radius:16px;padding:16px;">'
-      +'<div style="font-weight:800;font-size:16px;margin-bottom:4px">Phone number of '+String(pr.name||'this person').replace(/[<>&"]/g,'')+'</div>'
-      +'<div style="font-size:12.5px;opacity:.7;margin-bottom:10px">Saved encrypted on this phone, never uploaded. The SMS itself goes through your mobile network and is not end-to-end encrypted; it uses your SIM balance.</div>'
-      +'<input id="gzSimIn" type="tel" inputmode="tel" placeholder="+92 300 1234567" style="width:100%;box-sizing:border-box;padding:11px;border-radius:10px;border:1px solid var(--border,#444);background:var(--bg);color:var(--text);font-size:15px">'
-      +'<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end"><button id="gzSimNo" style="padding:9px 14px;border-radius:10px;border:0;background:#444;color:#fff">Cancel</button><button id="gzSimOk" style="padding:9px 16px;border-radius:10px;border:0;background:#ec2b8e;color:#fff;font-weight:700">Save</button></div></div>';
-    document.body.appendChild(ov);
-    const inp=ov.querySelector('#gzSimIn'); inp.value=getNum(pr.id); setTimeout(()=>{try{inp.focus();}catch(e){}},50);
-    ov.querySelector('#gzSimNo').onclick=()=>ov.remove();
-    ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
-    ov.querySelector('#gzSimOk').onclick=()=>{
-      const n=clean(inp.value);
-      if(!valid(n)){ toast('Enter a valid number, e.g. +923001234567'); return; }
-      setNum(pr.id,n); ov.remove(); if(done) done(n);
-    };
-  }
-  function go(kind){
-    const pr=peer; if(!pr||pr.group) return;
-    const n=getNum(pr.id);
-    if(!n){ askNum(pr,()=>go(kind)); return; }
-    if(kind==='sms'){ toast('Opening your SMS app…'); openExt('sms:'+n+'?body='+encodeURIComponent(smsBody())); }
-    else { const v=VAULT(); if(v && typeof v.call==='function'){ v.call(n); } else openExt('tel:'+n); }
-  }
-  const bar=document.createElement('div'); bar.id='gzSimBar';
-  bar.style.cssText='display:none;align-items:center;gap:8px;padding:7px 12px;background:var(--surface);border-top:1px solid var(--border,#333);font-size:12.5px;flex-wrap:wrap;';
-  bar.innerHTML='<span style="opacity:.75;flex:1;min-width:90px">No internet — reach them by SIM:</span>'
-    +'<button data-a="sms" style="padding:7px 12px;border-radius:18px;border:0;background:#34C759;color:#fff;font-weight:700">✉ SMS</button>'
-    +'<button data-a="call" style="padding:7px 12px;border-radius:18px;border:0;background:#0A84FF;color:#fff;font-weight:700">📞 Call</button>'
-    +'<button data-a="edit" aria-label="Change number" style="padding:7px 9px;border-radius:18px;border:0;background:#444;color:#fff">✎</button>';
-  const dmBar=$('dmBar'); if(!dmBar||!dmBar.parentNode) return;
-  dmBar.parentNode.insertBefore(bar,dmBar);
-  bar.addEventListener('click',e=>{
-    const b=e.target.closest('button[data-a]'); if(!b) return;
-    const a=b.getAttribute('data-a');
-    if(a==='edit'){ if(peer&&!peer.group) askNum(peer); return; }
-    go(a);
-  });
-  function refresh(){
-    let show=false;
-    try{ show=$('igChat').classList.contains('show') && !navigator.onLine && !!peer && !peer.group; }catch(e){}
-    bar.style.display=show?'flex':'none';
-  }
-  window.addEventListener('online',refresh); window.addEventListener('offline',refresh);
-  setInterval(refresh,1500); setTimeout(refresh,800);
-})();
 function toggleSend(){const has=$('dmIn').value.trim().length>0;$('dmSend').classList.toggle('hidden',!has);$('dmSch').classList.toggle('hidden',!has);$('dmMic').classList.toggle('hidden',has);}
 let tpT=0;$('dmIn').addEventListener('input',()=>{toggleSend();const n=Date.now();if(openId&&peer&&!peer.ai&&n-tpT>2500){tpT=n;db.collection('chats').doc(openId).set({...(peer.group?{}:{members:[me(),peer.id]}),typing:{[me()]:n}},{merge:true}).catch(()=>{});}});
 async function sendText(){if(peer&&peer.ai)return aiSend();const t=$('dmIn').value.trim();if(!t)return;$('dmIn').value='';toggleSend();try{await sendMsg({type:'text',text:t});}catch(e){toast('Send fail: '+e.message);}}

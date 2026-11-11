@@ -1336,6 +1336,44 @@ service cloud.firestore {
     }
 
     // ================================================================
+    //  OFFLINE GATEWAY (Gupzy / Gupchats): a phone with internet passes on end-to-end encrypted offline messages it carries.
+    //  meshHash/{myHash}  = "this hash is me" (write-only for clients; used by the rules below)
+    //  meshRelay/{msgId}  = encrypted text / photo / voice message + sender/receiver hash. Only the receiver can read / delete it. Nobody can edit it.
+    //  Optional: Firestore -> TTL policy on meshRelay.expireAt to auto-clean old ones.
+    // ================================================================
+    match /meshHash/{h} {
+      allow read: if false;
+      allow create: if notFrozen() && (signedIn() && h.matches('^[0-9a-f]{16}$')
+        && request.resource.data.keys().hasOnly(['uid']) && request.resource.data.uid == me());
+      allow update: if notFrozen() && (signedIn() && resource.data.uid == me()
+        && request.resource.data.keys().hasOnly(['uid']) && request.resource.data.uid == me());
+      allow delete: if false;
+    }
+    match /meshRelay/{id} {
+      allow read, delete: if notFrozen() && (signedIn()
+        && get(/databases/$(database)/documents/meshHash/$(resource.data.t)).data.uid == me());
+      allow create: if notFrozen() && (signedIn()
+        && request.resource.data.keys().hasOnly(['id', 'f', 't', 'ts', 'ty', 'env', 'd', 'by', 'up', 'expireAt'])
+        && id.size() <= 64 && request.resource.data.id == id
+        && request.resource.data.by == me()
+        && request.resource.data.f is string && request.resource.data.f.size() == 16
+        && request.resource.data.t is string && request.resource.data.t.size() == 16
+        && request.resource.data.ty in ['text', 'image', 'audio']
+        // text: no file part.  photo / voice message: the encrypted file as one base64 string (max about 260 KB) + number of parts
+        && ((request.resource.data.ty == 'text' && !('d' in request.resource.data))
+            || (request.resource.data.ty in ['image', 'audio'] && isStr(request.resource.data.get('d', ''), 270000)
+                && request.resource.data.env.get('n', 0) is number))
+        && request.resource.data.ts is number
+        && request.resource.data.ts > request.time.toMillis() - 259200000
+        && request.resource.data.ts < request.time.toMillis() + 21600000
+        && request.resource.data.env.keys().hasOnly(['enc', 'ct', 'iv', 'spk', 'rpk', 'n'])
+        && request.resource.data.env.enc == 1
+        && isStr(request.resource.data.env.ct, 12000) && isStr(request.resource.data.env.iv, 100)
+        && isStr(request.resource.data.env.spk, 400) && isStr(request.resource.data.env.rpk, 400));
+      allow update: if false;
+    }
+
+    // ================================================================
     //  EVERYTHING ELSE IS DENIED BY DEFAULT
     // ================================================================
   }
