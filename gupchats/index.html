@@ -387,7 +387,7 @@ html #boot img{position:relative;z-index:1;opacity:0;visibility:visible!importan
   <img class="wordmark logo" src="/gupchats/gupchats-logo.png" alt="GupChats">
   <p>Chat with your Gupzy friends — private and encrypted.</p>
   <button class="btn" id="loginBtn">Continue with Google</button>
-  <div id="loginErr" style="color:var(--red);margin-top:16px;font-size:14px"></div>
+  <div id="loginErr" style="color:var(--dim);margin:16px 24px 0;font-size:14px;text-align:center;line-height:1.4"></div>
 </div>
 
 <div id="nochannel" class="screen hidden" style="align-items:center;justify-content:center;text-align:center;padding:28px">
@@ -1015,18 +1015,27 @@ function updateHeaderSub(){
 function bindHeaderAv(){ var a=$('cAv'); if(!a||!cur) return; a.onclick=function(){ if(storyGroup(cur.peer.uid)) openStories(cur.peer.uid); }; }
 
 /* ---------------- auth ---------------- */
+function friendlyAuthMsg(x){
+  var c=(x&&x.code)||'', m=String((x&&x.message)||x||'');
+  if(c==='auth/network-request-failed' || /network|timeout|unreachable|offline|internet/i.test(m)) return 'No internet connection right now. Please check your connection and try again.';
+  if(c==='auth/popup-closed-by-user' || c==='auth/cancelled-popup-request' || c==='auth/user-cancelled') return '';
+  if(c==='auth/too-many-requests') return 'Too many attempts. Please wait a little and try again.';
+  if(c==='auth/user-disabled') return 'This account is not available.';
+  return 'Could not sign in right now. Please try again.';
+}
 function loginErr(m){ $('loginErr').textContent = m || ''; $('loginBtn').disabled=false; }
+function loginFail(x){ loginErr(friendlyAuthMsg(x)); }
 $('loginBtn').onclick = function(){
   $('loginBtn').disabled=true; loginErr('');
   if(window.AndroidAuth && typeof window.AndroidAuth.signIn==='function'){
     window.__nativeGoogleSignIn = {
-      onToken: function(t){ auth.signInWithCredential(firebase.auth.GoogleAuthProvider.credential(t)).catch(function(e){ loginErr(e.message); }); },
-      onFailed: function(code,msg){ loginErr(code==='cancelled' ? '' : (msg||'Sign-in failed')); }
+      onToken: function(t){ auth.signInWithCredential(firebase.auth.GoogleAuthProvider.credential(t)).catch(loginFail); },
+      onFailed: function(code,msg){ loginErr(code==='cancelled' ? '' : friendlyAuthMsg({message:msg})); }
     };
-    try{ window.AndroidAuth.signIn(); }catch(e){ loginErr(String(e)); }
+    try{ window.AndroidAuth.signIn(); }catch(e){ loginFail(e); }
   }else{
     var p=new firebase.auth.GoogleAuthProvider(); p.setCustomParameters({prompt:'select_account'});
-    auth.signInWithPopup(p).catch(function(e){ loginErr(e.message); });
+    auth.signInWithPopup(p).catch(loginFail);
   }
 };
 async function signOut(){
@@ -1110,8 +1119,7 @@ function renderStrip(){
   var fset={}; friends.forEach(function(f){ fset[f.uid]=1; });
   Object.keys(storyBy).forEach(function(u){ var g=storyBy[u]; if(u===me.uid||fset[u]||!g||!g.length) return; var l=g[g.length-1]; withS.push({uid:u,name:l.channelName||'User',logo:l.channelLogo||null}); });
   withS.sort(function(a,b){ var ua=hasUnseen(storyGroup(a.uid)), ub=hasUnseen(storyGroup(b.uid)); return ua===ub?0:(ua?-1:1); });
-  var rest=friends.filter(function(f){ return !storyGroup(f.uid); });
-  html+=withS.concat(rest).slice(0,40).map(function(f){ return '<div class="st" data-st="'+esc(f.uid)+'">'+avw(f.uid,f.logo,f.name)+'<div class="n">'+esc(f.name.split(' ')[0])+'</div></div>'; }).join('');
+  html+=withS.slice(0,40).map(function(f){ return '<div class="st" data-st="'+esc(f.uid)+'">'+avw(f.uid,f.logo,f.name)+'<div class="n">'+esc(f.name.split(' ')[0])+'</div></div>'; }).join('');
   s.innerHTML=html;
   $('stMe').onclick=function(){ if(mine) openStories(me.uid); else openStoryComposer(); };
   $('stPlus').onclick=function(e){ e.stopPropagation(); openStoryComposer(); };
