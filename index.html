@@ -8010,7 +8010,7 @@ if('serviceWorker' in navigator){
 #ggCall .ggbar button{width:56px;height:56px;border-radius:50%;border:0;font-size:24px;background:rgba(255,255,255,.2);color:#fff;cursor:pointer;padding:0}
 #ggCall .ggbar button.on{background:#fff;color:#000}
 #ggCall .ggbar button.end{background:#e5362b;color:#fff}
-#ggPill{position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);left:50%;transform:translateX(-50%);z-index:6003;background:#1fb855;color:#fff;font-weight:700;font-size:14px;padding:8px 16px;border-radius:999px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35);white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
+#ggPill{position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);left:50%;transform:translateX(-50%);z-index:6003;background:#1fb855;color:#fff;font-weight:700;font-size:14px;padding:8px 16px;border-radius:999px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35);white-space:nowrap;max-width:94vw;white-space:normal;text-align:center;overflow:hidden;text-overflow:ellipsis}
 #ggRing{position:fixed;inset:0;z-index:6004;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center}
 #ggRing .rbx{background:var(--surface,#1c1c24);color:var(--text,#fff);border-radius:20px;padding:22px;width:min(88%,360px);text-align:center}
 #ggRing .rb2{display:flex;gap:10px;margin-top:16px}
@@ -9927,11 +9927,12 @@ function meshCallOrSheet(vid){ if(!meshCallNow(vid)) meshSheet(); }
 (function(){ var s=document.createElement('style'); s.textContent='#gzOff{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 78px);max-width:92vw;z-index:2000;display:none;padding:6px 14px;border-radius:16px;font:600 12px system-ui,sans-serif;color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.25);cursor:pointer;max-width:92%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#gzOff.on{background:#1f9d55}#gzOff.warn{background:#d97706}.mlab{font-size:10px;opacity:.7;margin-top:2px}'; document.head.appendChild(s); })();
 function meshBanner(){
   if(!MESH||!meshUid()) return;
-  var el=document.getElementById('gzOff'); if(!el){ el=document.createElement('div'); el.id='gzOff'; el.onclick=function(){ var on=false; try{ on=MESH.isEnabled(); }catch(e){} if(on) meshSheet(); else meshAsk(true); }; document.body.appendChild(el); }
+  var el=document.getElementById('gzOff'); if(!el){ el=document.createElement('div'); el.id='gzOff'; el.onclick=function(){ var on=false; try{ on=MESH.isEnabled(); }catch(e){} if(on){ try{ MESH.enableAll(meshUid()); }catch(e){} meshSheet(); } else meshAsk(true); }; document.body.appendChild(el); }
   var on=false,st={}; try{ on=MESH.isEnabled(); st=JSON.parse(MESH.status()||'{}'); }catch(e){}
   if(navigator.onLine!==false){ el.style.display='none'; return; }
   var near=(st.near||[]).length;
-  var d=st.diag||{}, x='';
+  var d=st.diag||{}, x='', rd={}; try{ rd=JSON.parse(MESH.radios()||'{}'); }catch(e){}
+  if(on&&!near){ var off=[]; if(rd.wifi===false) off.push('Wi-Fi'); if(rd.bt===false) off.push('Bluetooth'); if(rd.loc===false) off.push('Location'); if(off.length){ d={err:'Turn ON '+off.join(' + ')+' (tap)'}; } }
   if(on&&!near){ x = !st.running ? ' · starting…' : (d.err ? ' · '+d.err : (!d.adv||!d.disc ? ' · starting…' : (d.found ? ' · found '+d.found+', connecting…' : ' · searching…'))); }
   el.textContent=on?('📡 No internet · '+near+' nearby phone'+(near===1?'':'s')+x):'📡 No internet · tap to chat with people nearby';
   el.className=on?'on':'warn'; el.style.display='block';
