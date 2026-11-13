@@ -8951,6 +8951,7 @@ function listen(){
       if(!firstLoad&&c.lastFrom&&c.lastFrom!==me()&&openId!==c.id&&(!old||ts(old.lastAt)!==ts(c.lastAt)))toast(((c.nicks&&c.nicks[peerOf(c).id])||window.__gzLN(peerOf(c).id,peerOf(c).name))+': '+prev(c).slice(0,40));
     });
     firstLoad=false;dmBadge();
+    try{ if(navigator.onLine!==false) Object.keys(chats).forEach(k=>{ const x=chats[k]; if(x&&!x.isGroup) (x.members||[]).forEach(u=>{ if(u!==me()) E2E.canEncrypt(u).catch(()=>{}); }); }); }catch(e){}   /* save every contact's key on the phone while online, so offline sending works */
     if($('igDm').classList.contains('show'))renderInbox();
     if(openId&&chats[openId]&&unreadN(chats[openId])>0)markRead();
     if(openId)renderSeen();
@@ -9369,6 +9370,7 @@ async function markRead(){
 }
 function audUrl(u){return u&&u.includes('/video/upload/')?u.replace('/video/upload/','/video/upload/f_mp3/').replace(/\.[a-z0-9]+$/i,'.mp3'):u;}
 function fmtD(s){s=Math.round(s||0);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
+window.addEventListener('online',()=>{try{if(openId)renderMsgs();}catch(e){}});window.addEventListener('offline',()=>{try{if(openId)renderMsgs();}catch(e){}});
 function renderMsgs(){
   const box=$('dmMsgs');const near=box.scrollHeight-box.scrollTop-box.clientHeight<140;
   let last=0;const segs=[];
@@ -9380,17 +9382,17 @@ function renderMsgs(){
     const q=((peer&&peer.group&&m.from!==me())?`<div class="dm-sn">${esc(m.fromName||'User')}</div>`:'')+(m.reply?`<div class="dm-q">${esc(m.reply.text)}</div>`:'');const rxs=m.reactions?Object.values(m.reactions):[];const rx=rxs.length?`<span class="dm-rx">${[...new Set(rxs)].join('')}${rxs.length>1?' '+rxs.length:''}</span>`:'';
     const eu=m.enc&&m.type!=='text'?encUrl(m):null;
     if(m.enc&&m.type!=='text'&&!eu)h+=`<div class="dm-m ${mine?'me':''}" data-m="${m.id}">${q}${encWait(m)}${rx}</div>`;
-    else if(m.type==='video')h+=`<div class="dm-m img ${mine?'me':''}" data-m="${m.id}"><video src="${esc(eu||m.url)}" controls playsinline preload="metadata" style="display:block;width:100%;max-width:260px;border-radius:12px"></video>${rx}</div>`;
-    else if(m.type==='image')h+=`<div class="dm-m img ${mine?'me':''}" data-m="${m.id}"><img src="${esc(eu||m.url)}" data-big alt="">${m.via==='mesh'?'<div class="mlab" style="padding:2px 8px">📡 offline</div>':''}${rx}</div>`;
-    else if(m.type==='audio')h+=`<div class="dm-m ${mine?'me':''}" data-m="${m.id}"><div class="dm-aud" data-u="${esc(eu||audUrl(m.url))}"><button data-ap>${ic.play}</button><div class="bar"><i></i></div><span>${fmtD(eu&&m._o&&m._o.m?m._o.m.dur:m.dur)}</span></div>${m.via==='mesh'?'<div class="mlab" style="padding:2px 8px">📡 offline</div>':''}${rx}</div>`;
-    else h+=`<div class="dm-m ${mine?'me':''}" data-m="${m.id}"${m.postId?` data-post="${esc(m.postId)}"`:''}>${q}${esc(m.text)}${m.via==='mesh'?'<div class="mlab">📡 offline</div>':''}${m._pending&&mine?' <span style="opacity:.65;font-size:11px">🕓</span>':''}${rx}</div>`;
+    else if(m.type==='video')h+=`<div class="dm-m img ${mine?'me':''}" data-m="${m.id}"><video src="${esc(eu||m.url)}" controls playsinline preload="metadata" style="display:block;width:100%;max-width:260px;border-radius:12px"></video>${m._pending&&mine&&navigator.onLine!==false?' <span style="opacity:.65;font-size:11px">🕓</span>':''}${rx}</div>`;
+    else if(m.type==='image')h+=`<div class="dm-m img ${mine?'me':''}" data-m="${m.id}"><img src="${esc(eu||m.url)}" data-big alt="">${m.via==='mesh'?'<div class="mlab" style="padding:2px 8px">📡 offline</div>':''}${m._pending&&mine&&navigator.onLine!==false?' <span style="opacity:.65;font-size:11px">🕓</span>':''}${rx}</div>`;
+    else if(m.type==='audio')h+=`<div class="dm-m ${mine?'me':''}" data-m="${m.id}"><div class="dm-aud" data-u="${esc(eu||audUrl(m.url))}"><button data-ap>${ic.play}</button><div class="bar"><i></i></div><span>${fmtD(eu&&m._o&&m._o.m?m._o.m.dur:m.dur)}</span></div>${m.via==='mesh'?'<div class="mlab" style="padding:2px 8px">📡 offline</div>':''}${m._pending&&mine&&navigator.onLine!==false?' <span style="opacity:.65;font-size:11px">🕓</span>':''}${rx}</div>`;
+    else h+=`<div class="dm-m ${mine?'me':''}" data-m="${m.id}"${m.postId?` data-post="${esc(m.postId)}"`:''}>${q}${esc(m.text)}${m.via==='mesh'?'<div class="mlab">📡 offline</div>':''}${m._pending&&mine&&navigator.onLine!==false?' <span style="opacity:.65;font-size:11px">🕓</span>':''}${rx}</div>`;
   segs.push(h);
   });
   let h='';
   OB.mine(openId).forEach(j=>{
-    const clk=' <span style="opacity:.7;font-size:11px">🕓 waiting for internet</span>';
-    if(j.type==='image')h+=`<div class="dm-m img me" data-ob="${j.id}"><img src="${OB.url(j)}" alt="" style="opacity:.7"><div style="padding:3px 8px;font-size:11px;opacity:.8">🕓</div></div>`;
-    else if(j.type==='video')h+=`<div class="dm-m img me" data-ob="${j.id}"><video src="${OB.url(j)}" muted playsinline preload="metadata" style="display:block;width:100%;max-width:260px;border-radius:12px;opacity:.7"></video><div style="padding:3px 8px;font-size:11px;opacity:.8">🕓</div></div>`;
+    const clk=navigator.onLine===false?'':' <span style="opacity:.7;font-size:11px">🕓 waiting for internet</span>';
+    if(j.type==='image')h+=`<div class="dm-m img me" data-ob="${j.id}"><img src="${OB.url(j)}" alt="" style="opacity:.7">${navigator.onLine===false?'':'<div style="padding:3px 8px;font-size:11px;opacity:.8">🕓</div>'}</div>`;
+    else if(j.type==='video')h+=`<div class="dm-m img me" data-ob="${j.id}"><video src="${OB.url(j)}" muted playsinline preload="metadata" style="display:block;width:100%;max-width:260px;border-radius:12px;opacity:.7"></video>${navigator.onLine===false?'':'<div style="padding:3px 8px;font-size:11px;opacity:.8">🕓</div>'}</div>`;
     else h+=`<div class="dm-m me" data-ob="${j.id}">🎤 Voice message${clk}</div>`;
   });
   const seenH='<div class="dm-seen hidden" id="dmSeen">Seen</div>';
@@ -9648,13 +9650,16 @@ const E2E=(()=>{
       /* answer from the local copy right away (instant), then refresh from the server in the background */
       let lc=null; try{ const d0=await db.collection('userKeys').doc(uid).get({source:'cache'}); lc=d0.exists?d0.data().pub:null; }catch(e0){}
       if(lc){
-        ppCache.set(uid,{p:lc,t:Date.now()-240000});
-        db.collection('userKeys').doc(uid).get().then(d=>{ const np=d.exists?d.data().pub:null; if(np){ ppCache.set(uid,{p:np,t:Date.now()}); if(np!==lc){ cache.forEach((v,k)=>{ if(v&&v.t===FAIL) cache.delete(k); }); } } }).catch(()=>{});
+        savePP(uid,lc);ppCache.set(uid,{p:lc,t:Date.now()-240000});
+        db.collection('userKeys').doc(uid).get().then(d=>{ const np=d.exists?d.data().pub:null; if(np){ savePP(uid,np);ppCache.set(uid,{p:np,t:Date.now()}); if(np!==lc){ cache.forEach((v,k)=>{ if(v&&v.t===FAIL) cache.delete(k); }); } } }).catch(()=>{});
         return lc;
       }
-      const d=await db.collection('userKeys').doc(uid).get();const p=d.exists?d.data().pub:null;if(p)ppCache.set(uid,{p,t:Date.now()});return p;}
-    catch(e){if(c)return c.p;try{const l=(await idbGet('p_'+uid))||[];return l.length?l[l.length-1]:null;}catch(e2){return null;}}
+      const d=await Promise.race([db.collection('userKeys').doc(uid).get(),new Promise((_,rj)=>setTimeout(()=>rj(new Error('slow')),navigator.onLine===false?300:4000))]);const p=d.exists?d.data().pub:null;if(p){ppCache.set(uid,{p,t:Date.now()});savePP(uid,p);return p;}}
+    catch(e){}
+    if(c)return c.p;try{const l=(await idbGet('p_'+uid))||[];if(l.length){const p=l[l.length-1];ppCache.set(uid,{p,t:Date.now()-240000});return p;}}catch(e2){}
+    return null;
   }
+  async function savePP(uid,p){try{const l=(await idbGet('p_'+uid))||[];if(!l.includes(p))await idbSet('p_'+uid,[...l,p]);}catch(e){}}
   /* every public key ever published by the peer (only the peer can write their own userKeys doc) */
   async function knownPubs(uid){
     const cur=await peerPub(uid);let list=(await idbGet('p_'+uid))||[];

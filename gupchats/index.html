@@ -842,13 +842,22 @@ document.addEventListener('click',function(e){
   bg.querySelector('#lkX').onclick=function(){ bg.remove(); };
   bg.querySelector('#lkPin').onclick=function(){ bg.remove(); unlockMore(why); };
 });
+async function savePeerPub(uid,p){
+  try{ var l=(await idbGet('p_'+uid))||[]; if(l.indexOf(p)<0) await idbSet('p_'+uid,l.concat([p])); }catch(e){}
+}
 async function peerPub(uid){
   var c=ppCache.get(uid); if(c && Date.now()-c.t<300000) return c.p;
-  var d=await db.collection('userKeys').doc(uid).get(OFFSRC());
-  var p = d.exists ? d.data().pub : null;
-  if(p) ppCache.set(uid,{p:p,t:Date.now()});
-  return p;
+  var p=null, off=(navigator.onLine===false);
+  try{
+    var d=await Promise.race([ db.collection('userKeys').doc(uid).get(OFFSRC()), new Promise(function(_,rj){ setTimeout(function(){ rj(new Error('slow')); }, off?300:4000); }) ]);
+    p = d.exists ? d.data().pub : null;
+  }catch(e){ p=null; }
+  if(p){ ppCache.set(uid,{p:p,t:Date.now()}); savePeerPub(uid,p); return p; }
+  /* no server / no Firestore copy (offline): use the peer key saved on this phone */
+  try{ var l=(await idbGet('p_'+uid))||[]; if(l.length){ p=l[l.length-1]; ppCache.set(uid,{p:p,t:Date.now()-240000}); return p; } }catch(e){}
+  return null;
 }
+function warmPeerKeys(){ try{ if(navigator.onLine===false) return; Object.keys(chats||{}).forEach(function(k){ var x=chats[k]; (x.members||[]).forEach(function(u){ if(u!==me.uid) peerPub(u).catch(function(){}); }); }); }catch(e){} }
 /* every public key the peer ever published (a sender key must be one of them) */
 async function knownPubs(uid, fresh){
   if(fresh) ppCache.delete(uid);
@@ -1472,7 +1481,7 @@ function startChats(){
   unsubChats = db.collection('chats').where('members','array-contains',me.uid).limit(200).onSnapshot(function(snap){
     chats={}; snap.docs.forEach(function(d){ var x=d.data(); x.id=d.id; if(x.isGroup){ if((x.members||[]).indexOf(me.uid)>=0) chats[d.id]=x; return; } if(!/^[^_]+_[^_]+$/.test(d.id) || (x.members||[]).length!==2) return; chats[d.id]=x; });   /* same inbox as Gupzy: 1-to-1 chats + groups */
     if(cur && cur.group){ if(!chats[cur.id]){ if(!cur.leaving){ closeChat(); toast('You are no longer in this group'); } } else groupLive(); }
-    renderChats(); syncPresenceWatch();
+    renderChats(); syncPresenceWatch(); warmPeerKeys();
     var anyUnread=Object.keys(chats).some(function(k){ return ((chats[k].unread||{})[me.uid]||0)>0; });
     $('d0').classList.toggle('hidden', !anyUnread);
   }, function(e){ console.error(e); toast('Chats error: '+e.message); });
@@ -1780,7 +1789,7 @@ function goneMsg(chatId, m){
 }
 /* one Gupzy message document -> something to draw */
 async function parseMsg(m, peerUid, chatId){
-  var base={ mine:m.from===me.uid, at:ms(m.createdAt), id:m.id, rx:m.reactions||null, via:m.via||'' };
+  var base={ mine:m.from===me.uid, at:ms(m.createdAt), id:m.id, rx:m.reactions||null, via:m.via||'', pend:!!m._pend };
   var isG = !!(cur && cur.group && cur.id===chatId);
   if(m.type==='sys') return isG ? Object.assign(base,{kind:'sys', text:String(m.text||'')}) : null;
   if(isG && !base.mine){ var gi=(chats[chatId]&&chats[chatId].info&&chats[chatId].info[m.from])||{}; base.sn=String(gi.name||m.fromName||'User'); }
@@ -1801,13 +1810,14 @@ async function renderMsgs(snap, tok){
   if(playingAudio() && !$('msgs')._seg){ setTimeout(function(){ if(tok===msgTok) renderMsgs(snap,tok); }, 1500); return; }
   var peer=cur && cur.peer; if(!peer) return; var chatId=cur.id;
   var clr0=Number((((chats[chatId]||{}).clearedAt)||{})[me.uid])||0;
-  var docs=snap.docs.map(function(d){ var x=d.data({serverTimestamps:'estimate'}); x.id=d.id; return x; }).filter(function(x){ return !goneMsg(chatId,x) && !(clr0 && ms(x.createdAt)<=clr0); });
+  var docs=snap.docs.map(function(d){ var x=d.data({serverTimestamps:'estimate'}); x.id=d.id; x._pend=!!(d.metadata&&d.metadata.hasPendingWrites); return x; }).filter(function(x){ return !goneMsg(chatId,x) && !(clr0 && ms(x.createdAt)<=clr0); });
   try{ docs=meshMerge(chatId, docs, clr0); }catch(e){ console.warn(e); }   /* + messages that came over Bluetooth/Wi-Fi (offline mode) */
   var out=(await Promise.all(docs.map(function(x){ return parseMsg(x, peer.uid, chatId).catch(function(){ return { mine:x.from===me.uid, at:ms(x.createdAt), kind:'lock' }; }); }))).filter(Boolean);
   if(tok!==msgTok || !cur) return;
   if(!cur.group) msgCacheSave(chatId,out);
   paintOut(out,tok,peer,false);
 }
+function ckHtml(m,fromCache){ return (m.mine && m.pend && !fromCache && navigator.onLine!==false) ? '<span class="clk" style="opacity:.75;font-size:11px;margin-left:6px" title="Not delivered yet">\uD83D\uDD53</span>' : ''; }   /* clock = still waiting to reach the server (same as Gupzy) */
 function paintOut(out,tok,peer,fromCache){
   if(tok!==msgTok || !cur) return;
   var html='', lastDay='', box=$('msgs'), toLoad=[];
@@ -1821,8 +1831,8 @@ function paintOut(out,tok,peer,fromCache){
     var sn=m.sn?'<div class="sn">'+esc(m.sn)+'</div>':'';
     if(m.kind==='lock'){ if(m.mine&&m.id){ MSGTXT[m.id]={t:'',n:'You',mine:true,rx:null}; } html+='<div class="b '+side+' lock" data-why="'+esc(m.why||'')+'"'+(m.mine&&m.id?' data-mid="'+esc(m.id)+'"':'')+'>'+sn+'🔒 Can\u2019t read yet \u00b7 tap to unlock</div>'; return; }
     if(m.kind==='post'){ html+='<div class="b '+side+' post" data-post="'+esc(m.postId)+'">'+sn+'<div class="pth" data-pid="'+esc(m.postId)+'"><div class="ph">\uD83D\uDCCE</div></div><div class="pt">'+esc(m.text)+'</div><div class="ps">Tap to view post</div></div>'; return; }
-    if(m.media){ mediaSpec.set(m.media.u,m.media); MSGTXT[m.id]={t:(m.media.kind==='img'?'📷 Photo':m.media.kind==='vid'?'🎥 Video':'🎤 Voice message'),n:m.mine?'You':(m.sn||peer.name||''),mine:m.mine,rx:m.rx}; html+='<div class="b '+side+' media" data-mid="'+esc(m.id)+'">'+sn+mediaInner(m.media)+(m.via==='mesh'?'<div class="mlab" style="padding:2px 8px">📡 offline</div>':'')+rxHtml(m)+'</div>'; if(m.media.enc && !mediaUrls.has(m.media.u)) toLoad.push(m.media); return; }
-    MSGTXT[m.id]={t:m.text,n:m.mine?'You':(m.sn||peer.name||''),mine:m.mine,rx:m.rx}; html+='<div class="b '+side+'" data-mid="'+esc(m.id)+'">'+sn+(m.q?'<div class="rq">'+esc(m.q)+'</div>':'')+esc(m.text)+(m.via==='mesh'?'<div class="mlab">📡 offline</div>':'')+rxHtml(m)+'</div>';
+    if(m.media){ mediaSpec.set(m.media.u,m.media); MSGTXT[m.id]={t:(m.media.kind==='img'?'📷 Photo':m.media.kind==='vid'?'🎥 Video':'🎤 Voice message'),n:m.mine?'You':(m.sn||peer.name||''),mine:m.mine,rx:m.rx}; html+='<div class="b '+side+' media" data-mid="'+esc(m.id)+'">'+sn+mediaInner(m.media)+(m.via==='mesh'?'<div class="mlab" style="padding:2px 8px">📡 offline</div>':'')+ckHtml(m,fromCache)+rxHtml(m)+'</div>'; if(m.media.enc && !mediaUrls.has(m.media.u)) toLoad.push(m.media); return; }
+    MSGTXT[m.id]={t:m.text,n:m.mine?'You':(m.sn||peer.name||''),mine:m.mine,rx:m.rx}; html+='<div class="b '+side+'" data-mid="'+esc(m.id)+'">'+sn+(m.q?'<div class="rq">'+esc(m.q)+'</div>':'')+esc(m.text)+(m.via==='mesh'?'<div class="mlab">📡 offline</div>':'')+ckHtml(m,fromCache)+rxHtml(m)+'</div>';
   })(); });
   var segs=marks.map(function(st,i){ return html.slice(st, i+1<marks.length?marks[i+1]:html.length); });
   if(fromCache && !html) return;
@@ -3248,6 +3258,8 @@ function meshMerge(chatId, docs, clr0){
   if(!add.length) return docs;
   return docs.concat(add).sort(function(a,b){ return ms(a.createdAt)-ms(b.createdAt); });
 }
+window.addEventListener('online',function(){ try{ if(cur && lastSnap) renderMsgs(lastSnap,msgTok); }catch(e){} });
+window.addEventListener('offline',function(){ try{ if(cur && lastSnap) renderMsgs(lastSnap,msgTok); }catch(e){} });
 function meshRerender(){ if(cur && !cur.group) renderMsgs(lastSnap || {docs:[]}, msgTok); }
 
 /* ---- offline voice call / panel ---- */
