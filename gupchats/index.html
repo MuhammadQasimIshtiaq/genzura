@@ -367,7 +367,7 @@ html #boot img{position:relative;z-index:1;opacity:0;visibility:visible!importan
 #gcMenuAd .gz-adhole{width:100%;height:250px;border-radius:12px;background:var(--surface);overflow:hidden}
 </style>
 <style id="gcMeshCss">
-#gcOff{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 6px);z-index:2000;display:none;padding:6px 14px;border-radius:16px;font:600 12px system-ui,sans-serif;color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.25);cursor:pointer;max-width:92%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#gcOff{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 78px);max-width:92vw;z-index:2000;display:none;padding:6px 14px;border-radius:16px;font:600 12px system-ui,sans-serif;color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.25);cursor:pointer;max-width:92%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #gcOff.on{background:#1f9d55}#gcOff.warn{background:#d97706}.mlab{font-size:10px;opacity:.7;margin-top:2px}
 </style>
 </head>
@@ -3312,7 +3312,9 @@ function meshBanner(){
   var on=false,st={}; try{ on=MESH.isEnabled(); st=JSON.parse(MESH.status()||'{}'); }catch(e){}
   if(navigator.onLine!==false){ el.style.display='none'; return; }
   var near=(st.near||[]).length;
-  el.textContent=on?('📡 No internet · '+near+' nearby phone'+(near===1?'':'s')):'📡 No internet · tap to chat with people nearby';
+  var d=st.diag||{}, x='';
+  if(on&&!near){ x = !st.running ? ' · starting…' : (d.err ? ' · '+d.err : (!d.adv||!d.disc ? ' · starting…' : (d.found ? ' · found '+d.found+', connecting…' : ' · searching…'))); }
+  el.textContent=on?('📡 No internet · '+near+' nearby phone'+(near===1?'':'s')+x):'📡 No internet · tap to chat with people nearby';
   el.className=on?'on':'warn'; el.style.display='block';
 }
 window.__meshEvent=function(ev){
