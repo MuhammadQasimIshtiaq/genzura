@@ -3818,19 +3818,50 @@ function show(d, isAdmin){
     ov.style.display='none'; bar.style.display = (on && isAdmin) ? 'block' : 'none';
   }
 }
-var curUser=null, lastD=null;
+var curUser=null, lastD=null, wasShown=false, pollT=null;
+var FZ_URL='https://firestore.googleapis.com/v1/projects/arain-tube-672a1/databases/(default)/documents/settings/appFreeze?key=AIzaSyATkLM81knrj_enQUsg1L9XRXt9_jdvL0w';
+function isAdm(){ return !!(curUser && curUser.uid===ADMIN); }
+function apply(d){
+  var on=!!(d && d.on);
+  var shownNow = on && !isAdm();
+  if(wasShown && !shownNow && !isAdm()){ /* just unfrozen: other listeners died while frozen, so restart the app cleanly */
+    wasShown=false; lastD=d; show(d,false); try{ location.reload(); }catch(e){}; return;
+  }
+  wasShown=shownNow; lastD=d; show(d, isAdm());
+}
+/* direct server check (never cached) - this is what makes unfreeze instant */
+function poll(){
+  try{
+    fetch(FZ_URL+'&_='+Date.now(), {cache:'no-store'}).then(function(r){
+      if(r.status===404) return apply(null);
+      if(!r.ok) return;
+      return r.json().then(function(j){
+        var f=(j&&j.fields)||{};
+        apply({ on: !!(f.on && f.on.booleanValue===true), message: (f.message&&f.message.stringValue)||'' });
+      });
+    }).catch(function(){});
+  }catch(e){}
+}
+function schedule(){
+  clearTimeout(pollT);
+  pollT=setTimeout(function(){ poll(); schedule(); }, wasShown ? 2000 : 8000);
+}
 function listen(){
   if(unsub) return;
   var db=fsdb(); if(!db) return;
-  unsub = db.collection('settings').doc('appFreeze').onSnapshot(function(s){
-    lastD = s.exists ? s.data() : null;
-    show(lastD, !!(curUser && curUser.uid===ADMIN));
-  }, function(){ /* can't read -> never lock users out by mistake */ });
+  unsub = db.collection('settings').doc('appFreeze').onSnapshot({includeMetadataChanges:true}, function(s){
+    if(s.metadata && s.metadata.fromCache && s.exists && s.data().on) return; /* stale cached "frozen" - wait for the server */
+    apply(s.exists ? s.data() : null);
+  }, function(){ /* listener died: restart it, polling keeps working meanwhile */
+    unsub=null; setTimeout(listen, 3000);
+  });
 }
 function boot(){
   try{
-    listen();   /* works even before / without login (rules let everybody read this one doc) */
-    firebase.auth().onAuthStateChanged(function(u){ curUser=u; show(lastD, !!(u && u.uid===ADMIN)); });
+    listen();
+    poll(); schedule();
+    ['focus','online','visibilitychange','pageshow'].forEach(function(ev){ (ev==='visibilitychange'?document:window).addEventListener(ev, function(){ if(!document.hidden) poll(); }); });
+    firebase.auth().onAuthStateChanged(function(u){ curUser=u; var on=!!(lastD&&lastD.on); wasShown=on&&!isAdm(); show(lastD, isAdm()); });
   }catch(e){ setTimeout(boot,500); }
 }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', boot); else boot();
