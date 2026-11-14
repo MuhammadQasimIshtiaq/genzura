@@ -590,16 +590,16 @@ async function rkHandle(request, env) {
 
 /* ================================================================
    NEW: Anonymous Inbox  (POST /anon-send)
-   - message server se likhta hai (Firestore rules mein client ko create ki ijazat NAHI)
-   - cooldown SERVER par:
-       ek IP -> ek creator ko: 30 second mein 1 message
-       ek IP: ghante mein 20 message (sab creators milakar)
-       ek creator: ghante mein 100 anonymous message
-   - creator ke phone par generic push: "You got a new anonymous message" (text push mein nahi)
-   Sender ki pehchan message mein SAVE NAHI hoti. Rate-limit ke liye sirf IP ka salted hash
-   anonRate/ collection mein 1-2 ghante ke liye rehta hai (expireAt par TTL policy laga dein).
+   - the message is written by the server (Firestore rules do NOT let the client create it)
+   - cooldown on the SERVER:
+       one IP -> one creator: 1 message per 30 seconds
+       one IP: 20 messages per hour (all creators combined)
+       one creator: 100 anonymous messages per hour
+   - creator ke phone par generic push: "You got a new anonymous message" (the text is not in the push)
+   The sender's identity is NOT saved in the message. For rate limiting only a salted hash of the IP
+   is kept in the anonRate/ collection for 1-2 hours (set a TTL policy on expireAt).
    Body: { "toUid": "<creator uid>", "text": "..." }
-   Optional variable: ANON_SALT (lamba random text; na dein to client email use hota hai)
+   Optional variable: ANON_SALT (long random text; if not set, the client email is used)
 ================================================================ */
 const anEnc = new TextEncoder();
 const AN_ORIGINS = ["https://gupzy.com", "https://www.gupzy.com", "https://genzura.netlify.app", "https://genzura.muhammadqasimishtiaq0604.workers.dev"]; /* new domain + old links, so nothing breaks while moving */

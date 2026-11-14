@@ -69,11 +69,10 @@
 <link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
 <link rel="dns-prefetch" href="https://securetoken.googleapis.com">
 
-<!-- Adsterra global (Social Bar) script hata diya gaya — ye reels ke upar khud-b-khud floating ads dikha raha tha.
-     Adsterra ka ad ab sirf feed ki apni "Sponsored" slide mein hi dikhta hai, kahin overlap nahi karta. -->
-<!-- ExoClick (ad-provider.js) hata diya gaya — "Fullpage Interstitial" format khud apni marzi se
-     poori screen par overlay dikhata hai, jo normal reels ke upar aa raha tha. Sahi (inline) format
-     milne par isay dobara sahi tareeke se add kar denge. -->
+<!-- Adsterra global (Social Bar) script removed — it showed floating ads on top of reels by itself.
+     Adsterra ads now only appear inside the feed's own "Sponsored" slide and never overlap anything. -->
+<!-- ExoClick (ad-provider.js) removed — the "Fullpage Interstitial" format showed a full-screen overlay
+     on its own, on top of normal reels. It can be added back once a proper (inline) format is available. -->
 
 
 <!-- ===================== DIAGNOSTIC (catches load/init failures) ===================== -->
@@ -1890,7 +1889,7 @@ try{ db.enablePersistence({ synchronizeTabs:true }).catch(()=>{}); }catch(e){}
 const functionsInstance = firebase.functions();
 
 /* ================================================================
-   ☁️ CLOUDINARY CONFIG — videos & images yahan upload hote hain
+   ☁️ CLOUDINARY CONFIG — videos & images are uploaded here
 ================================================================ */
 const CLOUDINARY_CLOUD_NAME = "rct4qeol";
 const CLOUDINARY_UPLOAD_PRESET = "arain_unsigned";
@@ -2920,7 +2919,7 @@ async function handleSharedVideoLink(){
       const doc = sharedVideoItem ? {exists:true, id:sharedVideoItem.id, data:()=>sharedVideoItem} : await db.collection('videos').doc(vid).get();
       if(doc.exists) openPlayer({id:doc.id, ...doc.data()});
       else toast("This video isn't available anymore");
-    }catch(err){ console.error(err); toast('Video load nahi ho saki — internet check karke link dobara kholein'); }
+    }catch(err){ console.error(err); toast('Could not load the video — check your internet and open the link again'); }
   }
 }
 
@@ -3217,11 +3216,11 @@ function interleaveBoosted(list, boosted){
    ADS IN THE REEL FEED — every AD_EVERY reels, one ad-slide is
    inserted, alternating between Adsterra, HilltopAds (web) / AdMob only (inside the Android app).
 ================================================================ */
-const AD_EVERY = 3; /* har kitne reels ke baad 1 ad slide aaye */
+const AD_EVERY = 3; /* show 1 ad slide after every this many reels */
 /* Website: NO third-party ads (needed for Google AdSense approval). Ads only run inside the Android app (AdMob). */
 const ADS_ENABLED = !!window.AndroidAdBridge;
 
-/* ---- ADSTERRA (unique container — sirf pehli baar asli tareeke se load hota hai) ---- */
+/* ---- ADSTERRA (unique container — only loaded the real way the first time) ---- */
 const ADSTERRA_CID = 'container-ebe1a2087b1b8d34bbe48d344eabc108';
 function renderAdsterraSlide(){
   /* Adsterra fills the FIRST element that has this id. The old code loaded the script only once, so every later
@@ -3242,7 +3241,7 @@ function renderAdsterraSlide(){
   return slide;
 }
 
-/* ---- HILLTOPADS (Direct Link — tap karne par naye tab mein khulta hai) ---- */
+/* ---- HILLTOPADS (Direct Link — opens in a new tab when tapped) ---- */
 const HILLTOP_LINK = "https://gloomy-association.com/dKmyFYz.dwGLNav/ZOGEUZ/NeOm/9ku-ZsUZloksPDT/ck0CMNjTgq5KNSjsEit/NtzeQTyiOwDYkS2ENuQM";
 function renderHilltopSlide(){
   const slide = document.createElement('div'); slide.className='short-slide sponsored-slide';
@@ -3266,8 +3265,8 @@ function renderExoClickSlide(){
   return slide;
 }
 
-/* ---- ADMOB NATIVE (sirf Android app ke andar — window.AndroidAdBridge sirf wahin hota hai).
-   Ye slide ek khaali jagah chhorti hai; app us jagah ke upar asli AdMob native ad rakh deta hai. ---- */
+/* ---- ADMOB NATIVE (only inside the Android app — window.AndroidAdBridge exists only there).
+   This slide leaves an empty space; the app places the real AdMob native ad on top of it. ---- */
 let _admobSeq = 0;
 /* native side reports whether an ad filled: no ad -> the Sponsored slide is hidden (no empty black screen); a late ad brings it back */
 const _adSlides = {};
@@ -3292,7 +3291,7 @@ function renderAdMobSlide(){
     const B = window.AndroidAdBridge;
     if(!B) return;
     if(!slide.isConnected){
-      if(wasConnected){ try{ B.unregisterAdSlot(id); }catch(e){} return; } /* feed dobara bana — ad hata do */
+      if(wasConnected){ try{ B.unregisterAdSlot(id); }catch(e){} return; } /* feed was rebuilt — remove the ad */
       requestAnimationFrame(tick); return;
     }
     wasConnected = true;
@@ -3302,7 +3301,7 @@ function renderAdMobSlide(){
        otherwise the bottom of a scrolled-away ad (INSTALL button) stays stuck over the header */
     const cr = slide.parentElement ? slide.parentElement.getBoundingClientRect() : {top:0, bottom:vh};
     const shown = r.width > 0 && r.height > 0 && slide.offsetParent !== null && r.bottom > cr.top + 2 && r.top < cr.bottom - 2;
-    if(!registered && r.width > 0 && r.top < vh * 2.5 && r.bottom > -vh * 1.5){ /* jab ad slide kareeb aaye tab hi ad load karo */
+    if(!registered && r.width > 0 && r.top < vh * 2.5 && r.bottom > -vh * 1.5){ /* only load the ad when the ad slide gets close */
       registered = true; try{ B.registerAdSlot(id); }catch(e){}
     }
     const far = r.top > vh * 2.5 || r.bottom < -vh * 1.5;
@@ -3324,10 +3323,10 @@ function renderAdMobSlide(){
   return slide;
 }
 
-/* ---- REWARDED: ad dekho -> 30 minute ads band (sirf Android app, naye APK mein) ---- */
+/* ---- REWARDED: watch an ad -> 30 minutes without ads (Android app only, new APK) ---- */
 const AD_FREE_MS = 30*60*1000;
 function adFreeLeft(){ try{ return Math.max(0, (+localStorage.getItem('adFreeUntil')||0) - Date.now()); }catch(e){ return 0; } }
-function isAdFree(){ return !!window.__wpActive; } /* '30 min no ads' hata diya; ab rewarded ad sirf reel boost ke liye */
+function isAdFree(){ return !!window.__wpActive; } /* '30 min no ads' removed; the rewarded ad is now only for the reel boost */
 function updateAdFreeBtn(){
   const b = document.getElementById('adFreeBtn'); if(!b) return;
   const B = window.AndroidAdBridge;
@@ -3340,7 +3339,7 @@ window.__rewardedResult = function(status){
   window.__rewardPurpose = null;
   if(status === 'earned'){
     pending.boost = true;
-    toast('Boost unlocked \u2705 \u2014 5 min ke liye reel top par aayegi');
+    toast('Boost unlocked \u2705 \u2014 your reel will be on top for 5 min');
   } else if(status === 'closed'){
     toast('Ad poora dekhna paRta hai, tab boost milta hai');
   } else {
@@ -3350,7 +3349,7 @@ window.__rewardedResult = function(status){
 };
 function onAdFreeBtn(){
   const B = window.AndroidAdBridge; if(!B || !B.showRewarded) return;
-  if(isAdFree()){ toast('Ads off hain: ' + Math.ceil(adFreeLeft()/60000) + ' min baqi'); return; }
+  if(isAdFree()){ toast('Ads are off: ' + Math.ceil(adFreeLeft()/60000) + ' min left'); return; }
   try{ B.showRewarded(); }catch(e){ toast('Ad not ready yet, please try again in a moment'); }
 }
 setInterval(updateAdFreeBtn, 30000);
@@ -3358,7 +3357,7 @@ window.addEventListener('load', ()=>{ const b=document.getElementById('adFreeBtn
 
 let _adSlotCounter = 0;
 function renderNextAdSlide(){
-  /* Web: Adsterra + HilltopAds. Android app: sirf AdMob (AdMob policy ki wajah se app mein doosre networks band) */
+  /* Web: Adsterra + HilltopAds. Android app: AdMob only (other networks are off in the app because of AdMob policy) */
   const renderers = window.AndroidAdBridge ? [renderAdMobSlide] : [renderAdsterraSlide, renderHilltopSlide];
   const slide = renderers[_adSlotCounter % renderers.length]();
   _adSlotCounter++;
@@ -5014,9 +5013,9 @@ document.getElementById('upPublishBtn').addEventListener('click', ()=>{
 
 /* ================================================================
    VIDEO SIZE CHECK + COMPRESSION (client-side, no server needed)
-   Agar select ki hui video 100MB se badi ho, to upload se pehle
-   browser mein hi usay chhota (compress) kiya jata hai — taake
-   Cloudinary par upload fail na ho aur data bhi bachay.
+   If the selected video is bigger than 100MB, it is compressed
+   in the browser before upload — so the Cloudinary upload does not
+   fail and data is saved too.
 ================================================================ */
 const MAX_VIDEO_UPLOAD_BYTES = 100 * 1024 * 1024; /* 100MB */
 
@@ -9000,7 +8999,7 @@ function openGupchatsApp(uid){
 }
 function openGupmeshApp(){
   var ok=false; try{ ok=!!(window.AndroidAuth && typeof window.AndroidAuth.openMeshApp==='function' && window.AndroidAuth.openMeshApp()); }catch(e){}
-  if(!ok) toast('Gupmesh app is phone mein install nahi hai');
+  if(!ok) toast('Gupmesh app is not installed on this phone');
 }
 function showChatChooser(){
   let o = document.getElementById('chatChooserOv'); if(o) o.remove();
@@ -9289,7 +9288,7 @@ const AIID='gupzy-ai';let aiHist=[],aiBusy=false;
 const aiKey=()=>'gzai_hist_'+me();
 function aiLoad(){try{aiHist=JSON.parse(localStorage.getItem(aiKey())||'[]')||[];}catch(e){aiHist=[];}const t0=Date.now()-aiHist.length*1000;aiHist.forEach((x,i)=>{if(!x.t)x.t=t0+i*1000;});}
 function aiSave(){try{localStorage.setItem(aiKey(),JSON.stringify(aiHist.slice(-60)));}catch(e){}}
-const AI_HELLO='Assalam o Alaikum! 👋 Main Gupzy AI hoon. Aap mujh se Gupzy ke baare mein, ya kisi bhi cheez ke baare mein pooch sakte hain.';
+const AI_HELLO='Hello! 👋 I am Gupzy AI. You can ask me about Gupzy, or about anything else.';
 function aiPaint(typing){
   if(!peer||!peer.ai)return;
   msgs=[{id:'ai-note',type:'sys',text:'Gupzy AI is an AI assistant. Your messages here are sent to our AI provider and are not end-to-end encrypted. Answers can be wrong, so double-check important things.',createdAt:(aiHist[0]&&aiHist[0].t)||Date.now()},
@@ -9298,7 +9297,7 @@ function aiPaint(typing){
   if(typing)msgs.push({id:'ai-typing',type:'text',text:'…',from:AIID,createdAt:Date.now()});
   renderMsgs();const box=$('dmMsgs');box.scrollTop=box.scrollHeight;
   if(!aiHist.length){
-    box.insertAdjacentHTML('beforeend','<div class="gzai-chips"><button data-q="Gupzy par channel kaise banate hain?">Channel kaise banayen?</button><button data-q="Mere video ke views kaise barhayen?">Views kaise barhayen?</button><button data-q="Mujhe ek mazedar caption likh do">Caption likho</button><button data-q="Tell me a fun fact">Fun fact</button></div>');
+    box.insertAdjacentHTML('beforeend','<div class="gzai-chips"><button data-q="How do I create a channel on Gupzy?">How to create a channel?</button><button data-q="How can I get more views on my video?">How to get more views?</button><button data-q="Write me a fun caption">Write a caption</button><button data-q="Tell me a fun fact">Fun fact</button></div>');
     box.querySelectorAll('.gzai-chips [data-q]').forEach(b=>{b.onclick=()=>{$('dmIn').value=b.getAttribute('data-q');aiSend();};});
   }
 }
@@ -9319,7 +9318,7 @@ async function aiSend(){
     const r=await fetch(atFn('ai'),{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+tk},body:JSON.stringify({messages:aiHist.slice(-12).map(x=>({role:x.role,content:x.content}))})});
     const d=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(d.error||('Error '+r.status));
-    reply=String(d.reply||'').trim()||'Sorry, mujhe jawab nahi mila. Dobara try karein.';
+    reply=String(d.reply||'').trim()||'Sorry, I could not find an answer. Please try again.';
   }catch(e){aiHist.pop();aiSave();aiBusy=false;if(peer&&peer.ai){$('dmIn').value=text;toggleSend();aiPaint(false);}toast('⚠️ '+(e&&e.message?e.message:'Something went wrong'));return;}
   aiHist.push({role:'assistant',content:reply,t:Date.now()});aiSave();aiBusy=false;if(peer&&peer.ai)aiPaint(false);
 }

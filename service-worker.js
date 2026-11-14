@@ -1,12 +1,12 @@
 /* Gupzy — service worker (fast version)
-   - Sirf apni site ki files (same-origin) handle karta hai. Videos (Cloudinary), Firebase/Firestore,
-     ads aur CDN scripts ko browser seedha load karta hai — pehle ye sab SW se guzar kar cache mein
-     copy hote the, jis se video/app slow ho jata tha.
-   - Range requests (video seeking/streaming) ko bhi bypass karta hai.
-   - Page (index.html): network-first, lekin agar net slow ho (4 sec) to cached copy turant dikha deta hai.
-   - Icons/manifest jaisi static files: cache-first + background mein refresh (instant load). */
+   - Only handles the site's own files (same-origin). Videos (Cloudinary), Firebase/Firestore,
+     ads and CDN scripts are loaded directly by the browser — before, all of these went through the SW and
+     were copied into the cache, which made videos and the app slow.
+   - Range requests (video seeking/streaming) are bypassed too.
+   - Page (index.html): network-first, but if the network is slow (4 sec) the cached copy is shown right away.
+   - Static files like icons/manifest: cache-first + refresh in the background (instant load). */
 
-const CACHE_NAME = 'gupzy-shell-v197';
+const CACHE_NAME = 'gupzy-shell-v198';
 const APP_SHELL = [
   './',
   './icon-192.png',
@@ -23,7 +23,7 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  /* purane cache (v1 mein videos/data bhi save ho gaya tha) delete kar do */
+  /* delete old caches (v1 also saved videos/data) */
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))

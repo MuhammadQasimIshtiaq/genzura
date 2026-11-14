@@ -699,7 +699,7 @@ async function backupSheet(first){
 async function healKey(pubDoc){
   if(!myKP || !pubDoc || myKP.pub===pubDoc) return;
   try{ await publishPub(myKP); srvPub=myKP.pub; ppCache.clear(); shared={}; backupState='off'; }catch(e){ toast('Key fix failed: '+(e&&e.message||e)); return; }
-  toast('Chat key theek ho gayi ✓ Ab naye messages chalenge. Ab backup password dobara save karo.');
+  toast('Chat key fixed ✓ New messages will work now. Please save your backup password again.');
   setTimeout(function(){ backupSheet(false); }, 1200);
 }
 /* ===== GUPZY CHAT PIN (6 boxes) - shared by Gupzy + Gupchats =====
@@ -1617,12 +1617,12 @@ function renderMenu(){
     +'<div class="card" id="mOut"><div class="ic">↩️</div>Sign out</div><hr>'
     +'<div class="sec">Also from Gupzy</div>'
     +'<div class="card" id="mGz"><div class="ic">▶️</div>Gupzy</div>'
-    +'<div class="card" id="mMesh"><div class="ic">📡</div>Gupmesh (bina internet)</div>'
+    +'<div class="card" id="mMesh"><div class="ic">📡</div>Gupmesh (no internet)</div>'
     +'<div id="gcMenuAd"><div class="ah">Sponsored</div><div class="gz-adhole"></div></div>';
   gcBannerMount($('gcMenuAd'), function(){ return curTab===3 && !cur && $('stPg').classList.contains('hidden') && !document.querySelector('.sheetbg'); });
   $('mOut').onclick=signOut;
   $('mSet').onclick=openSettings;
-  $('mMesh').onclick=function(){ var ok=false; try{ ok=!!(window.AndroidAuth && window.AndroidAuth.openMeshApp && window.AndroidAuth.openMeshApp()); }catch(e){} if(!ok) alert('Gupmesh app is phone mein install nahi hai'); };
+  $('mMesh').onclick=function(){ var ok=false; try{ ok=!!(window.AndroidAuth && window.AndroidAuth.openMeshApp && window.AndroidAuth.openMeshApp()); }catch(e){} if(!ok) alert('Gupmesh app is not installed on this phone'); };
   $('mGz').onclick=function(){ var u='https://gupzy.com/'; try{ if(window.AndroidAuth && window.AndroidAuth.openExternal){ window.AndroidAuth.openExternal(u); return; } }catch(e){} window.open(u,'_blank'); };
 }
 /* ---------------- banner ad (Android app only: needs window.AndroidAdBridge) ---------------- */
@@ -2973,7 +2973,7 @@ var AI={hist:[],busy:false};
 function aiKey(){ return 'gzai_hist_'+me.uid; }
 function aiLoad(){ try{ AI.hist=JSON.parse(localStorage.getItem(aiKey())||'[]')||[]; }catch(e){ AI.hist=[]; } var t0=Date.now()-AI.hist.length*1000; AI.hist.forEach(function(x,i){ if(!x.t) x.t=t0+i*1000; }); }
 function aiSave(){ try{ localStorage.setItem(aiKey(),JSON.stringify(AI.hist.slice(-60))); }catch(e){} }
-var AI_HELLO='Assalam o Alaikum! 👋 Main Gupzy AI hoon. Aap mujh se Gupzy ke baare mein, ya kisi bhi cheez ke baare mein pooch sakte hain.';
+var AI_HELLO='Hello! 👋 I am Gupzy AI. You can ask me about Gupzy, or about anything else.';
 function aiPaint(typing){
   if(!cur||!cur.ai) return;
   var out=[{kind:'sys',at:Date.now(),text:'Gupzy AI is an AI assistant. Your messages here are sent to our AI provider and are not end-to-end encrypted. Answers can be wrong, so double-check important things.'}];
@@ -2983,7 +2983,7 @@ function aiPaint(typing){
   paintOut(out,msgTok,cur.peer,true);
   var box=$('msgs'); box.scrollTop=box.scrollHeight;
   if(!AI.hist.length){
-    box.insertAdjacentHTML('beforeend','<div class="gzai-chips"><button data-q="Gupzy par channel kaise banate hain?">Channel kaise banayen?</button><button data-q="Mere video ke views kaise barhayen?">Views kaise barhayen?</button><button data-q="Mujhe ek mazedar caption likh do">Caption likho</button><button data-q="Tell me a fun fact">Fun fact</button></div>');
+    box.insertAdjacentHTML('beforeend','<div class="gzai-chips"><button data-q="How do I create a channel on Gupzy?">How to create a channel?</button><button data-q="How can I get more views on my video?">How to get more views?</button><button data-q="Write me a fun caption">Write a caption</button><button data-q="Tell me a fun fact">Fun fact</button></div>');
     box.querySelectorAll('.gzai-chips [data-q]').forEach(function(b){ b.onclick=function(){ $('mIn').value=b.getAttribute('data-q'); aiSend(); }; });
   }
 }
@@ -3007,7 +3007,7 @@ async function aiSend(){
     var r=await fetch(API_BASE+'/ai',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+tk},body:JSON.stringify({messages:AI.hist.slice(-12).map(function(x){ return {role:x.role,content:x.content}; })})});
     var d=await r.json().catch(function(){ return {}; });
     if(!r.ok) throw new Error(d.error||('Error '+r.status));
-    reply=String(d.reply||'').trim()||'Sorry, mujhe jawab nahi mila. Dobara try karein.';
+    reply=String(d.reply||'').trim()||'Sorry, I could not find an answer. Please try again.';
   }catch(e){ AI.hist.pop(); aiSave(); AI.busy=false; if(cur&&cur.ai){ $('mIn').value=text; updateSend(); aiPaint(false); } toast('⚠️ '+(e&&e.message?e.message:'Something went wrong')); return; }
   AI.hist.push({role:'assistant',content:reply,t:Date.now()}); aiSave(); AI.busy=false; if(cur&&cur.ai) aiPaint(false);
 }
