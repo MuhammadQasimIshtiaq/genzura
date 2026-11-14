@@ -366,10 +366,6 @@ html #boot img{position:relative;z-index:1;opacity:0;visibility:visible!importan
 #gcMenuAd .ah{font-size:12px;color:var(--dim);font-weight:600;padding:0 4px 6px}
 #gcMenuAd .gz-adhole{width:100%;height:250px;border-radius:12px;background:var(--surface);overflow:hidden}
 </style>
-<style id="gcMeshCss">
-#gcOff{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 78px);max-width:94vw;white-space:normal;text-align:center;z-index:2000;display:none;padding:6px 14px;border-radius:16px;font:600 12px system-ui,sans-serif;color:#fff;box-shadow:0 2px 10px rgba(0,0,0,.25);cursor:pointer;max-width:92%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#gcOff.on{background:#1f9d55}#gcOff.warn{background:#d97706}.mlab{font-size:10px;opacity:.7;margin-top:2px}
-</style>
 </head>
 <body>
 <style id="gzCallBoot">html.gz-callboot #boot{background:#0b1220!important}html.gz-callboot #boot img,html.gz-callboot #boot::before,html.gz-callboot #boot::after{display:none!important}html.gz-callboot,html.gz-callboot body{background:#0b1220!important}</style>
@@ -1057,7 +1053,6 @@ async function signOut(){
   try{ if(unsubChats){ unsubChats(); unsubChats=null; } }catch(e){}
   try{ closeChat(); }catch(e){}
   try{ msgCacheWipe(); }catch(e){}
-  try{ meshWipe(); }catch(e){}
   try{ if(window.AndroidAuth && AndroidAuth.signOut) AndroidAuth.signOut(); }catch(e){}
   try{ await auth.signOut(); }catch(e){ toast('Could not sign out: '+(e&&e.message||e)); return; }
   try{ show('login'); $('loginBtn').disabled=false; }catch(e){}
@@ -1076,7 +1071,7 @@ auth.onAuthStateChanged(async function(u){
     show('app'); setTab(0);
     try{ await initKeys(); }catch(e){ toast('Encryption setup failed on this device'); console.error(e); }
     startChats(); loadPeople();
-    renderMenu(); startPresence(); enablePush(); tryOpenPending(); startCallListener(); try{ meshInit(); }catch(e){ console.warn(e); }
+    renderMenu(); startPresence(); enablePush(); tryOpenPending(); startCallListener();
   }catch(e){ console.error(e); toast('Could not load your profile. Check internet.'); show('login'); }
 });
 
@@ -1811,7 +1806,6 @@ async function renderMsgs(snap, tok){
   var peer=cur && cur.peer; if(!peer) return; var chatId=cur.id;
   var clr0=Number((((chats[chatId]||{}).clearedAt)||{})[me.uid])||0;
   var docs=snap.docs.map(function(d){ var x=d.data({serverTimestamps:'estimate'}); x.id=d.id; x._pend=!!(d.metadata&&d.metadata.hasPendingWrites); return x; }).filter(function(x){ return !goneMsg(chatId,x) && !(clr0 && ms(x.createdAt)<=clr0); });
-  try{ docs=meshMerge(chatId, docs, clr0); }catch(e){ console.warn(e); }   /* + messages that came over Bluetooth/Wi-Fi (offline mode) */
   var out=(await Promise.all(docs.map(function(x){ return parseMsg(x, peer.uid, chatId).catch(function(){ return { mine:x.from===me.uid, at:ms(x.createdAt), kind:'lock' }; }); }))).filter(Boolean);
   if(tok!==msgTok || !cur) return;
   if(!cur.group) msgCacheSave(chatId,out);
@@ -1831,8 +1825,8 @@ function paintOut(out,tok,peer,fromCache){
     var sn=m.sn?'<div class="sn">'+esc(m.sn)+'</div>':'';
     if(m.kind==='lock'){ if(m.mine&&m.id){ MSGTXT[m.id]={t:'',n:'You',mine:true,rx:null}; } html+='<div class="b '+side+' lock" data-why="'+esc(m.why||'')+'"'+(m.mine&&m.id?' data-mid="'+esc(m.id)+'"':'')+'>'+sn+'🔒 Can\u2019t read yet \u00b7 tap to unlock</div>'; return; }
     if(m.kind==='post'){ html+='<div class="b '+side+' post" data-post="'+esc(m.postId)+'">'+sn+'<div class="pth" data-pid="'+esc(m.postId)+'"><div class="ph">\uD83D\uDCCE</div></div><div class="pt">'+esc(m.text)+'</div><div class="ps">Tap to view post</div></div>'; return; }
-    if(m.media){ mediaSpec.set(m.media.u,m.media); MSGTXT[m.id]={t:(m.media.kind==='img'?'📷 Photo':m.media.kind==='vid'?'🎥 Video':'🎤 Voice message'),n:m.mine?'You':(m.sn||peer.name||''),mine:m.mine,rx:m.rx}; html+='<div class="b '+side+' media" data-mid="'+esc(m.id)+'">'+sn+mediaInner(m.media)+(m.via==='mesh'?'<div class="mlab" style="padding:2px 8px">📡 offline</div>':'')+ckHtml(m,fromCache)+rxHtml(m)+'</div>'; if(m.media.enc && !mediaUrls.has(m.media.u)) toLoad.push(m.media); return; }
-    MSGTXT[m.id]={t:m.text,n:m.mine?'You':(m.sn||peer.name||''),mine:m.mine,rx:m.rx}; html+='<div class="b '+side+'" data-mid="'+esc(m.id)+'">'+sn+(m.q?'<div class="rq">'+esc(m.q)+'</div>':'')+esc(m.text)+(m.via==='mesh'?'<div class="mlab">📡 offline</div>':'')+ckHtml(m,fromCache)+rxHtml(m)+'</div>';
+    if(m.media){ mediaSpec.set(m.media.u,m.media); MSGTXT[m.id]={t:(m.media.kind==='img'?'📷 Photo':m.media.kind==='vid'?'🎥 Video':'🎤 Voice message'),n:m.mine?'You':(m.sn||peer.name||''),mine:m.mine,rx:m.rx}; html+='<div class="b '+side+' media" data-mid="'+esc(m.id)+'">'+sn+mediaInner(m.media)+ckHtml(m,fromCache)+rxHtml(m)+'</div>'; if(m.media.enc && !mediaUrls.has(m.media.u)) toLoad.push(m.media); return; }
+    MSGTXT[m.id]={t:m.text,n:m.mine?'You':(m.sn||peer.name||''),mine:m.mine,rx:m.rx}; html+='<div class="b '+side+'" data-mid="'+esc(m.id)+'">'+sn+(m.q?'<div class="rq">'+esc(m.q)+'</div>':'')+esc(m.text)+ckHtml(m,fromCache)+rxHtml(m)+'</div>';
   })(); });
   var segs=marks.map(function(st,i){ return html.slice(st, i+1<marks.length?marks[i+1]:html.length); });
   if(fromCache && !html) return;
@@ -1890,18 +1884,17 @@ async function blockedPair(peerUid){
 }
 async function sendMsgG(peer, id, base, payload){
   if(peer.group) return sendGroupMsg(peer, id, base, payload);
-  var blk = await Promise.race([ blockedPair(peer.uid), new Promise(function(r){ setTimeout(function(){ r(false); }, MESH ? 3000 : 600000); }) ]);   /* offline app: do not wait long for the server */
+  var blk = await blockedPair(peer.uid);
   if(blk) throw new Error('blocked');
-  var env=await encPayloadFast(id, peer.uid, payload);
+  var env=await encPayload(id, peer.uid, payload);
   var ref=db.collection('chats').doc(id);
-  var mref=ref.collection('messages').doc();   /* the id is known now so the same message can also travel offline and never shows twice */
+  var mref=ref.collection('messages').doc();
   var info={}; info[me.uid]={name:me.name,logo:me.logo||null}; info[peer.uid]={name:peer.name,logo:peer.logo||null};
   var unread={}; unread[peer.uid]=FV.increment(1);
   var b1=db.batch();   /* SPEED: one batch = one server round-trip */
   b1.set(mref, Object.assign({ from:me.uid, fromName:me.name||'', createdAt:FV.serverTimestamp() }, base, env));
   b1.set(ref, { members:[me.uid,peer.uid], info:info, lastText:(base.type==='text'?'🔒 Message':''), lastType:base.type, lastFrom:me.uid, lastAt:FV.serverTimestamp(), unread:unread },{merge:true});
   var commit=b1.commit();
-  meshOffer(peer, mref.id, base, env, commit);
   await commit;
   pushNotify(id);
 }
@@ -1933,12 +1926,6 @@ async function sendText(){
 $('sendBtn').onclick=sendText;
 function addPending(txt){ var b=$('msgs'), d=document.createElement('div'); d.className='pend'; d.textContent=txt; b.appendChild(d); b.scrollTop=b.scrollHeight; return d; }
 async function sendMedia(ty, blob, extra, peer, id){
-  if(MESH && navigator.onLine===false && !peer.group && !(cur&&cur.ai)){
-    if(ty==='vid'){ toast('Video needs internet. Photos and voice messages work offline when people are nearby.'); return; }
-    var mid=db.collection('chats').doc(id).collection('messages').doc().id;
-    if(!(await meshSendMedia(blob, ty==='img'?'image':'audio', (extra&&extra.d)||0, mid, peer.uid, id, true))) toast('Could not send offline');
-    return;
-  }
   var gty = ty==='img' ? 'image' : ty==='vid' ? 'video' : 'audio';
   var pend=($('chat').classList.contains('hidden')||!cur||cur.id!==id)?null:addPending(ty==='img'?'📷 Sending photo…':ty==='vid'?'🎥 Sending video…':'🎤 Sending voice message…');
   try{
@@ -2482,19 +2469,8 @@ function startCallListener(){
   setTimeout(function(){ loadIce(); },2500);
 }
 function callEnded(){ dismissIncoming(); if(CL) endCall(null,true); stopCallListener(); }
-function meshNearCall(vid){
-  /* nearby (or no internet): call over Bluetooth / Wi-Fi, works even if one side is offline. true = handled */
-  if(!(MESH && cur && !cur.group && !cur.ai)) return false;
-  var ph=mHash(cur.peer.uid), near=false; try{ near=!!MESH.isEnabled() && !!MESH.nearby(ph); }catch(e){}
-  var off=navigator.onLine===false;
-  if(!near && !off) return false;
-  if(!near){ toast('No internet, and '+(cur.peer.name||'this person')+' is not nearby right now'); meshSheet(); return true; }
-  if(vid && typeof MESH.callVideo!=='function'){ toast('Update the app to use offline video calls'); return off; }
-  try{ var r=String(vid?MESH.callVideo(ph, cur.peer.name||'', me.name||''):MESH.call(ph, cur.peer.name||'', me.name||'')); if(r==='ok') return true; toast(r==='off'?'Turn on Offline mode first':'Could not start the call'); }catch(e){}
-  return off;
-}
-$('cCallV').onclick=function(){ if(!cur) return; if(meshNearCall(false)) return; if(cur.group) ggStart(cur.id,'voice'); else startCall(cur.peer,'voice'); };
-$('cCallVid').onclick=function(){ if(!cur) return; if(meshNearCall(true)) return; if(cur.group) ggStart(cur.id,'video'); else startCall(cur.peer,'video'); };
+$('cCallV').onclick=function(){ if(!cur) return; if(cur.group) ggStart(cur.id,'voice'); else startCall(cur.peer,'voice'); };
+$('cCallVid').onclick=function(){ if(!cur) return; if(cur.group) ggStart(cur.id,'video'); else startCall(cur.peer,'video'); };
 
 /* Android back button */
 /* ================= GROUPS =================
@@ -3169,357 +3145,7 @@ function aiClear(){ ask('Clear this chat?','Your messages with Gupzy AI are dele
 })();
 
 
-/* ================= OFFLINE MODE: messages + voice calls without internet (Android app only) =================
-   Text messages are encrypted exactly like always, then handed to the phone's Bluetooth/Wi-Fi network (Google Nearby).
-   Every Gupchats phone in range carries them onward (store-carry-forward) until they reach the receiver. Calls: direct neighbours only.
-   Far away with no internet at all: the SIM still works -> SMS / phone call buttons in the 📡 panel. */
-var MESH = window.AndroidMesh || null, lastSnap=null, meshPeerHash={};
-try{ if(MESH && !MESH.isSupported()) MESH=null; }catch(e){ MESH=null; }
-function mHash(uid){ if(!MESH) return ''; return meshPeerHash[uid] || (meshPeerHash[uid]=String(MESH.hash(uid)||'')); }
-function meshKey(){ return 'gcmesh_in_'+(me&&me.uid); }
-function meshLoad(){ try{ return JSON.parse(localStorage.getItem(meshKey())||'[]')||[]; }catch(e){ return []; } }
-function meshWipe(){ try{ if(MESH) MESH.disable(); }catch(e){} try{ Object.keys(localStorage).forEach(function(k){ if(k.indexOf('gcmesh_in_')===0) localStorage.removeItem(k); }); }catch(e){} }
-
-/* same as encPayload, but when the server does not answer quickly use the key already saved on this phone */
-async function encPayloadFast(chatId, peerUid, obj){
-  if(!MESH) return encPayload(chatId, peerUid, obj);
-  var wait=new Promise(function(res){ setTimeout(function(){ res(null); }, navigator.onLine===false ? 150 : 3500); });
-  var r=null;
-  try{ r=await Promise.race([encPayload(chatId, peerUid, obj), wait]); }
-  catch(e){ if(e && e.message==='keymismatch') throw e; r=null; }
-  if(r) return r;
-  var kp=await knownPubs(peerUid); if(!kp || !kp.cur) throw new Error('nokey');
-  var key=await skey(kp.cur), iv=crypto.getRandomValues(new Uint8Array(12));
-  var ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:iv,additionalData:te.encode(chatId)}, key, te.encode(JSON.stringify(obj)));
-  return { enc:1, ct:b64(ct), iv:b64(iv), spk:myKP.pub, rpk:kp.cur };
-}
-
-/* a text message the internet did not deliver (right away, or after 4 s) also goes out over Bluetooth/Wi-Fi */
-function meshOffer(peer, mid, base, env, commit){
-  if(!MESH || !me || !base || base.type!=='text' || !env || !env.ct) return;
-  var done=false; commit.then(function(){ done=true; }, function(){});
-  var send=function(){
-    try{
-      MESH.send(JSON.stringify({ id:mid, f:mHash(me.uid), t:mHash(peer.uid), ts:Date.now(), ty:'text', env:{ enc:1, ct:env.ct, iv:env.iv, spk:env.spk, rpk:env.rpk } }));
-      meshNote();
-    }catch(e){ console.warn(e); }
-  };
-  var near=false; try{ near=!!MESH.isEnabled() && !!MESH.nearby(mHash(peer.uid)); }catch(e){}
-  /* receiver is right here (maybe without internet): hand it over Bluetooth / Wi-Fi now, the internet copy is dropped on their side when it arrives */
-  if(near){ send(); return; }
-  var go=function(){ if(done) return; send(); };
-  if(navigator.onLine===false) go(); else setTimeout(go, 4000);
-}
-var meshNoteAt=0;
-function meshNote(){
-  if(Date.now()-meshNoteAt<8000) return; meshNoteAt=Date.now();
-  if(navigator.onLine!==false) return;   /* we have internet: nothing to tell */
-  var on=false; try{ on=MESH.isEnabled(); }catch(e){}
-  if(on) toast('📡 No internet: sent to nearby phones. It reaches them when they come in range.');
-  else { toast('📡 No internet. Allow nearby chat to send this to people around you.'); meshAsk(true); }
-}
-
-/* messages that arrived over Bluetooth/Wi-Fi are kept here and shown in the chat next to the normal ones */
-function meshPeerMap(){
-  var m={}; try{ Object.keys(chats).forEach(function(k){ var c=chats[k]; if(!c || c.isGroup) return; (c.members||[]).forEach(function(u){ if(u!==me.uid) m[mHash(u)]=u; }); }); }catch(e){}
-  return m;
-}
-function meshPull(){
-  if(!MESH || !me) return;
-  var peers=meshPeerMap(); if(!Object.keys(peers).length) return;   /* chats not loaded yet: leave the mail where it is */
-  var arr; try{ arr=JSON.parse(MESH.drainInbox()||'[]'); }catch(e){ return; }
-  if(!arr || !arr.length) return;
-  var parts=meshParts(), tm={}; var store=meshLoad(), have={}, touched={}, n=0; store.forEach(function(x){ have[x.id]=1; });
-  arr.forEach(function(e){
-    try{
-      if(e && (e.ty==='part'||e.ty==='image'||e.ty==='audio')){ meshPullMedia(e,peers,parts,tm); return; }
-      var v=e && e.env; if(!v || have[e.id] || !v.enc || !v.ct || !v.iv || !v.spk || !v.rpk) return;
-      var puid=peers[e.f]; if(!puid) return;   /* only people I have a chat with */
-      var cid=dmId(me.uid, puid);
-      store.push({ id:String(e.id), cid:cid, from:puid, createdAt:Number(e.ts)||Date.now(), type:'text', enc:1, ct:String(v.ct), iv:String(v.iv), spk:String(v.spk), rpk:String(v.rpk), via:'mesh' });
-      have[e.id]=1; touched[cid]=1; n++;
-    }catch(x){}
-  });
-  n+=meshAssemble(parts,tm,store,have,touched,peers); meshPartsSave(parts);
-  if(!n) return;
-  meshSave(store);
-  if(cur && touched[cur.id]) meshRerender(); else toast('📡 New message received offline');
-}
-function meshMerge(chatId, docs, clr0){
-  if(!MESH || !me || (cur && cur.group)) return docs;
-  var have={}; docs.forEach(function(x){ have[x.id]=1; });
-  var store=meshLoad(), keep=[], add=[];
-  store.forEach(function(x){
-    if(have[x.id]) return;   /* the normal copy arrived through the internet: drop the offline copy */
-    keep.push(x);
-    if(x.cid===chatId && !goneMsg(chatId,x) && !(clr0 && ms(x.createdAt)<=clr0)) add.push(x);
-  });
-  if(keep.length!==store.length) meshSave(keep);
-  if(!add.length) return docs;
-  return docs.concat(add).sort(function(a,b){ return ms(a.createdAt)-ms(b.createdAt); });
-}
-window.addEventListener('online',function(){ try{ if(cur && lastSnap) renderMsgs(lastSnap,msgTok); }catch(e){} });
-window.addEventListener('offline',function(){ try{ if(cur && lastSnap) renderMsgs(lastSnap,msgTok); }catch(e){} });
-function meshRerender(){ if(cur && !cur.group) renderMsgs(lastSnap || {docs:[]}, msgTok); }
-
-/* ---- offline voice call / panel ---- */
-function meshCallOrSheet(){
-  var ph=mHash(cur.peer.uid), near=false; try{ near=MESH.nearby(ph); }catch(e){}
-  if(near){ try{ var r=String(MESH.call(ph, cur.peer.name||'', me.name||'')); if(r==='ok') return; toast(r==='off'?'Turn on Offline mode first':'Could not start the call'); }catch(e){} }
-  else toast('No internet, and '+(cur.peer.name||'this person')+' is not nearby right now');
-  meshSheet();
-}
-function meshSheet(){
-  if(!MESH || !me) return;
-  var on=false, st={}; try{ on=MESH.isEnabled(); st=JSON.parse(MESH.status()||'{}'); }catch(e){}
-  var near=(st.near||[]).length, peer=(cur && !cur.group && !cur.ai && cur.peer) ? cur.peer : null;
-  var ph=''; try{ if(peer) ph=localStorage.getItem('gcph_'+peer.uid)||''; }catch(e){}
-  var h='<div class="sh-t">📡 Chat without internet</div>'
-   +'<p class="sh-p">No internet? Text messages can still travel phone to phone over Bluetooth / Wi-Fi, even through other Gupchats users’ phones that carry them onward. Voice and video calls work when the other person is within about 30–100 m, whether they have internet or not.</p>'
-   +'<p'+(' class="sh-p"')+'>'+near+' nearby phone'+(near===1?'':'s')+' connected · '+(st.queued||0)+' message(s) being carried</p>';
-  if(peer){
-    var pn=esc(peer.name||'this person');
-    h+='<div style="margin-top:16px;font-weight:700">'+pn+'</div>'
-     +'<button class="btn" id="moCall" style="width:100%;padding:13px;margin-top:8px">📞 Offline voice call (nearby)</button>'
-     +'<button class="btn" id="moVid" style="width:100%;padding:13px;margin-top:8px">🎥 Offline video call (nearby)</button>'
-     +'<p class="sh-p" style="margin-top:14px">Too far away? If you both have a SIM, use the phone network instead (works without internet). Their number is saved only on this phone.</p>'
-     +'<input id="moNum" type="tel" inputmode="tel" placeholder="Their mobile number" value="'+esc(ph)+'" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid #ccd0d5;border-radius:10px;font-size:16px">'
-     +'<div style="display:flex;gap:8px;margin-top:8px"><button class="btn" id="moSms" style="flex:1;padding:12px">✉️ Send SMS</button><button class="btn" id="moDial" style="flex:1;padding:12px">📱 Call</button></div>';
-  }
-  h+='<button class="btn" id="moX" style="width:100%;padding:13px;margin-top:12px;background:#e4e6eb;color:#050505">Close</button>';
-  var bg=sheet(h);
-  bg.onclick=function(e){ if(e.target===bg) bg.remove(); };
-  bg.querySelector('#moX').onclick=function(){ bg.remove(); };
-  if(peer){
-    bg.querySelector('#moCall').onclick=function(){ bg.remove(); meshCallOrSheetFromPanel(); };
-    bg.querySelector('#moVid').onclick=function(){ bg.remove(); meshCallOrSheetFromPanel(true); };
-    var num=function(){ var v=(bg.querySelector('#moNum').value||'').trim(); if(!/^[+0-9 ()-]{5,20}$/.test(v)){ toast('Enter their mobile number'); return ''; } try{ localStorage.setItem('gcph_'+peer.uid, v); }catch(e){} return v; };
-    bg.querySelector('#moSms').onclick=function(){ var v=num(); if(!v) return; var t=($('mIn').value||'').trim() || ('Hi, this is '+(me.name||'a friend')+' (sent by SMS because I have no internet)'); try{ MESH.sms(v,t); }catch(e){} };
-    bg.querySelector('#moDial').onclick=function(){ var v=num(); if(!v) return; try{ MESH.dial(v); }catch(e){} };
-  }
-}
-function meshCallOrSheetFromPanel(vid){
-  var ph=mHash(cur.peer.uid), near=false; try{ near=MESH.nearby(ph); }catch(e){}
-  if(!near){ toast((cur.peer.name||'This person')+' is not nearby right now'); return; }
-  if(vid && typeof MESH.callVideo!=='function'){ toast('Update the app to use offline video calls'); return; }
-  try{ var r=String(vid?MESH.callVideo(ph, cur.peer.name||'', me.name||''):MESH.call(ph, cur.peer.name||'', me.name||'')); if(r!=='ok') toast(r==='off'?'Turn on Offline mode first':'Could not start the call'); }catch(e){}
-}
-
-/* ---- the little bar at the top: shows when there is no internet or offline mode is on ---- */
-function meshBanner(){
-  if(!MESH||!meshUid()) return;
-  var el=document.getElementById('gcOff'); if(!el){ el=document.createElement('div'); el.id='gcOff'; el.onclick=function(){ var on=false; try{ on=MESH.isEnabled(); }catch(e){} if(on){ try{ MESH.enableAll(meshUid()); }catch(e){} meshSheet(); } else meshAsk(true); }; document.body.appendChild(el); }
-  var on=false,st={}; try{ on=MESH.isEnabled(); st=JSON.parse(MESH.status()||'{}'); }catch(e){}
-  if(navigator.onLine!==false){ el.style.display='none'; return; }
-  var near=(st.near||[]).length;
-  var d=st.diag||{}, x='', rd={}; try{ rd=JSON.parse(MESH.radios()||'{}'); }catch(e){}
-  if(on&&!near){ var off=[]; if(rd.wifi===false) off.push('Wi-Fi'); if(rd.bt===false) off.push('Bluetooth'); if(rd.loc===false) off.push('Location'); if(off.length){ d={err:'Turn ON '+off.join(' + ')+' (tap)'}; } }
-  if(on&&!near){ x = !st.running ? ' · starting…' : (d.err ? ' · '+d.err : (!d.adv||!d.disc ? ' · starting…' : (d.found ? ' · found '+d.found+', connecting…' : ' · searching…'))); }
-  el.textContent=on?('📡 No internet · '+near+' nearby phone'+(near===1?'':'s')+x):'📡 No internet · tap to chat with people nearby';
-  el.className=on?'on':'warn'; el.style.display='block';
-}
-window.__meshEvent=function(ev){
-  try{
-    if(ev==='inbox') meshPull();
-    else if(ev==='denied') toast('Allow “Nearby devices” (Bluetooth) permission to use offline mode');
-    else if(/^error:/.test(ev)) toast('Offline mode: '+ev.slice(6));
-    meshBanner();
-  }catch(e){}
-};
-function meshAsk(force){
-  if(!MESH||!meshUid()) return;
-  if(document.getElementById('gzMeshAsk')) return;
-  if(!force&&meshAsk.done) return; meshAsk.done=1;
-  var r={},on=false; try{ r=JSON.parse(MESH.radios()||'{}'); on=MESH.isEnabled(); }catch(e){ return; }
-  if(r.bt&&r.wifi&&r.loc!==false&&on) return;
-  var last=0; try{ last=+localStorage.getItem('gzmesh_ask')||0; }catch(e){}
-  if(!force&&Date.now()-last<6*3600*1000) return;
-  var bs='width:100%;box-sizing:border-box;padding:13px;margin-top:8px;border:0;border-radius:12px;font:700 15px system-ui,sans-serif;cursor:pointer';
-  var bg=document.createElement('div'); bg.id='gzMeshAsk';
-  bg.style.cssText='position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px';
-  bg.innerHTML='<div style="background:#fff;color:#111;border-radius:18px;padding:22px 18px;width:100%;max-width:360px;font:14px/1.45 system-ui,sans-serif;text-align:center;box-sizing:border-box">'
-   +'<div style="font-size:34px">📡</div><div style="font-weight:800;font-size:18px;margin:6px 0">Chat without internet?</div>'
-   +'<p style="color:#555;margin:6px 0 10px">Allow <b>Bluetooth</b>, <b>Wi-Fi</b> and <b>Location</b>. With internet your chats work normally; without internet they automatically switch to people nearby (messages, photos, voice, calls). Your messages stay end-to-end encrypted.</p>'
-   +'<button id="maOk" style="'+bs+';background:linear-gradient(90deg,#ec2b8e,#7b3ff2);color:#fff">OK, turn on</button>'
-   +'<button id="maNo" style="'+bs+';background:#e4e6eb;color:#050505">Not now</button></div>';
-  document.body.appendChild(bg);
-  bg.querySelector('#maOk').onclick=function(){ bg.remove(); try{ MESH.enableAll(meshUid()); }catch(e){} setTimeout(meshBanner,2500); };
-  bg.querySelector('#maNo').onclick=function(){ bg.remove(); try{ localStorage.setItem('gzmesh_ask',String(Date.now())); }catch(e){} };
-}
-function meshUid(){ return me&&me.uid; }
-function meshCid(puid){ return dmId(me.uid,puid); }
-function meshEncFile(b){ return encFileG(b); }
-function meshEncPay(c,u,pl){ return encPayloadFast(c,u,pl); }
-/* ---- PHOTOS + VOICE MESSAGES offline: the file is encrypted, cut in small parts and every part travels like a text message ---- */
-var MESH_MAX=150*1024, MESH_CH=7200;
-function meshB64(u8){ var s='',i; for(i=0;i<u8.length;i+=0x8000) s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000)); return btoa(s); }
-function meshPartsKey(){ return meshKey()+'_parts'; }
-function meshParts(){
-  try{ var o=JSON.parse(localStorage.getItem(meshPartsKey())||'{}')||{}, now=Date.now(); Object.keys(o).forEach(function(k){ if(now-(o[k].t||0)>3*86400000) delete o[k]; }); return o; }catch(e){ return {}; }
-}
-function meshPartsSave(o){ try{ localStorage.setItem(meshPartsKey(),JSON.stringify(o)); }catch(e){ try{ localStorage.removeItem(meshPartsKey()); }catch(x){} } }
-function meshSave(a){
-  a=a.slice(-300); var s=JSON.stringify(a);
-  while(s.length>3500000 && a.length){ var i=-1; for(var j=0;j<a.length;j++){ if(a[j].url){ i=j; break; } } if(i<0) break; a.splice(i,1); s=JSON.stringify(a); }
-  try{ localStorage.setItem(meshKey(),s); }catch(e){}
-}
-async function meshShrinkImg(blob){
-  var bmp; try{ bmp=await createImageBitmap(blob); }catch(e){ bmp=await new Promise(function(res,rej){ var im=new Image(); im.onload=function(){ res(im); }; im.onerror=rej; im.src=URL.createObjectURL(blob); }); }
-  var w=bmp.width||bmp.naturalWidth, h=bmp.height||bmp.naturalHeight, out=null, tries=[[720,.55],[560,.45],[420,.4]];
-  for(var i=0;i<tries.length;i++){
-    var sc=Math.min(1,tries[i][0]/Math.max(w,h)), cv=document.createElement('canvas'); cv.width=Math.max(1,Math.round(w*sc)); cv.height=Math.max(1,Math.round(h*sc));
-    cv.getContext('2d').drawImage(bmp,0,0,cv.width,cv.height);
-    out=await new Promise(function(r){ cv.toBlob(r,'image/jpeg',tries[i][1]); });
-    if(out && out.size<=MESH_MAX*0.9) break;
-  }
-  return out;
-}
-/* kind: 'image' | 'audio'. ownCopy: also show it in my own chat (Gupchats has no outbox, Gupzy already shows its outbox clock) */
-async function meshSendMedia(blob,kind,dur,mid,peerUid,chatId,ownCopy){
-  if(!MESH||!meshUid()) return false;
-  try{
-    var b=blob; if(kind==='image') b=await meshShrinkImg(blob);
-    if(!b||b.size>MESH_MAX){ toast('Too big to send offline (voice messages up to about 1 minute). It needs internet.'); return false; }
-    var ef=await meshEncFile(b);
-    var env=await meshEncPay(chatId,peerUid,{t:'',q:'',m:{k:ef.k,mt:b.type||'',dur:dur||0}});
-    var u8=new Uint8Array(await ef.blob.arrayBuffer()), n=Math.ceil(u8.length/MESH_CH), ts=Date.now(), f=mHash(meshUid()), t=mHash(peerUid);
-    for(var i=0;i<n;i++){
-      if(!MESH.send(JSON.stringify({id:mid+'.'+i,f:f,t:t,ts:ts,ty:'part',env:{mid:mid,i:i,n:n,d:meshB64(u8.subarray(i*MESH_CH,(i+1)*MESH_CH))}}))) return false;
-    }
-    if(!MESH.send(JSON.stringify({id:mid,f:f,t:t,ts:ts,ty:kind,env:{enc:1,ct:env.ct,iv:env.iv,spk:env.spk,rpk:env.rpk,n:n}}))) return false;
-    if(ownCopy){
-      var st=meshLoad(); st.push({id:mid,cid:chatId,from:meshUid(),createdAt:ts,type:kind,enc:1,ct:env.ct,iv:env.iv,spk:env.spk,rpk:env.rpk,url:'data:application/octet-stream;base64,'+meshB64(u8),via:'mesh'});
-      meshSave(st); meshRerender();
-    }
-    meshNote(); return true;
-  }catch(e){ console.warn(e); return false; }
-}
-function meshPullMedia(e,peers,parts,tm){
-  var v=e.env; if(!v||!peers[e.f]||!(v.n>0&&v.n<=40)) return;
-  if(e.ty==='part'){
-    if(!v.mid||typeof v.d!=='string'||v.d.length>12000) return;
-    var P=parts[v.mid]||(parts[v.mid]={p:{},t:Date.now(),f:e.f}); P.p[v.i]=v.d; tm[v.mid]=1;
-  }else{
-    if(!v.enc||!v.ct||!v.iv||!v.spk||!v.rpk) return;
-    var H=parts[e.id]||(parts[e.id]={p:{},t:Date.now(),f:e.f}); H.f=e.f;
-    H.h={ts:Number(e.ts)||Date.now(),ty:e.ty,n:v.n,ct:String(v.ct),iv:String(v.iv),spk:String(v.spk),rpk:String(v.rpk)}; tm[e.id]=1;
-  }
-}
-function meshAssemble(parts,tm,store,have,touched,peers){
-  var n=0;
-  Object.keys(tm).forEach(function(mid){
-    var P=parts[mid]; if(!P||!P.h||have[mid]) return;
-    var s='',i; for(i=0;i<P.h.n;i++){ if(typeof P.p[i]!=='string') return; s+=P.p[i]; }
-    var puid=peers[P.f]; if(!puid) return; var cid=meshCid(puid);
-    store.push({id:mid,cid:cid,from:puid,createdAt:P.h.ts,type:P.h.ty,enc:1,ct:P.h.ct,iv:P.h.iv,spk:P.h.spk,rpk:P.h.rpk,url:'data:application/octet-stream;base64,'+s,via:'mesh'});
-    delete parts[mid]; have[mid]=1; touched[cid]=1; n++;
-  });
-  return n;
-}
-/* ===== GATEWAY: a phone WITH internet passes on the offline messages it is carrying for other people =====
-   Only the already end-to-end encrypted envelope (plus two short hashes) goes to Firestore meshRelay/{id}; the carrying phone cannot read it.
-   The real receiver (meshRelay where t == his hash) picks it up while he has internet, shows it in the chat and deletes the relay copy. Text, photos and voice messages (a photo / voice message is sent as ONE relay doc once all its parts have arrived). Calls cannot be relayed (they need instant two-way audio/video). */
-function gwUid(){ try{ return (me&&me.uid)||''; }catch(e){ return ''; } }
-function gwKey(s){ return 'gzgw_'+s+'_'+gwUid(); }
-function gwGet(s){ try{ return JSON.parse(localStorage.getItem(gwKey(s))||'{}')||{}; }catch(e){ return {}; } }
-function gwPut(s,o){ try{ var k=Object.keys(o); if(k.length>800){ k.sort(function(a,b){ return o[a]-o[b]; }).slice(0,k.length-600).forEach(function(x){ delete o[x]; }); } localStorage.setItem(gwKey(s),JSON.stringify(o)); }catch(e){} }
-var gwMedia={};   /* photo / voice message being collected: mid -> {h:header, p:{i:base64 part}, ids:[envelope ids], t:time} */
-function gwUpload(){
-  var U=gwUid();
-  if(!MESH||!U||navigator.onLine===false||typeof MESH.carried!=='function'||gwUpload.b) return;
-  var arr; try{ arr=JSON.parse(MESH.carried()||'[]'); }catch(e){ return; }
-  var now=Date.now(), mine=mHash(U), skip=[], hold=[], todo=[], mids=Object.keys(gwMedia);
-  mids.forEach(function(k){ if(now-gwMedia[k].t>20*60000) delete gwMedia[k]; });
-  (arr||[]).forEach(function(e){
-    if(!e||!e.id) return;
-    var id=String(e.id), v=e.env;
-    if(!v||e.f===mine||e.t===mine) { skip.push(id); return; }
-    if(e.ty==='text') { todo.push({k:'t',e:e}); return; }
-    if(e.ty==='part'){
-      if(!v.mid||typeof v.d!=='string'||!(v.i>=0)){ skip.push(id); return; }
-      var M=gwMedia[v.mid]||(gwMedia[v.mid]={p:{},ids:[],t:now}); M.p[v.i]=v.d; M.ids.push(id); hold.push(id); return;
-    }
-    if(e.ty==='image'||e.ty==='audio'){
-      if(!v.enc||!v.ct||!v.iv||!v.spk||!v.rpk||!(v.n>0&&v.n<=40)){ skip.push(id); return; }
-      var H=gwMedia[id]||(gwMedia[id]={p:{},ids:[],t:now}); H.h=e; H.ids.push(id); hold.push(id); return;
-    }
-    skip.push(id);
-  });
-  Object.keys(gwMedia).forEach(function(k){
-    var M=gwMedia[k]; if(!M.h) return;
-    var s='',i; for(i=0;i<M.h.env.n;i++){ if(typeof M.p[i]!=='string') return; s+=M.p[i]; }
-    todo.push({k:'m',e:M.h,d:s,ids:M.ids,mid:k});
-  });
-  if(skip.length){ try{ MESH.gwDone(JSON.stringify(skip)); }catch(e){} }
-  var doneNow={}; todo.forEach(function(x){ (x.ids||[]).forEach(function(i){ doneNow[i]=1; }); });
-  hold=hold.filter(function(i){ return !doneNow[i]; });
-  if(hold.length&&typeof MESH.gwHold==='function'){ try{ MESH.gwHold(JSON.stringify(hold)); }catch(e){} }
-  if(!todo.length) return;
-  todo=todo.slice(0,8);
-  gwUpload.b=1;
-  var ok=[], exp=firebase.firestore.Timestamp.fromMillis(Date.now()+3*86400000);
-  Promise.all(todo.map(function(x){
-    var e=x.e,v=e.env,env={enc:1,ct:String(v.ct),iv:String(v.iv),spk:String(v.spk),rpk:String(v.rpk)};
-    var doc={id:String(e.id),f:String(e.f),t:String(e.t),ts:Number(e.ts),ty:x.k==='t'?'text':String(e.ty),env:env,by:U,up:FV.serverTimestamp(),expireAt:exp};
-    if(x.k==='m'){ env.n=Number(v.n); doc.d=x.d; }
-    return db.collection('meshRelay').doc(String(e.id)).set(doc).then(function(){ ok.push(String(e.id)); if(x.ids) x.ids.forEach(function(i){ ok.push(i); }); if(x.mid) delete gwMedia[x.mid]; },
-      function(er){ if(er&&(er.code==='permission-denied'||er.code==='invalid-argument')){ ok.push(String(e.id)); if(x.ids) x.ids.forEach(function(i){ ok.push(i); }); if(x.mid) delete gwMedia[x.mid]; } });   /* denied = somebody else already passed it on */
-  })).then(function(){ if(ok.length){ try{ MESH.gwDone(JSON.stringify(ok)); }catch(e){} } },function(){}).then(function(){ gwUpload.b=0; });
-}
-var gwPend=[];
-function gwListen(){
-  var U=gwUid();
-  if(!U){ if(gwListen.off){ try{ gwListen.off(); }catch(e){} gwListen.off=null; gwListen.u=null; } return; }
-  if(!MESH||navigator.onLine===false||gwListen.u===U||gwListen.b||Date.now()-(gwListen.at||0)<30000) return;
-  gwListen.b=1; gwListen.at=Date.now();
-  var h=mHash(U);
-  var start=function(){
-    gwListen.b=0;
-    try{ if(gwListen.off) gwListen.off(); }catch(e){}
-    gwListen.u=U;
-    gwListen.off=db.collection('meshRelay').where('t','==',h).onSnapshot(function(s){
-      s.docChanges().forEach(function(c){ if(c.type!=='added') return; var d=c.doc.data(); if(d&&d.id&&!gwPend.some(function(x){ return x.id===d.id; })) gwPend.push(d); });
-      gwProcess();
-    },function(er){ gwListen.u=null; });
-  };
-  db.collection('meshHash').doc(h).set({uid:U}).then(start,start);   /* lets the server know which hash is mine (only I can read my relay mail) */
-}
-function gwProcess(){
-  var U=gwUid();
-  if(!gwPend.length||!U) return;
-  var peers=meshPeerMap(); if(!Object.keys(peers).length) return;   /* chats not loaded yet: keep it for the next round */
-  var seen=gwGet('in'), store=meshLoad(), have={}, touched={}, n=0, now=Date.now();
-  store.forEach(function(x){ have[x.id]=1; });
-  var list=gwPend; gwPend=[];
-  list.forEach(function(e){
-    try{
-      var v=e.env, med=(e.ty==='image'||e.ty==='audio')&&typeof e.d==='string'&&e.d.length>0, txt=e.ty==='text';
-      if(v&&v.enc&&v.ct&&v.iv&&v.spk&&v.rpk&&(txt||med)&&!seen[e.id]&&!have[e.id]&&peers[e.f]){
-        var puid=peers[e.f], cid=dmId(me.uid,puid);
-        var row={id:String(e.id),cid:cid,from:puid,createdAt:Number(e.ts)||now,type:txt?'text':e.ty,enc:1,ct:String(v.ct),iv:String(v.iv),spk:String(v.spk),rpk:String(v.rpk),via:'mesh'};
-        if(med) row.url='data:application/octet-stream;base64,'+e.d;
-        store.push(row);
-        have[e.id]=1; touched[cid]=1; n++;
-      }
-      seen[e.id]=now;
-    }catch(x){}
-    db.collection('meshRelay').doc(String(e.id)).delete().catch(function(){});
-  });
-  gwPut('in',seen);
-  if(!n) return;
-  meshSave(store);
-  if(cur&&touched[cur.id]) meshRerender(); else toast('📡 New message received offline');
-}
-function gwTick(){ try{ gwListen(); gwProcess(); gwUpload(); }catch(e){ console.warn(e); } }
-function meshInit(){
-  if(!MESH || !me) return;
-  try{ if(MESH.isEnabled()) MESH.enable(me.uid); }catch(e){}   /* keeps the identity current and the service running */
-  meshPull(); meshBanner(); setTimeout(meshAsk,2500);
-  if(!meshInit.t){
-    meshInit.t=setInterval(function(){ meshPull(); meshBanner(); gwTick(); }, 5000); setTimeout(gwTick,3000); window.addEventListener('online',function(){ setTimeout(gwTick,1500); });
-    window.addEventListener('online', meshBanner); window.addEventListener('offline', function(){ meshBanner(); meshAsk.done=0; setTimeout(function(){ meshAsk(false); },800); });
-  }
-}
+var lastSnap=null;
 
 })();   /* end of main Gupchats scope (v6/v7 code must live inside it) */
 </script>
