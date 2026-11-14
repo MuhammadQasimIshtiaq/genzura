@@ -1617,10 +1617,12 @@ function renderMenu(){
     +'<div class="card" id="mOut"><div class="ic">↩️</div>Sign out</div><hr>'
     +'<div class="sec">Also from Gupzy</div>'
     +'<div class="card" id="mGz"><div class="ic">▶️</div>Gupzy</div>'
+    +'<div class="card" id="mMesh"><div class="ic">📡</div>Gupmesh (bina internet)</div>'
     +'<div id="gcMenuAd"><div class="ah">Sponsored</div><div class="gz-adhole"></div></div>';
   gcBannerMount($('gcMenuAd'), function(){ return curTab===3 && !cur && $('stPg').classList.contains('hidden') && !document.querySelector('.sheetbg'); });
   $('mOut').onclick=signOut;
   $('mSet').onclick=openSettings;
+  $('mMesh').onclick=function(){ var ok=false; try{ ok=!!(window.AndroidAuth && window.AndroidAuth.openMeshApp && window.AndroidAuth.openMeshApp()); }catch(e){} if(!ok) alert('Gupmesh app is phone mein install nahi hai'); };
   $('mGz').onclick=function(){ var u='https://gupzy.com/'; try{ if(window.AndroidAuth && window.AndroidAuth.openExternal){ window.AndroidAuth.openExternal(u); return; } }catch(e){} window.open(u,'_blank'); };
 }
 /* ---------------- banner ad (Android app only: needs window.AndroidAdBridge) ---------------- */

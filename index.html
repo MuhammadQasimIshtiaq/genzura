@@ -8998,6 +8998,10 @@ function openGupchatsApp(uid){
   try{ if(window.AndroidAuth && window.AndroidAuth.openExternal){ window.AndroidAuth.openExternal(AT_CHATS_APK_URL); return; } }catch(e){}
   window.open(AT_CHATS_APK_URL, '_blank');
 }
+function openGupmeshApp(){
+  var ok=false; try{ ok=!!(window.AndroidAuth && typeof window.AndroidAuth.openMeshApp==='function' && window.AndroidAuth.openMeshApp()); }catch(e){}
+  if(!ok) toast('Gupmesh app is phone mein install nahi hai');
+}
 function showChatChooser(){
   let o = document.getElementById('chatChooserOv'); if(o) o.remove();
   o = document.createElement('div'); o.id = 'chatChooserOv';
@@ -9008,11 +9012,13 @@ function showChatChooser(){
     <div style="font-size:18px;font-weight:800;margin-bottom:12px;color:var(--text,#14121f);">Open messages</div>
     ${row('ccGupzy','💬','Chats on Gupzy','Messages inside Gupzy')}
     ${row('ccGupchats','🟣','Chats on Gupchats',(window.AndroidAuth&&AT_CHATS_ON_PLAYSTORE)?'Get the Gupchats app':'Open the Gupchats app')}
+    ${window.AndroidAuth?row('ccGupmesh','📡','Gupmesh','Chat without internet (WiFi / Bluetooth)'):''}
   </div>`;
   document.body.appendChild(o);
   o.addEventListener('click', e=>{ if(e.target === o) o.remove(); });
   o.querySelector('#ccGupzy').onclick = ()=>{ o.remove(); openGupzyChats(); };
   o.querySelector('#ccGupchats').onclick = ()=>{ o.remove(); openGupchatsApp(); };
+  var gm=o.querySelector('#ccGupmesh'); if(gm) gm.onclick = ()=>{ o.remove(); openGupmeshApp(); };
 }
 $('dmBtn').onclick=()=>{if(!requireAuth())return;if(!window.AndroidAuth){openGupzyChats();return;}   /* plain website: open the chats inside Gupzy directly */
   if(gupchatsInstalled()){openGupchatsApp();return;}showChatChooser();};   /* Gupchats installed -> chats live there, no chooser */
